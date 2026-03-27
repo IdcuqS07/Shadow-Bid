@@ -1238,22 +1238,6 @@ export default function PremiumCreateAuction() {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-white/5 bg-void-800 p-4 opacity-75">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-mono text-sm">Anti-Snipe Extension</span>
-                          <span className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-0.5 text-xs font-mono uppercase tracking-wider text-white/50">
-                            Not Live
-                          </span>
-                        </div>
-                        <div className="text-xs text-white/60">
-                          Last-minute bid extension is not part of the V2.20 contract yet. Auction timing follows the duration and close flow shown above.
-                        </div>
-                      </div>
-                      <span className="font-mono text-sm text-white/40">Not available</span>
-                    </div>
-                  </div>
                 </div>
 
                 <div className="mt-6 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
@@ -1264,7 +1248,7 @@ export default function PremiumCreateAuction() {
                         Contract Reality
                       </div>
                       <div className="text-xs text-white/60">
-                        V2.20 privacy comes from sealed bid commitments and the reveal window. Reserve hiding and anti-snipe are not configurable on-chain in the current contract.
+                        V2.20 privacy comes from sealed bid commitments and the reveal window. Reserve hiding is not configurable on-chain in the current contract.
                       </div>
                     </div>
                   </div>
