@@ -1,0 +1,361 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Manrope:wght@600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: "Inter", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+    font-family: "JetBrains Mono", monospace;
+}
+
+/* Dark Blue Background */
+.dark-blue-bg {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%);
+}
+
+@layer base {
+    :root {
+        --background: 224 30% 16%;
+        --foreground: 210 40% 98%;
+        --card: 224 30% 19%;
+        --card-foreground: 210 40% 98%;
+        --popover: 224 30% 19%;
+        --popover-foreground: 210 40% 98%;
+        --primary: 221 83% 53%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 224 30% 23%;
+        --secondary-foreground: 210 40% 98%;
+        --muted: 224 30% 23%;
+        --muted-foreground: 215 20% 65%;
+        --accent: 221 83% 53%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 224 30% 26%;
+        --input: 224 30% 26%;
+        --ring: 221 83% 53%;
+        --success: 142 76% 36%;
+        --warning: 38 92% 50%;
+        --info: 199 89% 48%;
+        --chart-1: 217 91% 60%;
+        --chart-2: 204 94% 44%;
+        --chart-3: 173 80% 40%;
+        --chart-4: 38 92% 50%;
+        --chart-5: 0 84% 60%;
+        --radius: 0.5rem;
+    }
+}
+
+@layer base {
+    * {
+        border-color: hsl(var(--border));
+    }
+
+    body {
+        @apply bg-background text-foreground;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        font-family: "Manrope", sans-serif;
+    }
+
+    p,
+    span,
+    td,
+    th,
+    label,
+    input,
+    textarea,
+    select,
+    button {
+        font-family: "Inter", sans-serif;
+    }
+}
+
+/* Premium Wallet Button Styling */
+.wallet-button-premium button {
+    background: linear-gradient(135deg, #D4AF37 0%, #E5C158 100%) !important;
+    border: none !important;
+    border-radius: 0.75rem !important;
+    padding: 0.625rem 1.25rem !important;
+    font-size: 0.875rem !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-weight: 600 !important;
+    color: #0A0B0F !important;
+    cursor: pointer !important;
+    transition: all 0.2s !important;
+    box-shadow: 0 0 20px rgba(212, 175, 55, 0.3) !important;
+    pointer-events: auto !important;
+    z-index: 100 !important;
+}
+
+.wallet-button-premium button:hover {
+    box-shadow: 0 0 30px rgba(212, 175, 55, 0.5) !important;
+    transform: translateY(-1px) !important;
+}
+
+.wallet-button-premium button:active {
+    transform: translateY(0) !important;
+}
+
+.wallet-button-premium button:disabled {
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+}
+
+/* Wallet connecting state */
+.wallet-button-premium.connecting button,
+.wallet-connecting button {
+    opacity: 0.7 !important;
+    cursor: wait !important;
+    pointer-events: none !important;
+}
+
+/* Wallet Modal Styling for Premium UI */
+.wallet-adapter-modal-wrapper {
+    background: rgba(10, 11, 15, 0.95) !important;
+    backdrop-filter: blur(20px) !important;
+    z-index: 9999 !important;
+}
+
+.wallet-adapter-modal {
+    background: linear-gradient(135deg, #12131A 0%, #0D0E14 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 1rem !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+    z-index: 10000 !important;
+}
+
+.wallet-adapter-modal-title {
+    color: #ffffff !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    font-weight: 700 !important;
+}
+
+.wallet-adapter-modal-list {
+    background: transparent !important;
+}
+
+.wallet-adapter-modal-list-item {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-radius: 0.75rem !important;
+    transition: all 0.2s !important;
+    cursor: pointer !important;
+}
+
+.wallet-adapter-modal-list-item:hover {
+    background: rgba(212, 175, 55, 0.1) !important;
+    border-color: rgba(212, 175, 55, 0.3) !important;
+    transform: translateY(-2px) !important;
+}
+
+.wallet-adapter-button-trigger {
+    color: #ffffff !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Fix Input Autofill Background - Premium Dark Theme */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #12141A inset !important;
+    -webkit-text-fill-color: #ffffff !important;
+    box-shadow: 0 0 0 1000px #12141A inset !important;
+    caret-color: #ffffff !important;
+    transition: background-color 5000s ease-in-out 0s !important;
+    background-color: #12141A !important;
+    background-image: none !important;
+}
+
+/* Ensure all inputs have dark background - Maximum Specificity */
+input,
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+textarea,
+select {
+    background-color: #12141A !important;
+    background-image: none !important;
+    color: #ffffff !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+}
+
+/* Premium Input Focus States */
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+    background-color: #12141A !important;
+    background-image: none !important;
+    color: #ffffff !important;
+    outline: none !important;
+}
+
+/* Placeholder text color */
+input::placeholder,
+textarea::placeholder {
+    color: rgba(255, 255, 255, 0.3) !important;
+    opacity: 1 !important;
+}
+
+input::-webkit-input-placeholder,
+textarea::-webkit-input-placeholder {
+    color: rgba(255, 255, 255, 0.3) !important;
+    opacity: 1 !important;
+}
+
+input::-moz-placeholder,
+textarea::-moz-placeholder {
+    color: rgba(255, 255, 255, 0.3) !important;
+    opacity: 1 !important;
+}
+
+/* Disabled input states */
+input:disabled,
+textarea:disabled,
+select:disabled {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    background-image: none !important;
+    color: rgba(255, 255, 255, 0.4) !important;
+    cursor: not-allowed !important;
+    opacity: 0.6 !important;
+}
+
+/* Remove any default browser styling */
+input,
+textarea,
+select {
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-user-select: text !important;
+    user-select: text !important;
+}
+
+/* Force dark background on all states */
+input:not(:placeholder-shown),
+textarea:not(:placeholder-shown) {
+    background-color: #12141A !important;
+    background-image: none !important;
+    color: #ffffff !important;
+}
+
+
+/* Extra specificity for inputs inside premium components */
+.glass-card input,
+.glass-card textarea,
+div[class*="glass"] input,
+div[class*="glass"] textarea,
+form input,
+form textarea {
+    background-color: #12141A !important;
+    background-image: none !important;
+    color: #ffffff !important;
+}
+
+/* Override any Tailwind or component library defaults */
+input[class*="bg-"],
+textarea[class*="bg-"] {
+    background-color: #12141A !important;
+    background-image: none !important;
+}
+
+/* Force on all pseudo-states */
+input:hover,
+input:active,
+input:focus-within,
+textarea:hover,
+textarea:active,
+textarea:focus-within {
+    background-color: #12141A !important;
+    background-image: none !important;
+    color: #ffffff !important;
+}
+
+/* Remove any gradient or image backgrounds */
+input,
+textarea {
+    background: #12141A !important;
+}
+
+
+/* Premium Select Dropdown Styling */
+select {
+    background-color: #12141A !important;
+    background-image: none !important;
+    color: #ffffff !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+}
+
+select:focus,
+select:focus-visible {
+    background-color: #12141A !important;
+    background-image: none !important;
+    color: #ffffff !important;
+    outline: none !important;
+}
+
+/* Select option styling */
+select option {
+    background-color: #12141A !important;
+    color: #ffffff !important;
+    padding: 12px !important;
+}
+
+select option:disabled {
+    color: rgba(255, 255, 255, 0.4) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+select option:checked {
+    background-color: #D4AF37 !important;
+    color: #0A0B0F !important;
+}
+
+/* Remove default arrow in IE */
+select::-ms-expand {
+    display: none;
+}
+
+/* Force submit button to be clickable - prevent any overlay */
+button[type="submit"] {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 9999 !important;
+}
+
+/* Ensure form doesn't block interactions */
+form {
+  position: relative;
+  z-index: 1;
+}
+
+/* Prevent GlassCard from overlaying buttons */
+.glass-card {
+  position: relative;
+  z-index: 1;
+}

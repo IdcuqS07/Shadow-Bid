@@ -1,52 +1,42 @@
-# ShadowBid Marketplace V2.20
+# ShadowBid Marketplace
 
-This repository now contains only the active `v2.20` Leo contract for ShadowBid Marketplace.
-Older contract versions, frontend code, and historical working notes were intentionally removed so the GitHub repository stays focused on the live contract source.
+ShadowBid is a privacy-focused sealed-bid auction marketplace built on Aleo.
+This repository now contains the active `v2.20` Leo contract and the restored React frontend that previously ran on `http://localhost:3007`.
 
-## Repository Scope
+## Repository Structure
 
-- Active contract source: `shadowbid_marketplace_v2_20/src/main.leo`
-- Leo manifest: `shadowbid_marketplace_v2_20/program.json`
-- Deployment guides: `shadowbid_marketplace_v2_20/DEPLOY.md` and `shadowbid_marketplace_v2_20/DEPLOYMENT_INSTRUCTIONS.md`
-- Deployment record: `shadowbid_marketplace_v2_20/DEPLOYMENT_SUCCESS.md`
+- `shadowbid_marketplace_v2_20/` - active Leo smart contract source and deployment notes
+- `shadowbid-marketplace/` - React + Vite frontend used for the marketplace UI
 
-## V2.20 Highlights
+## Frontend Quick Start
 
-- Sealed-bid commit-reveal auction flow
-- Multi-currency bidding with Aleo credits, USDCx, and USAD
-- Reserve price support and platform fee accounting
-- Keeper-friendly lifecycle timestamps
-- Dispute handling and proof anchor mappings
-- RWA settlement flow with configurable confirmation windows
+```bash
+cd shadowbid-marketplace
+npm ci
+npm run dev
+```
 
-## Quick Start
+The frontend runs on `http://localhost:3007`.
 
-### Prerequisites
-
-- Leo `3.5.0`
-- Access to an Aleo wallet or deployment key
-- Sufficient Aleo credits for build and deploy operations
-
-### Build
+## Contract Quick Start
 
 ```bash
 cd shadowbid_marketplace_v2_20
 leo build
 ```
 
-### Deploy
+## V2.20 Highlights
 
-```bash
-cd shadowbid_marketplace_v2_20
-leo deploy --network testnet
-```
+- Commit-reveal sealed bidding
+- Aleo, USDCx, and USAD support
+- Reserve price and platform fee accounting
+- Keeper-friendly lifecycle timestamps
+- Dispute handling and proof anchor mappings
 
-For a step-by-step flow, use `shadowbid_marketplace_v2_20/DEPLOYMENT_INSTRUCTIONS.md`.
+## Deployment
 
-## Notes
-
-- This repo is intentionally contract-only.
-- Generated artifacts such as `build/`, `outputs/`, and local `.env` files are not part of the tracked source.
+- Frontend production deployment is managed through Vercel
+- Contract deployment guidance lives in `shadowbid_marketplace_v2_20/DEPLOY.md`
 
 ## Links
 
