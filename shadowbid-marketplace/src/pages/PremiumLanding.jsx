@@ -21,7 +21,7 @@ export default function PremiumLanding() {
     {
       icon: Shield,
       title: 'Zero-Knowledge Proofs',
-      description: 'Bid amounts stay private until reveal phase. Maximum privacy guaranteed.',
+      description: 'Bid commitments stay hidden until reveal phase through the V2.20 sealed commit-reveal flow.',
       version: 'V2.20',
     },
     {

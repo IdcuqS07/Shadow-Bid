@@ -1037,7 +1037,7 @@ export default function PremiumCreateAuction() {
                     placeholder="0.00"
                     suffix={formData.currency || 'ALEO'}
                     type="number"
-                    hint="Optional - Hidden from bidders"
+                    hint="Optional - Enforced on settlement, not hidden on-chain"
                   />
                 </div>
 
@@ -1046,7 +1046,7 @@ export default function PremiumCreateAuction() {
                     <Info className="w-5 h-5 text-cyan-400 mt-0.5" />
                     <div className="text-xs text-white/60">
                       <span className="text-cyan-400 font-mono">V2.20</span> supports 3 currencies: Aleo Credits, USDCx, and USAD.
-                      <span className="text-cyan-400 font-mono"> Reserve Price</span> remains private until auction ends, and platform fees are calculated automatically on settlement.
+                      <span className="text-cyan-400 font-mono"> Reserve Price</span> is enforced during settlement, and platform fees are calculated automatically on the winning bid.
                     </div>
                   </div>
                 </div>
