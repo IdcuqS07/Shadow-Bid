@@ -1,75 +1,65 @@
-# V2.19 Manual Deployment Instructions
+# V2.20 Manual Deployment Instructions
 
 ## Prerequisites
 
-You need:
-- Your private key
-- Sufficient credits for deployment (~10-20 credits)
-- Leo CLI installed
+- Leo CLI `3.5.0`
+- Private key or wallet access for deployment
+- Enough Aleo credits to pay deployment fees
 
-## Option 1: Deploy with Environment Variable (Recommended)
+## Option 1: Use an environment variable
 
 ```bash
-cd shadowbid_marketplace_v2_19
-
-# Set private key (replace with your actual key)
+cd shadowbid_marketplace_v2_20
 export PRIVATE_KEY="your_private_key_here"
-
-# Deploy to testnet
 leo deploy --network testnet
-
-# Or deploy to mainnet
-leo deploy --network mainnet
 ```
 
-## Option 2: Deploy with .env File
+To deploy to mainnet, replace `testnet` with `mainnet`.
 
-1. Create `.env` file in `shadowbid_marketplace_v2_19/`:
+## Option 2: Use a local `.env` file
+
+Create `shadowbid_marketplace_v2_20/.env` with your local values:
 
 ```bash
 PRIVATE_KEY=your_private_key_here
 NETWORK=testnet
 ```
 
-2. Deploy:
+Then load the values in your shell and deploy:
 
 ```bash
-cd shadowbid_marketplace_v2_19
-leo deploy --network testnet
+cd shadowbid_marketplace_v2_20
+source .env
+leo deploy --network "${NETWORK}"
 ```
 
-## Option 3: Deploy via Leo Studio / GUI
+## Option 3: Use Leo Studio
 
-1. Open Leo Studio
-2. Load project: `shadowbid_marketplace_v2_19`
-3. Connect wallet
-4. Click "Deploy"
-5. Select network: testnet
-6. Confirm transaction
+1. Open Leo Studio.
+2. Load the `shadowbid_marketplace_v2_20` project.
+3. Connect the deployer wallet.
+4. Choose the target network.
+5. Confirm the deployment transaction.
 
 ## After Deployment
 
-### 1. Save Program ID
+### Save the program ID
 
-After successful deployment, you'll see:
+Expected program:
+
+```text
+shadowbid_marketplace_v2_20.aleo
 ```
-✅ Successfully deployed 'shadowbid_marketplace_v2_19.aleo'
-Program ID: shadowbid_marketplace_v2_19.aleo
-```
 
-Save this Program ID for UI integration.
+### Verify on an explorer
 
-### 2. Verify Deployment
+- Testnet: <https://explorer.provable.com/testnet>
+- Mainnet: <https://explorer.provable.com/>
 
-Check on Aleo Explorer:
-- Testnet: https://explorer.provable.com/testnet
-- Search for: `shadowbid_marketplace_v2_19.aleo`
+### Run a local smoke test
 
-### 3. Test Functions
-
-Test basic functions:
 ```bash
-# Create auction (example)
+cd shadowbid_marketplace_v2_20
 leo run create_auction \
   "123456field" \
   "1000000u128" \
@@ -79,4 +69,3 @@ leo run create_auction \
   "1234567890i64" \
   "86400i64"
 ```
-

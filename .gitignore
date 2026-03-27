@@ -1,39 +1,33 @@
-# Dependencies
-node_modules/
-package-lock.json
-
-# Build outputs
-dist/
-build/
+# Leo / Aleo artifacts
 .leo/
+build/
 outputs/
 
-# Environment variables
+# Environment and secrets
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+!.env.local.example
 
-# IDE
+# JavaScript and frontend leftovers
+node_modules/
+dist/
+coverage/
+
+# Editor and OS files
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
 *.swp
 *.swo
 *~
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
+# Logs and caches
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Testing
-coverage/
-
-# Misc
 .cache/
 *.bak
 *.tmp

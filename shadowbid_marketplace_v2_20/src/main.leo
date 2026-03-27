@@ -37,10 +37,10 @@ program shadowbid_marketplace_v2_20.aleo {
     const ASSET_VEHICLES: u8 = 6u8;                 // 30 days timeout
     const ASSET_INTELLECTUAL_PROPERTY: u8 = 7u8;    // 90 days timeout
 
-    // V2.19 NEW: Platform fee configuration
+    // Platform fee configuration
     const PLATFORM_FEE_RATE: u16 = 250u16;  // 2.5% (250 basis points / 10000)
 
-    // V2.19 NEW: Platform owner address
+    // Platform owner address
     const PLATFORM_ADDRESS: address = aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8;
 
     // Verification states
@@ -94,17 +94,17 @@ program shadowbid_marketplace_v2_20.aleo {
         payment_claimed_at: i64,      // Timestamp
         confirmation_timeout: i64,    // Timeout based on asset type
         
-        // V2.19 NEW: Settlement timing
+        // Settlement timing
         settled_at: i64,              // When finalize_winner was called
         claimable_at: i64,            // settled_at + confirmation_timeout
         
-        // V2.19 NEW: Platform fee
+        // Platform fee tracking
         platform_fee_amount: u128,    // Calculated fee (2.5% of winning_amount)
         seller_net_amount: u128,      // Net amount for seller (winning_amount - fee)
         platform_fee_claimed: bool,   // Has platform claimed the fee?
         platform_fee_claimed_at: i64, // When platform claimed
         
-        // V2.19 NEW: Reserve price
+        // Reserve price controls
         reserve_price: u128,          // Minimum acceptable price
         reserve_met: bool             // Is winning_amount >= reserve_price?
     }
@@ -162,7 +162,7 @@ program shadowbid_marketplace_v2_20.aleo {
     async transition create_auction(
         public auction_id: field,
         public min_bid_amount: u128,
-        public reserve_price: u128,   // V2.19 NEW
+        public reserve_price: u128,
         public currency_type: u8,
         public asset_type: u8,
         public end_time: i64,
@@ -175,7 +175,7 @@ program shadowbid_marketplace_v2_20.aleo {
         // Validate asset type
         assert(asset_type <= 7u8);
         
-        // V2.19 NEW: Validate reserve price
+        // Enforce reserve price floor
         assert(reserve_price >= min_bid_amount);
         
         // Create auction receipt for seller
@@ -192,7 +192,7 @@ program shadowbid_marketplace_v2_20.aleo {
             auction_id,
             self.signer,
             min_bid_amount,
-            reserve_price,            // V2.19 NEW
+            reserve_price,
             currency_type,
             asset_type,
             end_time,
@@ -204,7 +204,7 @@ program shadowbid_marketplace_v2_20.aleo {
         auction_id: field,
         seller: address,
         min_bid_amount: u128,
-        reserve_price: u128,          // V2.19 NEW
+        reserve_price: u128,
         currency_type: u8,
         asset_type: u8,
         end_time: i64,
@@ -242,7 +242,7 @@ program shadowbid_marketplace_v2_20.aleo {
             payment_claimed_at: 0i64,
             confirmation_timeout: timeout,
             
-            // V2.19 NEW: Initialize new fields
+            // Initialize settlement and fee fields
             settled_at: 0i64,
             claimable_at: 0i64,
             platform_fee_amount: 0u128,
@@ -679,7 +679,7 @@ program shadowbid_marketplace_v2_20.aleo {
         
         assert(winning_amount > 0u128);
         
-        // V2.19 NEW: Check if reserve price met
+        // Check whether the reserve price is met
         let reserve_met: bool = winning_amount >= auction.reserve_price;
         
         let updated_auction: AuctionInfo = AuctionInfo {
@@ -706,7 +706,7 @@ program shadowbid_marketplace_v2_20.aleo {
             platform_fee_claimed: auction.platform_fee_claimed,
             platform_fee_claimed_at: auction.platform_fee_claimed_at,
             reserve_price: auction.reserve_price,
-            reserve_met                                    // V2.19 NEW: Set flag
+            reserve_met
         };
         
         Mapping::set(auctions, auction_id, updated_auction);
@@ -718,7 +718,7 @@ program shadowbid_marketplace_v2_20.aleo {
 
     async transition finalize_winner(
         public auction_id: field,
-        public finalized_at: i64        // V2.19 NEW
+        public finalized_at: i64
     ) -> (WinnerRecord, Future) {
         
         let placeholder_record: WinnerRecord = WinnerRecord {
@@ -735,22 +735,22 @@ program shadowbid_marketplace_v2_20.aleo {
     async function finalize_finalize_winner(
         auction_id: field,
         caller: address,
-        finalized_at: i64               // V2.19 NEW
+        finalized_at: i64
     ) {
         let auction: AuctionInfo = Mapping::get(auctions, auction_id);
         assert_eq(auction.state, CHALLENGE);
         assert(finalized_at >= auction.challenge_end_time);
         assert_eq(Mapping::get_or_use(auction_dispute_root, auction_id, 0field), 0field);
         
-        // V2.19 NEW: Reserve must be met to finalize
+        // Reserve must be met before finalization
         assert(auction.reserve_met);
         
-        // V2.19 NEW: Calculate platform fee and seller net amount
+        // Calculate platform fee and seller net amount
         let winning_amount_u128: u128 = auction.winning_amount;
         let fee_amount: u128 = (winning_amount_u128 * (PLATFORM_FEE_RATE as u128)) / 10000u128;
         let seller_amount: u128 = winning_amount_u128 - fee_amount;
         
-        // V2.19 NEW: Calculate claimable_at
+        // Derive the claimable timestamp
         let claimable_at: i64 = finalized_at + auction.confirmation_timeout;
         
         let winner_key: field = auction_id + BHP256::hash_to_field(auction.winner);
@@ -784,11 +784,11 @@ program shadowbid_marketplace_v2_20.aleo {
             payment_claimed_at: auction.payment_claimed_at,
             confirmation_timeout: auction.confirmation_timeout,
             
-            // V2.19 NEW: Set settlement timing
+            // Persist settlement timing
             settled_at: finalized_at,
             claimable_at,
             
-            // V2.19 NEW: Set fee amounts
+            // Persist fee amounts
             platform_fee_amount: fee_amount,
             seller_net_amount: seller_amount,
             platform_fee_claimed: auction.platform_fee_claimed,
@@ -826,7 +826,7 @@ program shadowbid_marketplace_v2_20.aleo {
         
         // Verify auction uses USDCx currency
         assert_eq(auction.currency_type, CURRENCY_USDX);
-        // V2.19 CHANGED: Allow refunds for CANCELLED auctions
+        // Allow refunds for settled or cancelled auctions
         assert(auction.state == SETTLED || auction.state == CANCELLED);
         
         let bid_key: field = auction_id + BHP256::hash_to_field(bidder);
@@ -875,7 +875,7 @@ program shadowbid_marketplace_v2_20.aleo {
         
         // Verify auction uses USAD currency
         assert_eq(auction.currency_type, CURRENCY_USAD);
-        // V2.19 CHANGED: Allow refunds for CANCELLED auctions
+        // Allow refunds for settled or cancelled auctions
         assert(auction.state == SETTLED || auction.state == CANCELLED);
         
         let bid_key: field = auction_id + BHP256::hash_to_field(bidder);
@@ -931,7 +931,7 @@ program shadowbid_marketplace_v2_20.aleo {
         
         // Verify auction uses Aleo currency
         assert_eq(auction.currency_type, CURRENCY_ALEO);
-        // V2.19 CHANGED: Allow refunds for CANCELLED auctions
+        // Allow refunds for settled or cancelled auctions
         assert(auction.state == SETTLED || auction.state == CANCELLED);
         
         let bid_key: field = auction_id + BHP256::hash_to_field(bidder);
@@ -956,7 +956,7 @@ program shadowbid_marketplace_v2_20.aleo {
     }
 
     // -------------------------
-    // 8. PRIVATE TRANSACTIONS (V2.18 NEW)
+    // 8. Private Transactions
     // -------------------------
     
     // 8a. Commit Bid Aleo - Private Input (Private → Public)
@@ -1051,7 +1051,7 @@ program shadowbid_marketplace_v2_20.aleo {
     
     // 8b. Commit Bid USDCx - Private Input (Private → Public)
     // NOTE: USDCx private requires ComplianceRecord - complex implementation
-    // Skipped in V2.18, will be added in V3.0
+    // Not yet implemented for private stablecoin flows
     
     // 8c. Claim Refund Aleo - Private Output (Public → Private)
     // Contract sends from public mapping, user receives private record
@@ -1075,15 +1075,15 @@ program shadowbid_marketplace_v2_20.aleo {
         ));
     }
     
-    // Note: finalize_claim_refund_aleo already exists from V2.17
-    // It handles the escrow validation and marking as refunded
+    // Note: finalize_claim_refund_aleo already exists above.
+    // It handles escrow validation and marks the bid as refunded.
     
     // 8d. Claim Refund USDCx/USAD - Private Output
     // NOTE: USDCx/USAD private requires ComplianceRecord - complex implementation
-    // Skipped in V2.18, will be added in V3.0
+    // Not yet implemented for private stablecoin flows
 
     // -------------------------
-    // 9. RWA SETTLEMENT MECHANISM (V2.18 NEW)
+    // 9. RWA Settlement Mechanism
     // -------------------------
     
     // 9a. Confirm Receipt - Winner confirms item received
@@ -1186,7 +1186,7 @@ program shadowbid_marketplace_v2_20.aleo {
         // Cannot claim twice
         assert(!auction.payment_claimed);
         
-        // V2.19 CHANGED: Use claimable_at instead of item_received_at + timeout
+        // Use claimable_at instead of item_received_at + timeout
         let timeout_passed: bool = claim_at >= auction.claimable_at;
         assert(auction.item_received || timeout_passed);
         
@@ -1269,7 +1269,7 @@ program shadowbid_marketplace_v2_20.aleo {
         // Cannot claim twice
         assert(!auction.payment_claimed);
         
-        // V2.19 CHANGED: Use claimable_at instead of item_received_at + timeout
+        // Use claimable_at instead of item_received_at + timeout
         let timeout_passed: bool = claim_at >= auction.claimable_at;
         assert(auction.item_received || timeout_passed);
         
@@ -1352,7 +1352,7 @@ program shadowbid_marketplace_v2_20.aleo {
         // Cannot claim twice
         assert(!auction.payment_claimed);
         
-        // V2.19 CHANGED: Use claimable_at instead of item_received_at + timeout
+        // Use claimable_at instead of item_received_at + timeout
         let timeout_passed: bool = claim_at >= auction.claimable_at;
         assert(auction.item_received || timeout_passed);
         
@@ -1390,7 +1390,7 @@ program shadowbid_marketplace_v2_20.aleo {
     }
 
     // -------------------------
-    // 10. V2.19 NEW FUNCTIONS
+    // 10. Platform Fee and Reserve Functions
     // -------------------------
     
     // 10a. Claim Platform Fee - Aleo
