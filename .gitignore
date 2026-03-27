@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+
+# Leo
+.leo/
+build/
+
+# Environment
+.env
+.env.*
+.env.local
+.env.production
+!.env.example
+!.env.local.example
+!**/.env.example
+!**/.env.local.example
+
+# Leo build artifacts
+smart-contract/build/
+smart-contract/.leo/
+smart-contract/outputs/
+smart-contract/*.avm
+
+# IDE
+.kiro/
+.vscode/
+.idea/
+.vercel/
+
+# OS
+.DS_Store
+*.log
