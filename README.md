@@ -75,6 +75,7 @@ npm run build:contracts
 - [frontend/README.md](frontend/README.md) explains the app and local workflow
 - [contracts/README.md](contracts/README.md) summarizes the `v2.20` Leo program
 - [docs/README.md](docs/README.md) indexes the guides moved out of the app folder
+- [docs/frontend/ops-console.md](docs/frontend/ops-console.md) explains what `Ops Console` is, how it works, and how it is wired into the repo
 
 ## Deployment Notes
 

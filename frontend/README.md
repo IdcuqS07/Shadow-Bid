@@ -1,13 +1,13 @@
 # ShadowBid Frontend
 
-React + Vite marketplace UI for ShadowBid, including the live Ops Console API integration that runs on Vercel.
+React + Vite marketplace UI for ShadowBid, including the admin-facing Ops Console and the shared Ops backend integration used by premium lifecycle flows.
 
 ## What Lives Here
 
 - Marketplace pages for create, bid, reveal, settlement, and admin flows
 - Wallet integration for Aleo-compatible wallets, with Shield Wallet as the recommended option
-- Vercel Function entrypoint for the live Ops backend
-- Local fallback ops server for development
+- Vercel Function entrypoint for the Ops backend
+- Node/VPS-friendly ops server for development or external hosting
 
 ## Local Development
 
@@ -53,3 +53,4 @@ frontend/
 - Troubleshooting: [docs/frontend/troubleshooting.md](../docs/frontend/troubleshooting.md)
 - Integration notes: [docs/frontend/integration.md](../docs/frontend/integration.md)
 - Ops storage notes: [docs/frontend/local-storage.md](../docs/frontend/local-storage.md)
+- Ops Console guide: [docs/frontend/ops-console.md](../docs/frontend/ops-console.md)

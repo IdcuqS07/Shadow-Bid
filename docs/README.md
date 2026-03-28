@@ -9,6 +9,7 @@ This directory groups the supporting guides that used to live beside the fronten
 - [troubleshooting.md](frontend/troubleshooting.md)
 - [integration.md](frontend/integration.md)
 - [local-storage.md](frontend/local-storage.md)
+- [ops-console.md](frontend/ops-console.md)
 
 ## Contract Guides
 
