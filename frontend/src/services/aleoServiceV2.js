@@ -259,7 +259,7 @@ export function generateNonce() {
 
 // Helper: Generate commitment hash (simplified)
 // Production should use proper Poseidon hash
-export function generateCommitment(amountUsdx, nonce, bidderAddress, auctionId) {
+export function generateCommitment(amountUsdx, nonce) {
   // Simplified: nonce + amount
   // Production: Use proper cryptographic hash
   const nonceValue = BigInt(nonce.replace('field', ''));
@@ -621,8 +621,12 @@ export async function waitForTransactionConfirmation(transactionId, options = {}
       lastResult = await getTransactionConfirmation(transactionId);
 
       if (lastResult.confirmed) {
+        const rejectedByExecution = lastResult.transactionType === 'fee';
         return {
-          status: lastResult.transactionType === 'fee' ? 'rejected' : 'confirmed',
+          status: rejectedByExecution ? 'rejected' : 'confirmed',
+          error: rejectedByExecution
+            ? 'Execution was rejected on-chain before the contract state changed.'
+            : null,
           ...lastResult,
         };
       }

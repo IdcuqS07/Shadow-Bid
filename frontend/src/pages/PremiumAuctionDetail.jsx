@@ -228,16 +228,6 @@ function extractPrivateRecordMicrocredits(record) {
   return null;
 }
 
-function summarizePrivateRecord(record) {
-  return {
-    type: typeof record,
-    hasPlaintext: Boolean(record && typeof record === 'object' && typeof record.plaintext === 'string'),
-    hasRecordString: Boolean(record && typeof record === 'object' && typeof record.record === 'string'),
-    hasData: Boolean(record && typeof record === 'object' && record.data),
-    microcredits: extractPrivateRecordMicrocredits(record),
-  };
-}
-
 function getPrivateRecordLockStorageKey(walletAddress) {
   return `private_record_locks_${walletAddress}`;
 }
@@ -1103,7 +1093,18 @@ export default function PremiumAuctionDetail() {
   };
 
   const waitForLifecycleTransaction = async (result, successMessage, pendingMessage) => {
-    const transactionId = result?.transactionId;
+    const transactionId =
+      typeof result?.walletTransactionId === 'string' && result.walletTransactionId.trim()
+        ? result.walletTransactionId
+        : typeof result?.transactionId === 'string' && result.transactionId.trim()
+          ? result.transactionId
+          : typeof result === 'string' && result.trim()
+            ? result
+            : null;
+    const explorerTransactionId =
+      typeof result?.explorerTransactionId === 'string' && result.explorerTransactionId.trim()
+        ? result.explorerTransactionId
+        : null;
 
     if (!transactionId) {
       alert(successMessage);
@@ -1111,13 +1112,10 @@ export default function PremiumAuctionDetail() {
       return;
     }
 
-    const confirmation = await waitForTransactionConfirmation(transactionId, {
-      attempts: 10,
-      intervalMs: 2000,
-    });
+    const confirmation = await resolveTransactionStatus(transactionId, explorerTransactionId);
 
     if (confirmation.status === 'rejected') {
-      throw new Error('Transaction was rejected by the network after submission');
+      throw new Error(confirmation.error || 'Transaction was rejected by the network after submission');
     }
 
     if (confirmation.status === 'confirmed') {
@@ -1941,6 +1939,14 @@ export default function PremiumAuctionDetail() {
       alert('⏳ Close Auction already submitted.\n\nWait for the contract state to update to CLOSED before trying again.');
       return;
     }
+
+    if (!auctionCountdownEnded) {
+      alert(
+        `⏳ Auction is still running.\n\n` +
+        `Close Auction becomes available after ${formatUnixTimestamp(auction?.endTimestamp)}.`
+      );
+      return;
+    }
     
     setIsSubmitting(true);
     
@@ -1951,11 +1957,17 @@ export default function PremiumAuctionDetail() {
       
       const result = await closeAuction(executeTransaction, parseInt(auctionId));
       const transactionId = result?.transactionId;
+      const explorerTransactionId = looksLikeOnChainTransactionId(result?.explorerTransactionId)
+        ? result.explorerTransactionId
+        : looksLikeOnChainTransactionId(transactionId)
+          ? transactionId
+          : null;
 
       if (transactionId && address) {
         savePendingCloseAuction(auctionId, address, {
           transactionId,
           walletTransactionId: transactionId,
+          explorerTransactionId,
           status: 'pending',
           createdAt: Date.now(),
         });
@@ -2007,12 +2019,10 @@ export default function PremiumAuctionDetail() {
         throw new Error('Wallet does not support transactions');
       }
       
-      let result;
-      
       // Call appropriate refund function based on currency type
       if (auction.currencyType === 0) {
         // USDCx refund
-        result = await claimRefund(
+        await claimRefund(
           executeTransaction,
           parseInt(auctionId),
           commitmentData.amount
@@ -2020,7 +2030,7 @@ export default function PremiumAuctionDetail() {
         alert('✅ Refund Claimed Successfully!\n\nYour USDCx has been returned.');
       } else if (auction.currencyType === 2) {
         // USAD refund
-        result = await claimRefundUSAD(
+        await claimRefundUSAD(
           executeTransaction,
           parseInt(auctionId),
           commitmentData.amount
@@ -2028,17 +2038,19 @@ export default function PremiumAuctionDetail() {
         alert('✅ Refund Claimed Successfully!\n\nYour USAD has been returned.');
       } else {
         const isPrivateRefund = isPrivateCommitment(commitmentData);
-        result = isPrivateRefund
-          ? await claimRefundAleoPrivate(
-              executeTransaction,
-              parseInt(auctionId, 10),
-              commitmentData.amount
-            )
-          : await claimRefundAleo(
+        if (isPrivateRefund) {
+          await claimRefundAleoPrivate(
               executeTransaction,
               parseInt(auctionId, 10),
               commitmentData.amount
             );
+        } else {
+          await claimRefundAleo(
+              executeTransaction,
+              parseInt(auctionId, 10),
+              commitmentData.amount
+            );
+        }
         alert(
           isPrivateRefund
             ? '✅ Refund Claimed Successfully!\n\nYour Aleo credits were returned as a private record.'
@@ -4022,10 +4034,10 @@ export default function PremiumAuctionDetail() {
                         <PremiumButton 
                           className="w-full"
                           onClick={handleCloseAuction}
-                          disabled={isSubmitting || isClosePending}
+                          disabled={isSubmitting || isClosePending || !auctionCountdownEnded}
                           variant="cyan"
                         >
-                          {isSubmitting ? 'Closing...' : isClosePending ? 'Close Pending...' : auctionCountdownEnded ? '1️⃣ Close Auction Now' : '1️⃣ Close Auction'}
+                          {isSubmitting ? 'Closing...' : isClosePending ? 'Close Pending...' : auctionCountdownEnded ? '1️⃣ Close Auction Now' : '1️⃣ Close Auction After End'}
                         </PremiumButton>
                       )}
                       
