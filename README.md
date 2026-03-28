@@ -76,6 +76,7 @@ npm run build:contracts
 - [contracts/README.md](contracts/README.md) summarizes the `v2.20` Leo program
 - [docs/README.md](docs/README.md) indexes the guides moved out of the app folder
 - [docs/frontend/ops-console.md](docs/frontend/ops-console.md) explains what `Ops Console` is, how it works, and how it is wired into the repo
+- [docs/contracts/autonomous-lifecycle-design.md](docs/contracts/autonomous-lifecycle-design.md) proposes the next contract/protocol path for delegated reveal, encrypted reveal escrow, and non-reveal fallback
 
 ## Deployment Notes
 

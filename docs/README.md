@@ -16,3 +16,4 @@ This directory groups the supporting guides that used to live beside the fronten
 - [deploy.md](contracts/deploy.md)
 - [deployment-instructions.md](contracts/deployment-instructions.md)
 - [deployment-success.md](contracts/deployment-success.md)
+- [autonomous-lifecycle-design.md](contracts/autonomous-lifecycle-design.md)

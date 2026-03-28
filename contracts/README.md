@@ -31,3 +31,4 @@ leo build
 - Deployment guide: [docs/contracts/deploy.md](../docs/contracts/deploy.md)
 - Manual instructions: [docs/contracts/deployment-instructions.md](../docs/contracts/deployment-instructions.md)
 - Latest deployment record: [docs/contracts/deployment-success.md](../docs/contracts/deployment-success.md)
+- Next-step autonomy design: [docs/contracts/autonomous-lifecycle-design.md](../docs/contracts/autonomous-lifecycle-design.md)
