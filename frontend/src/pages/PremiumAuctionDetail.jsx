@@ -2607,6 +2607,12 @@ export default function PremiumAuctionDetail() {
     auction.winner.toLowerCase() === normalizedAddress &&
     !isReserveFailureFlow
   );
+  const isBidderParticipantView = Boolean(
+    normalizedAddress &&
+    !isSellerView &&
+    !isPlatformOwnerView &&
+    (submittedCommitmentData || pendingCommitmentData || storedCommitmentData)
+  );
   const auctionCountdownEnded = Boolean(
     auction?.endTimestamp &&
     Math.floor(Date.now() / 1000) >= auction.endTimestamp
@@ -2645,6 +2651,13 @@ export default function PremiumAuctionDetail() {
   const revealWindowEndsAtLabel = formatUnixTimestamp(auction?.challengeEndTime);
   const challengeWindowEndsAtLabel = formatUnixTimestamp(auction?.challengeEndTime);
   const platformFeeClaimedAtLabel = formatUnixTimestamp(auction?.platformFeeClaimedAt);
+  const settlementOutcomeSummary = auction?.winner
+    ? isWinnerView
+      ? `You are the winning bidder${auction?.winningBid ? ` with a final bid of ${auction.winningBid} ${auction.token}.` : '.'}`
+      : isBidderParticipantView
+        ? 'Thank you for participating. Another bidder has been confirmed as the winner of this auction.'
+        : 'A winning bidder has been confirmed for this auction.'
+    : null;
   const resolvedSellerVerification = sellerVerification || auction?.sellerVerification || null;
   const resolvedProofBundle = auctionProofBundle || auction?.assetProof || null;
   const proofFiles = Array.isArray(resolvedProofBundle?.proofFiles)
@@ -3879,8 +3892,19 @@ export default function PremiumAuctionDetail() {
                     </div>
                     {(auction.winningBid || auction.sellerNetAmount !== null) && (
                       <div className="mt-2 pt-2 border-t border-gold-500/30">
+                        {settlementOutcomeSummary && (
+                          <div className={`mb-2 rounded-lg border px-3 py-2 text-[11px] leading-relaxed ${
+                            isWinnerView
+                              ? 'border-green-500/20 bg-green-500/10 text-green-200'
+                              : isBidderParticipantView
+                                ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100'
+                                : 'border-white/10 bg-black/20 text-white/65'
+                          }`}>
+                            {settlementOutcomeSummary}
+                          </div>
+                        )}
                         {auction.winningBid && (
-                          <div className="text-cyan-400 mt-1">Winning Bid: {auction.winningBid} {auction.token}</div>
+                          <div className="text-cyan-400 mt-1">{isWinnerView ? 'Your Winning Bid' : 'Winning Bid'}: {auction.winningBid} {auction.token}</div>
                         )}
                         {auction.sellerNetAmount !== null && (
                           <div className="text-green-400 mt-1">Seller Net: {auction.sellerNetAmount} {auction.token}</div>
