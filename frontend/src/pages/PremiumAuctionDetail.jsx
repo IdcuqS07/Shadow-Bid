@@ -2670,6 +2670,12 @@ export default function PremiumAuctionDetail() {
     onChainDisputeValue !== '0field'
   );
   const canOpenOnChainDispute = auction?.status === 'challenge' || auction?.status === 'settled';
+  const canClaimPlatformFeeAction = Boolean(
+    isPlatformOwnerView &&
+    auction?.status === 'settled' &&
+    auction?.paymentClaimed &&
+    !auction?.platformFeeClaimed
+  );
 
   return (
     <div className="min-h-screen bg-void-900 text-white">
@@ -4160,20 +4166,6 @@ export default function PremiumAuctionDetail() {
                         </PremiumButton>
                       )}
 
-                      {isPlatformOwnerView &&
-                       auction.status === 'settled' &&
-                       auction.paymentClaimed &&
-                       !auction.platformFeeClaimed && (
-                        <PremiumButton
-                          className="w-full"
-                          onClick={handleClaimPlatformFee}
-                          disabled={isClaimingFee}
-                          variant="gold"
-                        >
-                          {isClaimingFee ? 'Claiming Fee...' : `5️⃣ Claim Platform Fee${auction.platformFee ? ` (${auction.platformFee} ${auction.token})` : ''}`}
-                        </PremiumButton>
-                      )}
-                      
                       {/* Workflow guide */}
                       <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                         <div className="text-xs text-white/60">
@@ -4214,6 +4206,61 @@ export default function PremiumAuctionDetail() {
                           </div>
                         </div>
                       </div>
+                    </div>
+                  )}
+
+                  {isPlatformOwnerView && (
+                    <div className="space-y-3">
+                      <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                        <div className="text-xs font-mono text-cyan-400 mb-1">🏛️ Platform Owner Controls</div>
+                        <div className="text-xs text-white/60">Fee collection uses the platform owner wallet only</div>
+                      </div>
+
+                      <div className="p-4 bg-void-800 rounded-xl border border-white/5 space-y-2 text-xs">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-white/40">Auction Status</span>
+                          <span className="text-cyan-400">{auction.contractState}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-white/40">Seller Payment</span>
+                          <span className={auction.paymentClaimed ? 'text-green-400' : 'text-white/60'}>
+                            {auction.paymentClaimed ? 'CLAIMED' : 'PENDING'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-white/40">Platform Fee</span>
+                          <span className="text-gold-400">
+                            {auction.platformFee !== null ? `${auction.platformFee} ${auction.token}` : 'Not recorded'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-white/40">Fee Claim Status</span>
+                          <span className={auction.platformFeeClaimed ? 'text-green-400' : 'text-white/60'}>
+                            {auction.platformFeeClaimed ? 'CLAIMED' : 'UNCLAIMED'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {canClaimPlatformFeeAction ? (
+                        <PremiumButton
+                          className="w-full"
+                          onClick={handleClaimPlatformFee}
+                          disabled={isClaimingFee || !auction.platformFeeMicro}
+                          variant="gold"
+                        >
+                          {isClaimingFee ? 'Claiming Fee...' : `5️⃣ Claim Platform Fee${auction.platformFee ? ` (${auction.platformFee} ${auction.token})` : ''}`}
+                        </PremiumButton>
+                      ) : (
+                        <div className="p-4 bg-white/5 border border-white/10 rounded-xl text-xs text-white/60">
+                          {auction.platformFeeClaimed
+                            ? 'Platform fee is already claimed on-chain.'
+                            : auction.status !== 'settled'
+                              ? 'Platform fee becomes available after the auction reaches SETTLED.'
+                              : !auction.paymentClaimed
+                                ? 'Platform fee unlocks after the seller payout is claimed on-chain.'
+                                : 'Refresh the auction state if the fee should already be available.'}
+                        </div>
+                      )}
                     </div>
                   )}
                   
