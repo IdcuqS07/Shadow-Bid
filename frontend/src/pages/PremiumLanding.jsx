@@ -109,7 +109,7 @@ export default function PremiumLanding() {
             <div className="flex items-center justify-center gap-4 pt-8">
               <PremiumButton 
                 size="xl"
-                onClick={() => navigate('/premium-create')}
+                onClick={() => navigate('/premium-auctions')}
               >
                 Launch App
               </PremiumButton>
@@ -205,7 +205,7 @@ export default function PremiumLanding() {
               <div className="pt-4">
                 <PremiumButton 
                   size="xl"
-                  onClick={() => navigate('/premium-create')}
+                  onClick={() => navigate('/premium-auctions')}
                 >
                   Get Started Now
                 </PremiumButton>
