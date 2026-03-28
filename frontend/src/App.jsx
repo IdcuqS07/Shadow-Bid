@@ -19,6 +19,7 @@ import PremiumCreateAuction from "@/pages/PremiumCreateAuction";
 import PremiumHowItWorks from "@/pages/PremiumHowItWorks";
 import WalletDebugPage from "@/pages/WalletDebugPage";
 import AdminOnlyRoute from "@/components/auth/AdminOnlyRoute";
+import WalletDiagnostics from "@/components/common/WalletDiagnostics";
 import { AleoWalletProvider } from '@provablehq/aleo-wallet-adaptor-react';
 import { PuzzleWalletAdapter } from '@provablehq/aleo-wallet-adaptor-puzzle';
 import { LeoWalletAdapter } from '@provablehq/aleo-wallet-adaptor-leo';
@@ -55,6 +56,7 @@ function App() {
       }}
     >
       <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
+        <WalletDiagnostics />
         <BrowserRouter>
           <Routes>
             {/* Premium Routes - No AppShell (Default) */}

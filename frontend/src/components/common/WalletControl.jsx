@@ -4,6 +4,7 @@ import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { Check, ChevronDown, Loader2, LogOut } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { recordWalletDebug } from '@/wallets/walletDebug';
 
 function shortenAddress(address) {
   if (!address) return null;
@@ -37,6 +38,38 @@ export default function WalletControl({ variant = 'standard', className, style }
   const availableWallets = (wallets ?? []).filter((candidate) => isSelectableWallet(candidate));
 
   const busy = connecting || disconnecting || switchingWallet;
+  const currentWalletName = wallet?.adapter?.name ?? null;
+
+  useEffect(() => {
+    recordWalletDebug('wallet-control-mounted', {
+      surface: variant,
+      walletName: currentWalletName,
+      connected,
+      address: address ?? null,
+    });
+  }, [variant]);
+
+  useEffect(() => {
+    recordWalletDebug('wallet-control-state', {
+      surface: variant,
+      walletName: currentWalletName,
+      connected,
+      connecting,
+      disconnecting,
+      switchingWallet,
+      address: address ?? null,
+      pendingWalletName,
+    });
+  }, [
+    address,
+    connected,
+    connecting,
+    currentWalletName,
+    disconnecting,
+    pendingWalletName,
+    switchingWallet,
+    variant,
+  ]);
 
   useEffect(() => {
     if (!pendingWalletName || busy) {
@@ -50,9 +83,23 @@ export default function WalletControl({ variant = 'standard', className, style }
     let cancelled = false;
 
     const runConnect = async () => {
+      recordWalletDebug('wallet-control-connect-start', {
+        surface: variant,
+        walletName: pendingWalletName,
+      });
+
       try {
         await connect();
+        recordWalletDebug('wallet-control-connect-success', {
+          surface: variant,
+          walletName: pendingWalletName,
+        });
       } catch (error) {
+        recordWalletDebug('wallet-control-connect-error', {
+          surface: variant,
+          walletName: pendingWalletName,
+          error,
+        });
         console.error('[WalletControl] Failed to connect selected wallet:', error);
       } finally {
         if (!cancelled) {
@@ -67,17 +114,32 @@ export default function WalletControl({ variant = 'standard', className, style }
     return () => {
       cancelled = true;
     };
-  }, [busy, connect, pendingWalletName, wallet?.adapter?.name]);
+  }, [busy, connect, pendingWalletName, variant, wallet?.adapter?.name]);
 
   const handleWalletSelect = async (walletName) => {
     if (busy) {
+      recordWalletDebug('wallet-control-select-ignored-busy', {
+        surface: variant,
+        walletName,
+      });
       return;
     }
 
     if (connected && wallet?.adapter?.name === walletName) {
+      recordWalletDebug('wallet-control-select-same-wallet', {
+        surface: variant,
+        walletName,
+      });
       setOpen(false);
       return;
     }
+
+    recordWalletDebug('wallet-control-select-wallet', {
+      surface: variant,
+      walletName,
+      currentWalletName,
+      connected,
+    });
 
     setOpen(false);
     setSwitchingWallet(true);
@@ -85,11 +147,30 @@ export default function WalletControl({ variant = 'standard', className, style }
 
     try {
       if (connected) {
+        recordWalletDebug('wallet-control-switch-disconnect-start', {
+          surface: variant,
+          walletName,
+          currentWalletName,
+        });
         await disconnect();
+        recordWalletDebug('wallet-control-switch-disconnect-success', {
+          surface: variant,
+          walletName,
+          currentWalletName,
+        });
       }
 
       selectWallet(walletName);
+      recordWalletDebug('wallet-control-select-wallet-success', {
+        surface: variant,
+        walletName,
+      });
     } catch (error) {
+      recordWalletDebug('wallet-control-select-wallet-error', {
+        surface: variant,
+        walletName,
+        error,
+      });
       console.error('[WalletControl] Failed to switch wallet:', error);
       setPendingWalletName(null);
       setSwitchingWallet(false);
@@ -98,6 +179,11 @@ export default function WalletControl({ variant = 'standard', className, style }
 
   const handleDisconnect = async () => {
     if (busy || !connected) {
+      recordWalletDebug('wallet-control-disconnect-ignored', {
+        surface: variant,
+        busy,
+        connected,
+      });
       return;
     }
 
@@ -105,8 +191,21 @@ export default function WalletControl({ variant = 'standard', className, style }
     setSwitchingWallet(true);
 
     try {
+      recordWalletDebug('wallet-control-disconnect-start', {
+        surface: variant,
+        walletName: currentWalletName,
+      });
       await disconnect();
+      recordWalletDebug('wallet-control-disconnect-success', {
+        surface: variant,
+        walletName: currentWalletName,
+      });
     } catch (error) {
+      recordWalletDebug('wallet-control-disconnect-error', {
+        surface: variant,
+        walletName: currentWalletName,
+        error,
+      });
       console.error('[WalletControl] Failed to disconnect wallet:', error);
     } finally {
       setPendingWalletName(null);
@@ -114,7 +213,6 @@ export default function WalletControl({ variant = 'standard', className, style }
     }
   };
 
-  const currentWalletName = wallet?.adapter?.name ?? null;
   const buttonLabel = busy
     ? 'Connecting...'
     : connected && address
