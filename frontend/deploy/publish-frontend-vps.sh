@@ -27,6 +27,7 @@ ssh "${REMOTE}" "\
   ln -sfn '${REMOTE_RELEASE_DIR}' '${REMOTE_WEB_ROOT}/current' && \
   cp /tmp/nginx-shadowbid-web.conf /etc/nginx/sites-available/shadowbid-web && \
   ln -sfn /etc/nginx/sites-available/shadowbid-web /etc/nginx/sites-enabled/shadowbid-web && \
+  rm -f /etc/nginx/sites-enabled/default && \
   nginx -t && \
   systemctl reload nginx"
 
