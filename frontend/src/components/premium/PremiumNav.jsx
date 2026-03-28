@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { Shield, Loader2, Bot, BookOpen } from 'lucide-react';
+import { Shield, Loader2, Bot } from 'lucide-react';
 import PremiumNotificationCenter from '@/components/notifications/PremiumNotificationCenter';
 
 export default function PremiumNav() {
@@ -27,14 +27,6 @@ export default function PremiumNav() {
           </button>
 
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => navigate('/how-it-works')}
-              className="hidden lg:inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/75 transition-colors hover:border-white/20 hover:bg-white/10"
-            >
-              <BookOpen className="h-4 w-4" />
-              How It Works
-            </button>
             <button
               type="button"
               onClick={() => navigate('/ops')}
