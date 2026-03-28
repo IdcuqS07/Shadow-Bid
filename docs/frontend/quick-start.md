@@ -116,9 +116,9 @@ https://testnet.explorer.provable.com/transaction/YOUR_TX_ID
 
 ## 🎓 Learn More
 
-- **Full Guide**: See [USER_GUIDE.md](./USER_GUIDE.md)
-- **Troubleshooting**: See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
-- **Local Storage**: See [LOCAL_STORAGE.md](./LOCAL_STORAGE.md)
+- **Full Guide**: See [user-guide.md](./user-guide.md)
+- **Troubleshooting**: See [troubleshooting.md](./troubleshooting.md)
+- **Local Storage**: See [local-storage.md](./local-storage.md)
 
 ## 🎉 You're Ready!
 

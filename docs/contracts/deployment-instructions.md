@@ -9,7 +9,7 @@
 ## Option 1: Use an environment variable
 
 ```bash
-cd shadowbid_marketplace_v2_20
+cd contracts
 export PRIVATE_KEY="your_private_key_here"
 leo deploy --network testnet
 ```
@@ -18,7 +18,7 @@ To deploy to mainnet, replace `testnet` with `mainnet`.
 
 ## Option 2: Use a local `.env` file
 
-Create `shadowbid_marketplace_v2_20/.env` with your local values:
+Create `contracts/.env` with your local values:
 
 ```bash
 PRIVATE_KEY=your_private_key_here
@@ -28,7 +28,7 @@ NETWORK=testnet
 Then load the values in your shell and deploy:
 
 ```bash
-cd shadowbid_marketplace_v2_20
+cd contracts
 source .env
 leo deploy --network "${NETWORK}"
 ```
@@ -36,7 +36,7 @@ leo deploy --network "${NETWORK}"
 ## Option 3: Use Leo Studio
 
 1. Open Leo Studio.
-2. Load the `shadowbid_marketplace_v2_20` project.
+2. Load the `contracts` project.
 3. Connect the deployer wallet.
 4. Choose the target network.
 5. Confirm the deployment transaction.
@@ -59,7 +59,7 @@ shadowbid_marketplace_v2_20.aleo
 ### Run a local smoke test
 
 ```bash
-cd shadowbid_marketplace_v2_20
+cd contracts
 leo run create_auction \
   "123456field" \
   "1000000u128" \

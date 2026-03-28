@@ -151,5 +151,5 @@ The auctioneer is responsible for determining the winner using zero-knowledge pr
 
 For issues or questions:
 - Check the transaction on [Aleo Explorer](https://testnet.explorer.provable.com)
-- Review the [Integration Guide](./INTEGRATION.md) for technical details
+- Review the [Integration Guide](./integration.md) for technical details
 - Open an issue on GitHub

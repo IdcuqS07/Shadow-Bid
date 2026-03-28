@@ -254,4 +254,4 @@ Potential improvements:
 
 ## Questions?
 
-See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for common issues.
+See [troubleshooting.md](./troubleshooting.md) for common issues.

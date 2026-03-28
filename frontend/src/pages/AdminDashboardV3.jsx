@@ -176,7 +176,7 @@ export default function AdminDashboardV3() {
                 <div className="font-semibold">Ops API is offline</div>
                 <div className="mt-1 text-red-100/80">
                   {import.meta.env.DEV
-                    ? 'Start it with `npm run dev:api` inside `shadowbid-marketplace` to enable analytics sync, notifications, and executor jobs.'
+                    ? 'Start it with `npm run dev:api` inside `frontend` to enable analytics sync, notifications, and executor jobs.'
                     : 'This deployment is not reaching the shared operations backend right now, so analytics and automation data are temporarily unavailable.'}
                 </div>
               </div>

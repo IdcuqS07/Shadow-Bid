@@ -1,5 +1,5 @@
 {
-  "name": "shadowbid-marketplace",
+  "name": "shadow-bid-frontend",
   "private": true,
   "version": "1.0.0",
   "description": "Private Sealed-Bid Marketplace powered by Zero Knowledge",

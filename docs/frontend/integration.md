@@ -1,8 +1,11 @@
 # Smart Contract Integration Guide
 
+This guide documents the lightweight helper service in `frontend/src/services/aleoService.js`.
+The production marketplace flow now centers on the `v2.20` program and `aleoServiceV2.js`.
+
 ## Contract Information
 
-- **Program ID**: `shadowbid_marketplace.aleo`
+- **Program ID**: `shadowbid_marketplace_v2_20.aleo`
 - **Network**: Aleo Testnet
 - **Auctioneer Address**: `aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8`
 
@@ -59,7 +62,7 @@ Create `.env.local` file:
 
 ```env
 VITE_ALEO_NETWORK=testnet
-VITE_PROGRAM_ID=shadowbid_marketplace.aleo
+VITE_PROGRAM_ID=shadowbid_marketplace_v2_20.aleo
 VITE_AUCTIONEER_ADDRESS=aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8
 VITE_API_BASE=https://api.explorer.provable.com/v1/testnet
 ```

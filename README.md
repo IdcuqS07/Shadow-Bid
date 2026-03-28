@@ -1,44 +1,76 @@
-# ShadowBid Marketplace
+# ShadowBid
 
-ShadowBid is a privacy-focused sealed-bid auction marketplace built on Aleo.
-This repository now contains the active `v2.20` Leo contract and the restored React frontend that previously ran on `http://localhost:3007`.
+Privacy-focused sealed-bid auctions on Aleo, organized as a cleaner monorepo.
 
-## Repository Structure
+## Overview
 
-- `shadowbid_marketplace_v2_20/` - active Leo smart contract source and deployment notes
-- `shadowbid-marketplace/` - React + Vite frontend used for the marketplace UI
+ShadowBid combines a React marketplace frontend with the active `v2.20` Leo contract. The repository is now structured closer to a production app repo, with clear separation between the frontend, contract source, and supporting documentation.
 
-## Frontend Quick Start
+## Repository Layout
+
+```text
+shadow-bid/
+├── frontend/          # React + Vite marketplace UI and live Ops Console API
+├── contracts/         # Active ShadowBid v2.20 Leo program
+├── docs/              # Frontend and contract guides
+├── package.json       # Root shortcuts for frontend and contract workflows
+└── README.md
+```
+
+## Architecture
+
+```text
+┌────────────────────┐      ┌──────────────────────┐      ┌─────────────────────┐
+│ frontend/          │─────▶│ Vercel Functions     │─────▶│ Vercel Blob         │
+│ React + Vite UI    │      │ Ops Console API      │      │ Persistent ops data │
+│ Wallet adapters    │      │ Notifications/state  │      │ executor runs       │
+└─────────┬──────────┘      └──────────────────────┘      └─────────────────────┘
+          │
+          ▼
+┌────────────────────┐
+│ contracts/         │
+│ Leo v2.20 program  │
+│ Commit-reveal flow │
+│ Reserve/settlement │
+└────────────────────┘
+```
+
+## Quick Start
+
+### Frontend
 
 ```bash
-cd shadowbid-marketplace
-npm ci
+npm run install:frontend
 npm run dev
 ```
 
-The frontend runs on `http://localhost:3007`.
+The marketplace runs on `http://localhost:3007`.
 
-## Contract Quick Start
+### Ops API for local development
 
 ```bash
-cd shadowbid_marketplace_v2_20
-leo build
+npm run dev:ops
 ```
 
-## V2.20 Highlights
+### Contract
 
-- Commit-reveal sealed bidding
-- Aleo, USDCx, and USAD support
-- Reserve price and platform fee accounting
-- Keeper-friendly lifecycle timestamps
-- Dispute handling and proof anchor mappings
+```bash
+npm run build:contracts
+```
 
-## Deployment
+## Key Paths
 
-- Frontend production deployment is managed through Vercel
-- Contract deployment guidance lives in `shadowbid_marketplace_v2_20/DEPLOY.md`
+- [frontend/README.md](/Users/idcuq/Documents/Bid%20Market/frontend/README.md) explains the app and local workflow
+- [contracts/README.md](/Users/idcuq/Documents/Bid%20Market/contracts/README.md) summarizes the `v2.20` Leo program
+- [docs/README.md](/Users/idcuq/Documents/Bid%20Market/docs/README.md) indexes the guides moved out of the app folder
 
-## Links
+## Deployment Notes
+
+- The live marketplace is deployed from `frontend/`
+- The production Ops Console backend is served by `frontend/api/index.js`
+- Contract deployment references are collected under `docs/contracts/`
+
+## References
 
 - Aleo developer docs: <https://developer.aleo.org/>
 - Leo language docs: <https://developer.aleo.org/leo/>

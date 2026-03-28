@@ -20,14 +20,14 @@
 ### 1. Build the program
 
 ```bash
-cd shadowbid_marketplace_v2_20
+cd contracts
 leo build
 ```
 
 ### 2. Deploy to testnet
 
 ```bash
-cd shadowbid_marketplace_v2_20
+cd contracts
 leo deploy --network testnet
 ```
 

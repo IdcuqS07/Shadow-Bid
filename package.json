@@ -1,0 +1,14 @@
+{
+  "name": "shadow-bid",
+  "private": true,
+  "description": "ShadowBid monorepo with frontend, contract, and docs",
+  "scripts": {
+    "install:frontend": "npm --prefix frontend ci",
+    "dev": "npm --prefix frontend run dev",
+    "dev:ops": "npm --prefix frontend run dev:api",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview",
+    "lint": "npm --prefix frontend run lint",
+    "build:contracts": "cd contracts && leo build"
+  }
+}

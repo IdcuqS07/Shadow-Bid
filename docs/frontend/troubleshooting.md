@@ -179,7 +179,7 @@ The auction ID format is incorrect (should be a number).
 ### Before Asking for Help
 
 1. Check this troubleshooting guide
-2. Review the [User Guide](./USER_GUIDE.md)
+2. Review the [User Guide](./user-guide.md)
 3. Check transaction on [Aleo Explorer](https://testnet.explorer.provable.com)
 4. Look at browser console for errors (F12)
 
