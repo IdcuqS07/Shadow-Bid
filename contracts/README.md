@@ -16,6 +16,6 @@ leo build
 
 ## Deploy and Validation
 
-- Deployment guide: [docs/contracts/deploy.md](/Users/idcuq/Documents/Bid%20Market/docs/contracts/deploy.md)
-- Manual instructions: [docs/contracts/deployment-instructions.md](/Users/idcuq/Documents/Bid%20Market/docs/contracts/deployment-instructions.md)
-- Latest deployment record: [docs/contracts/deployment-success.md](/Users/idcuq/Documents/Bid%20Market/docs/contracts/deployment-success.md)
+- Deployment guide: [docs/contracts/deploy.md](../docs/contracts/deploy.md)
+- Manual instructions: [docs/contracts/deployment-instructions.md](../docs/contracts/deployment-instructions.md)
+- Latest deployment record: [docs/contracts/deployment-success.md](../docs/contracts/deployment-success.md)

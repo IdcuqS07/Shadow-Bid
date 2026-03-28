@@ -60,9 +60,9 @@ npm run build:contracts
 
 ## Key Paths
 
-- [frontend/README.md](/Users/idcuq/Documents/Bid%20Market/frontend/README.md) explains the app and local workflow
-- [contracts/README.md](/Users/idcuq/Documents/Bid%20Market/contracts/README.md) summarizes the `v2.20` Leo program
-- [docs/README.md](/Users/idcuq/Documents/Bid%20Market/docs/README.md) indexes the guides moved out of the app folder
+- [frontend/README.md](frontend/README.md) explains the app and local workflow
+- [contracts/README.md](contracts/README.md) summarizes the `v2.20` Leo program
+- [docs/README.md](docs/README.md) indexes the guides moved out of the app folder
 
 ## Deployment Notes
 

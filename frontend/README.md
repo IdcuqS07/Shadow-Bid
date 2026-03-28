@@ -48,8 +48,8 @@ frontend/
 
 ## Supporting Guides
 
-- Quick start: [docs/frontend/quick-start.md](/Users/idcuq/Documents/Bid%20Market/docs/frontend/quick-start.md)
-- User guide: [docs/frontend/user-guide.md](/Users/idcuq/Documents/Bid%20Market/docs/frontend/user-guide.md)
-- Troubleshooting: [docs/frontend/troubleshooting.md](/Users/idcuq/Documents/Bid%20Market/docs/frontend/troubleshooting.md)
-- Integration notes: [docs/frontend/integration.md](/Users/idcuq/Documents/Bid%20Market/docs/frontend/integration.md)
-- Ops storage notes: [docs/frontend/local-storage.md](/Users/idcuq/Documents/Bid%20Market/docs/frontend/local-storage.md)
+- Quick start: [docs/frontend/quick-start.md](../docs/frontend/quick-start.md)
+- User guide: [docs/frontend/user-guide.md](../docs/frontend/user-guide.md)
+- Troubleshooting: [docs/frontend/troubleshooting.md](../docs/frontend/troubleshooting.md)
+- Integration notes: [docs/frontend/integration.md](../docs/frontend/integration.md)
+- Ops storage notes: [docs/frontend/local-storage.md](../docs/frontend/local-storage.md)
