@@ -18,6 +18,7 @@ import PremiumAuctionList from "@/pages/PremiumAuctionList";
 import PremiumAuctionDetail from "@/pages/PremiumAuctionDetail";
 import PremiumCreateAuction from "@/pages/PremiumCreateAuction";
 import WalletDebugPage from "@/pages/WalletDebugPage";
+import AdminOnlyRoute from "@/components/auth/AdminOnlyRoute";
 import { AleoWalletProvider } from '@provablehq/aleo-wallet-adaptor-react';
 import { WalletModalProvider } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { PuzzleWalletAdapter } from '@provablehq/aleo-wallet-adaptor-puzzle';
@@ -72,7 +73,14 @@ function App() {
                 <Route path="auctions" element={<AuctionsPage />} />
                 <Route path="auctions/:auctionId" element={<AuctionDetailPage />} />
                 <Route path="create" element={<CreateAuctionPage />} />
-                <Route path="admin-v3" element={<AdminDashboardV3 />} />
+                <Route
+                  path="admin-v3"
+                  element={(
+                    <AdminOnlyRoute>
+                      <AdminDashboardV3 />
+                    </AdminOnlyRoute>
+                  )}
+                />
                 <Route path="commit-bid" element={<CommitBidPageV2 />} />
                 <Route path="reveal-bid" element={<RevealBidPageV2 />} />
                 <Route path="settlement" element={<SettlementPage />} />

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import { useAleoBalance } from "@/hooks/useAleoBalance";
 import { useUnrevealedBids } from "@/hooks/useUnrevealedBids";
+import { isPlatformOwner } from "@/services/aleoServiceV2";
 
 const sellerNavItems = [
   { to: "/create", label: "Create Auction", icon: PlusCircle },
@@ -39,9 +40,10 @@ export const Sidebar = ({ mobileOpen, onClose }) => {
   const [dashboardExpanded, setDashboardExpanded] = useState(true);
   const [sellerExpanded, setSellerExpanded] = useState(false);
   const [bidderExpanded, setBidderExpanded] = useState(false);
-  const { connected } = useWallet();
+  const { connected, address } = useWallet();
   const { formatted, loading } = useAleoBalance();
   const { totalUnrevealed } = useUnrevealedBids();
+  const showAdminConsole = Boolean(address && isPlatformOwner(address));
 
   const shouldShowContent = !isCollapsed || isHovered;
 
@@ -180,24 +182,26 @@ export const Sidebar = ({ mobileOpen, onClose }) => {
                   {shouldShowContent && <span>How It Works</span>}
                 </NavLink>
 
-                <NavLink
-                  to="/admin-v3"
-                  onClick={onClose}
-                  data-testid="nav-link-prototype-console"
-                  className={({ isActive }) =>
-                    `group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-200 ${
-                      isActive
-                        ? "bg-slate-800 text-white"
-                        : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
-                    } ${
-                      shouldShowContent ? "pl-10" : "justify-center"
-                    }`
-                  }
-                  title={!shouldShowContent ? "Ops Console" : ""}
-                >
-                  <Bot className="h-4 w-4 flex-shrink-0" />
-                  {shouldShowContent && <span>Ops Console</span>}
-                </NavLink>
+                {showAdminConsole && (
+                  <NavLink
+                    to="/admin-v3"
+                    onClick={onClose}
+                    data-testid="nav-link-prototype-console"
+                    className={({ isActive }) =>
+                      `group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+                        isActive
+                          ? "bg-slate-800 text-white"
+                          : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                      } ${
+                        shouldShowContent ? "pl-10" : "justify-center"
+                      }`
+                    }
+                    title={!shouldShowContent ? "Ops Console" : ""}
+                  >
+                    <Bot className="h-4 w-4 flex-shrink-0" />
+                    {shouldShowContent && <span>Ops Console</span>}
+                  </NavLink>
+                )}
               </div>
             )}
           </div>
