@@ -14,7 +14,7 @@
 
 #### Problem: Wallet doesn't show up in connection modal
 **Solutions:**
-1. Install a supported wallet (Leo, Puzzle, or Fox)
+1. Install a supported wallet (Shield recommended, or Puzzle / Leo / Fox)
 2. Restart your browser
 3. Check browser console for errors
 

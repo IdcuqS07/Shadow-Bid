@@ -94,7 +94,7 @@ export default function WalletDebugPage() {
         <div className="p-6 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
           <h2 className="text-xl font-bold mb-4 text-cyan-400">Troubleshooting</h2>
           <ol className="space-y-2 text-sm list-decimal list-inside">
-            <li>Make sure you have an Aleo wallet extension installed (Shield, Puzzle, Leo, Fox, or Soter)</li>
+            <li>Make sure you have an Aleo wallet extension installed (Shield recommended, or Puzzle / Leo / Fox / Soter)</li>
             <li>Check that the wallet extension is enabled in your browser</li>
             <li>Refresh this page after installing/enabling wallet</li>
             <li>Try clicking "Select Wallet" button above</li>

@@ -5,7 +5,7 @@
 ### 1. Connect Your Wallet (30 seconds)
 
 1. Click **"Connect Wallet"** button (top right)
-2. Select your wallet (Leo, Puzzle, or Fox)
+2. Select your wallet (**Shield** recommended, or Puzzle / Leo / Fox)
 3. Approve the connection
 4. ✅ You're connected!
 

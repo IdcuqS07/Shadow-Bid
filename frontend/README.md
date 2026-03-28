@@ -5,7 +5,7 @@ React + Vite marketplace UI for ShadowBid, including the live Ops Console API in
 ## What Lives Here
 
 - Marketplace pages for create, bid, reveal, settlement, and admin flows
-- Wallet integration for Aleo-compatible wallets
+- Wallet integration for Aleo-compatible wallets, with Shield Wallet as the recommended option
 - Vercel Function entrypoint for the live Ops backend
 - Local fallback ops server for development
 

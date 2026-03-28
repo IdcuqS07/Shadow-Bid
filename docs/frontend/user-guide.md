@@ -6,8 +6,9 @@
 
 Before using the marketplace, you need to connect an Aleo wallet:
 
-- **Leo Wallet** (Recommended)
+- **Shield Wallet** (Recommended)
 - **Puzzle Wallet**
+- **Leo Wallet**
 - **Fox Wallet**
 
 Click the "Connect Wallet" button in the top right corner and select your wallet provider.
