@@ -2125,6 +2125,27 @@ export default function PremiumAuctionDetail() {
       alert('Please connect your wallet first');
       return;
     }
+
+    if (auction?.status !== 'challenge') {
+      alert('❌ Finalize Winner is only available during the challenge phase.');
+      return;
+    }
+
+    if (!finalizeWinnerWindowEnded) {
+      alert(
+        `⏳ Challenge period is still active.\n\n` +
+        `Finalize Winner becomes available after ${challengeWindowEndsAtLabel}.`
+      );
+      return;
+    }
+
+    if (hasActiveOnChainDispute) {
+      alert(
+        '❌ Finalize Winner is blocked while an on-chain dispute is open.\n\n' +
+        'Resolve the dispute before finalizing the auction.'
+      );
+      return;
+    }
     
     setIsSubmitting(true);
     
@@ -2595,6 +2616,11 @@ export default function PremiumAuctionDetail() {
     auction?.challengeEndTime &&
     Math.floor(Date.now() / 1000) >= auction.challengeEndTime
   );
+  const finalizeWinnerWindowEnded = Boolean(
+    auction?.status === 'challenge' &&
+    auction?.challengeEndTime &&
+    Math.floor(Date.now() / 1000) >= auction.challengeEndTime
+  );
   const hasRevealedBidCandidate = Boolean(
     auction?.winningAmountMicro &&
     auction.winningAmountMicro !== '0'
@@ -2617,6 +2643,7 @@ export default function PremiumAuctionDetail() {
   const settledAtLabel = formatUnixTimestamp(auction?.settledAt);
   const claimableAtLabel = formatUnixTimestamp(auction?.claimableAt);
   const revealWindowEndsAtLabel = formatUnixTimestamp(auction?.challengeEndTime);
+  const challengeWindowEndsAtLabel = formatUnixTimestamp(auction?.challengeEndTime);
   const platformFeeClaimedAtLabel = formatUnixTimestamp(auction?.platformFeeClaimedAt);
   const resolvedSellerVerification = sellerVerification || auction?.sellerVerification || null;
   const resolvedProofBundle = auctionProofBundle || auction?.assetProof || null;
@@ -2637,6 +2664,11 @@ export default function PremiumAuctionDetail() {
   const onChainProfileValue = formatOnChainValue(onChainSellerProfile);
   const onChainProofValue = formatOnChainValue(onChainProofRoot);
   const onChainDisputeValue = formatOnChainValue(onChainDisputeRoot);
+  const hasActiveOnChainDispute = Boolean(
+    onChainDisputeValue &&
+    onChainDisputeValue !== 'Not anchored' &&
+    onChainDisputeValue !== '0field'
+  );
   const canOpenOnChainDispute = auction?.status === 'challenge' || auction?.status === 'settled';
 
   return (
@@ -4021,7 +4053,11 @@ export default function PremiumAuctionDetail() {
                             <div className="font-mono text-sm text-cyan-400">Settlement Status: Waiting for Finalization</div>
                           </div>
                           <div className="text-xs text-white/60">
-                            A winning bidder has been selected, but the final settlement step has not been completed yet.
+                            {hasActiveOnChainDispute
+                              ? 'An on-chain dispute is open. Resolve it before finalizing the winner.'
+                              : finalizeWinnerWindowEnded
+                                ? 'The challenge window is over. The seller can now finalize the winner.'
+                                : `A winner is selected, but finalization unlocks after ${challengeWindowEndsAtLabel}.`}
                           </div>
                         </div>
                       ) : auction.status === 'closed' ? (
@@ -4108,10 +4144,16 @@ export default function PremiumAuctionDetail() {
                           <PremiumButton 
                             className="w-full"
                             onClick={handleFinalizeWinner}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !finalizeWinnerWindowEnded || hasActiveOnChainDispute}
                             variant="secondary"
                           >
-                            {isSubmitting ? 'Finalizing...' : '3️⃣ Finalize Winner'}
+                            {isSubmitting
+                              ? 'Finalizing...'
+                              : hasActiveOnChainDispute
+                                ? '3️⃣ Resolve Dispute First'
+                                : !finalizeWinnerWindowEnded
+                                  ? '3️⃣ Waiting for Challenge Window'
+                                  : '3️⃣ Finalize Winner'}
                           </PremiumButton>
                         )
                       )}

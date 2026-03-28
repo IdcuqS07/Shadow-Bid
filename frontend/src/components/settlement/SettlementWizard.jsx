@@ -172,6 +172,14 @@ export function SettlementWizard() {
       return;
     }
 
+    const now = Math.floor(Date.now() / 1000);
+    const challengeEnd = parseInt(auctionInfo?.challenge_end_time || '0', 10);
+
+    if (challengeEnd > now) {
+      toast.error('Challenge period is still active. Wait until that deadline passes before finalizing the winner.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const result = await AleoServiceV2.finalizeWinner(executeTransaction, parseInt(auctionId));
