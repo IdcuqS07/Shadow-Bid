@@ -3,8 +3,8 @@ import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
-import { WalletMultiButton } from "@provablehq/aleo-wallet-adaptor-react-ui";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import WalletControl from "@/components/common/WalletControl";
 
 const routeLabels = {
   "/": "Dashboard",
@@ -18,7 +18,7 @@ const routeLabels = {
 export const HeaderBar = ({ onOpenSidebar }) => {
   const location = useLocation();
   const currentLabel = routeLabels[location.pathname] || "Auction Detail";
-  const { connected, address, network, connecting } = useWallet();
+  const { connecting } = useWallet();
 
   return (
     <header
@@ -60,7 +60,7 @@ export const HeaderBar = ({ onOpenSidebar }) => {
 
         <div className="flex items-center gap-3">
           <div className="relative">
-            <WalletMultiButton style={{ whiteSpace: 'nowrap', flexShrink: 0 }} />
+            <WalletControl style={{ whiteSpace: 'nowrap', flexShrink: 0 }} />
             {connecting && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-800/80 rounded-lg backdrop-blur-sm pointer-events-none">
                 <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />

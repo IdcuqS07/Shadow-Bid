@@ -1,9 +1,9 @@
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { useEffect, useState } from 'react';
+import WalletControl from '@/components/common/WalletControl';
 
 export default function WalletDebugPage() {
-  const { connected, connecting, wallet, wallets, address, publicKey, select } = useWallet();
+  const { connected, connecting, wallet, wallets, address, selectWallet } = useWallet();
   const [detectedWallets, setDetectedWallets] = useState([]);
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export default function WalletDebugPage() {
     
     console.log('[WalletDebug] Window object keys:', Object.keys(window).filter(k => k.includes('wallet') || k.includes('aleo')));
     console.log('[WalletDebug] Detected wallets:', detected);
-    console.log('[WalletDebug] Available wallets from provider:', wallets?.map(w => w.name));
+    console.log('[WalletDebug] Available wallets from provider:', wallets?.map(w => w.adapter?.name));
   }, [wallets]);
 
   return (
@@ -31,7 +31,7 @@ export default function WalletDebugPage() {
         {/* Wallet Button */}
         <div className="p-6 bg-void-800 rounded-xl border border-white/10">
           <h2 className="text-xl font-bold mb-4">Connect Wallet</h2>
-          <WalletMultiButton />
+          <WalletControl variant="premium" />
         </div>
 
         {/* Connection Status */}
@@ -41,8 +41,7 @@ export default function WalletDebugPage() {
             <div>Connected: <span className={connected ? 'text-green-400' : 'text-red-400'}>{String(connected)}</span></div>
             <div>Connecting: <span className={connecting ? 'text-yellow-400' : 'text-white/60'}>{String(connecting)}</span></div>
             <div>Address: <span className="text-cyan-400">{address || 'null'}</span></div>
-            <div>Public Key: <span className="text-cyan-400">{publicKey || 'null'}</span></div>
-            <div>Current Wallet: <span className="text-gold-500">{wallet?.name || 'null'}</span></div>
+            <div>Current Wallet: <span className="text-gold-500">{wallet?.adapter?.name || 'null'}</span></div>
           </div>
         </div>
 
@@ -70,13 +69,13 @@ export default function WalletDebugPage() {
             <ul className="space-y-2">
               {wallets.map((w, i) => (
                 <li key={i} className="flex items-center gap-4">
-                  <span className="font-mono">{w.name}</span>
+                  <span className="font-mono">{w.adapter?.name}</span>
                   <span className={`text-xs px-2 py-1 rounded ${w.readyState === 'Installed' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                     {w.readyState}
                   </span>
                   {w.readyState === 'Installed' && (
                     <button
-                      onClick={() => select(w.name)}
+                      onClick={() => selectWallet(w.adapter?.name)}
                       className="text-xs px-3 py-1 bg-gold-500 text-void-900 rounded hover:bg-gold-400"
                     >
                       Select
