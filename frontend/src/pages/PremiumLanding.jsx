@@ -212,7 +212,7 @@ export default function PremiumLanding() {
       <footer className="relative z-10 border-t border-white/5 py-8 px-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between text-sm text-white/40 font-mono">
-            <div>© 2024 ShadowBid. Built on Aleo.</div>
+            <div>© 2026 ShadowBid. Built on Aleo.</div>
             <div className="flex items-center gap-6">
               <a href="#" className="hover:text-white transition-colors">Docs</a>
               <a href="#" className="hover:text-white transition-colors">GitHub</a>
