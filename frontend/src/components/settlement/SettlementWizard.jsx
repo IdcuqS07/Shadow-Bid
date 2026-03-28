@@ -106,7 +106,7 @@ export function SettlementWizard() {
           setCurrentStep(STEPS.FINALIZE);
         }
       } else {
-        setCurrentStep(STEPS.DETERMINE);
+        setCurrentStep(challengeEnd > now ? STEPS.REVEAL : STEPS.DETERMINE);
       }
     } else if (state === 2) {
       if (challengeEnd > now) {
@@ -141,6 +141,14 @@ export function SettlementWizard() {
   const handleDetermineWinner = async () => {
     if (!connected) {
       toast.error('Please connect your wallet');
+      return;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const challengeEnd = parseInt(auctionInfo?.challenge_end_time || '0', 10);
+
+    if (challengeEnd > now) {
+      toast.error('Reveal window is still active. Wait until that deadline passes before determining the winner.');
       return;
     }
 
@@ -250,18 +258,25 @@ export function SettlementWizard() {
     }
 
     if (currentStep.id === STEPS.REVEAL.id) {
+      const now = Math.floor(Date.now() / 1000);
+      const revealDeadline = parseInt(auctionInfo.challenge_end_time || '0', 10);
+      const remaining = Math.max(0, revealDeadline - now);
+      const hours = Math.floor(remaining / 3600);
+      const minutes = Math.floor((remaining % 3600) / 60);
+
       return (
         <div className="text-center py-6 space-y-4">
           <Clock className="h-10 w-10 text-amber-400 mx-auto animate-pulse" />
           <div>
             <p className="text-sm font-semibold text-amber-200">Waiting for Bidders to Reveal</p>
-            <p className="text-xs text-slate-400 mt-1">Bidders need to reveal their bids before you can determine the winner</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Determine Winner unlocks after the reveal window closes, even if some bidders never reveal.
+            </p>
           </div>
           
           <div className="rounded-lg border border-blue-500/20 bg-blue-950/30 p-3 text-left">
             <p className="text-xs text-blue-200">
-              💡 <strong>Tip:</strong> You can proceed to determine winner even if not all bidders have revealed. 
-              Only revealed bids will be counted.
+              💡 <strong>Reveal window remaining:</strong> {hours}h {minutes}m
             </p>
           </div>
           
@@ -272,14 +287,6 @@ export function SettlementWizard() {
               size="sm"
             >
               Refresh Status
-            </Button>
-            <Button
-              onClick={() => setCurrentStep(STEPS.DETERMINE)}
-              variant="default"
-              size="sm"
-              className="bg-purple-600 hover:bg-purple-700"
-            >
-              Proceed to Determine Winner
             </Button>
           </div>
         </div>

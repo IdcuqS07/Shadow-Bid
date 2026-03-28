@@ -2073,6 +2073,27 @@ export default function PremiumAuctionDetail() {
       alert('Please connect your wallet first');
       return;
     }
+
+    if (auction?.status !== 'closed') {
+      alert('❌ Determine Winner is only available after the auction is closed.');
+      return;
+    }
+
+    if (!determineWinnerWindowEnded) {
+      alert(
+        `⏳ Reveal window is still active.\n\n` +
+        `Determine Winner becomes available after ${revealWindowEndsAtLabel}.`
+      );
+      return;
+    }
+
+    if (!hasRevealedBidCandidate) {
+      alert(
+        '❌ No revealed bids found yet.\n\n' +
+        'The V2.20 contract requires at least one revealed bid before determining a winner.'
+      );
+      return;
+    }
     
     setIsSubmitting(true);
     
@@ -2569,6 +2590,15 @@ export default function PremiumAuctionDetail() {
     auction?.endTimestamp &&
     Math.floor(Date.now() / 1000) >= auction.endTimestamp
   );
+  const determineWinnerWindowEnded = Boolean(
+    auction?.status === 'closed' &&
+    auction?.challengeEndTime &&
+    Math.floor(Date.now() / 1000) >= auction.challengeEndTime
+  );
+  const hasRevealedBidCandidate = Boolean(
+    auction?.winningAmountMicro &&
+    auction.winningAmountMicro !== '0'
+  );
   const storedNonce = getNonce(auctionId, address);
   const canRevealBid = Boolean(
     auction?.status === 'closed' &&
@@ -2586,6 +2616,7 @@ export default function PremiumAuctionDetail() {
   const paymentClaimedAtLabel = formatUnixTimestamp(auction?.paymentClaimedAt);
   const settledAtLabel = formatUnixTimestamp(auction?.settledAt);
   const claimableAtLabel = formatUnixTimestamp(auction?.claimableAt);
+  const revealWindowEndsAtLabel = formatUnixTimestamp(auction?.challengeEndTime);
   const platformFeeClaimedAtLabel = formatUnixTimestamp(auction?.platformFeeClaimedAt);
   const resolvedSellerVerification = sellerVerification || auction?.sellerVerification || null;
   const resolvedProofBundle = auctionProofBundle || auction?.assetProof || null;
@@ -4000,7 +4031,11 @@ export default function PremiumAuctionDetail() {
                             <div className="font-mono text-sm text-cyan-400">Settlement Status: Waiting for Winner Determination</div>
                           </div>
                           <div className="text-xs text-white/60">
-                            Bids can now be revealed. Determine the highest valid reveal before finalizing the auction.
+                            {determineWinnerWindowEnded
+                              ? hasRevealedBidCandidate
+                                ? 'The reveal window is over. You can now determine the winner from the highest valid revealed bid.'
+                                : 'The reveal window is over, but no revealed bid is recorded on-chain yet.'
+                              : `Bids can still be revealed until ${revealWindowEndsAtLabel}. Determine Winner unlocks after that deadline.`}
                           </div>
                         </div>
                       ) : null}
@@ -4046,9 +4081,15 @@ export default function PremiumAuctionDetail() {
                         <PremiumButton 
                           className="w-full"
                           onClick={handleDetermineWinner}
-                          disabled={isSubmitting}
+                          disabled={isSubmitting || !determineWinnerWindowEnded || !hasRevealedBidCandidate}
                         >
-                          {isSubmitting ? 'Processing...' : '2️⃣ Determine Winner'}
+                          {isSubmitting
+                            ? 'Processing...'
+                            : !determineWinnerWindowEnded
+                              ? '2️⃣ Waiting for Reveal Window'
+                              : !hasRevealedBidCandidate
+                                ? '2️⃣ No Revealed Bids Yet'
+                                : '2️⃣ Determine Winner'}
                         </PremiumButton>
                       )}
                       
