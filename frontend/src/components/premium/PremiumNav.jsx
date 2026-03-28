@@ -29,7 +29,7 @@ export default function PremiumNav() {
           <div className="flex items-center gap-4">
             <button
               type="button"
-              onClick={() => navigate('/standard/admin-v3')}
+              onClick={() => navigate('/ops')}
               className="hidden lg:inline-flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs font-mono uppercase tracking-[0.18em] text-cyan-300 transition-colors hover:bg-cyan-500/20"
             >
               <Bot className="h-4 w-4" />

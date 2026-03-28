@@ -65,6 +65,19 @@ function App() {
               <Route path="/premium-auction/:auctionId" element={<PremiumAuctionDetail />} />
               <Route path="/premium-create" element={<PremiumCreateAuction />} />
               <Route path="/wallet-debug" element={<WalletDebugPage />} />
+              <Route
+                path="/ops"
+                element={<AppShell />}
+              >
+                <Route
+                  index
+                  element={(
+                    <AdminOnlyRoute>
+                      <AdminDashboardV3 />
+                    </AdminOnlyRoute>
+                  )}
+                />
+              </Route>
               
               {/* Standard Routes - With AppShell */}
               <Route path="/standard" element={<AppShell />}>
@@ -72,14 +85,6 @@ function App() {
                 <Route path="auctions" element={<AuctionsPage />} />
                 <Route path="auctions/:auctionId" element={<AuctionDetailPage />} />
                 <Route path="create" element={<CreateAuctionPage />} />
-                <Route
-                  path="admin-v3"
-                  element={(
-                    <AdminOnlyRoute>
-                      <AdminDashboardV3 />
-                    </AdminOnlyRoute>
-                  )}
-                />
                 <Route path="commit-bid" element={<CommitBidPageV2 />} />
                 <Route path="reveal-bid" element={<RevealBidPageV2 />} />
                 <Route path="settlement" element={<SettlementPage />} />
@@ -88,7 +93,8 @@ function App() {
               </Route>
 
               {/* Legacy standard route redirects */}
-              <Route path="/admin-v3" element={<Navigate to="/standard/admin-v3" replace />} />
+              <Route path="/admin-v3" element={<Navigate to="/ops" replace />} />
+              <Route path="/standard/admin-v3" element={<Navigate to="/ops" replace />} />
               <Route path="/commit-bid" element={<Navigate to="/standard/commit-bid" replace />} />
               <Route path="/reveal-bid" element={<Navigate to="/standard/reveal-bid" replace />} />
               <Route path="/settlement" element={<Navigate to="/standard/settlement" replace />} />

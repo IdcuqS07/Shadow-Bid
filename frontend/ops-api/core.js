@@ -542,7 +542,7 @@ function buildNotifications(db, wallet) {
         urgency: 'low',
         title: 'Platform fee can be claimed',
         description: 'The settled platform fee is available to claim.',
-        actionPath: '/standard/admin-v3',
+        actionPath: '/ops',
       });
     }
   }

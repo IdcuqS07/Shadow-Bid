@@ -6,7 +6,7 @@ export default function AdminOnlyRoute({ children }) {
   const { address } = useWallet();
 
   if (!address || !isPlatformOwner(address)) {
-    return <Navigate to="/standard" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return children;

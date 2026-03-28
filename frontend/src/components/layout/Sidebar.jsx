@@ -184,7 +184,7 @@ export const Sidebar = ({ mobileOpen, onClose }) => {
 
                 {showAdminConsole && (
                   <NavLink
-                    to="/admin-v3"
+                    to="/ops"
                     onClick={onClose}
                     data-testid="nav-link-prototype-console"
                     className={({ isActive }) =>
