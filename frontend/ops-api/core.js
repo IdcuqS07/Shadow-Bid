@@ -3,11 +3,33 @@ import crypto from 'node:crypto';
 
 export const PLATFORM_ADDRESS = 'aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8';
 
+function resolveCorsOrigin(configuredOrigin = '*', requestOrigin = '') {
+  if (!configuredOrigin || configuredOrigin === '*') {
+    return '*';
+  }
+
+  const allowedOrigins = configuredOrigin
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (allowedOrigins.length === 0) {
+    return '*';
+  }
+
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    return requestOrigin;
+  }
+
+  return allowedOrigins[0];
+}
+
 function createCorsHeaders(origin = '*') {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    Vary: 'Origin',
     'Content-Type': 'application/json; charset=utf-8',
   };
 }
@@ -1242,9 +1264,10 @@ export function createOpsHttpHandler({
   storageDriver = 'memory',
   corsOrigin = process.env.OPS_ALLOWED_ORIGIN || '*',
 }) {
-  const corsHeaders = createCorsHeaders(corsOrigin);
-
   return async function handleOpsRequest(request, response) {
+    const requestOrigin = request.headers.origin || '';
+    const corsHeaders = createCorsHeaders(resolveCorsOrigin(corsOrigin, requestOrigin));
+
     if ((request.method || 'GET').toUpperCase() === 'OPTIONS') {
       sendNoContent(response, corsHeaders);
       return;
@@ -1297,9 +1320,10 @@ export function createOpsFetchHandler({
   storageDriver = 'memory',
   corsOrigin = process.env.OPS_ALLOWED_ORIGIN || '*',
 }) {
-  const corsHeaders = createCorsHeaders(corsOrigin);
-
   return async function handleOpsFetch(request) {
+    const requestOrigin = request.headers.get('origin') || '';
+    const corsHeaders = createCorsHeaders(resolveCorsOrigin(corsOrigin, requestOrigin));
+
     if ((request.method || 'GET').toUpperCase() === 'OPTIONS') {
       return createNoContentResponse(corsHeaders);
     }
