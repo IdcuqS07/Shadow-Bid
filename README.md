@@ -31,6 +31,11 @@ ShadowBid `v2.21` supports three auction currencies on Aleo testnet:
 
 At the contract level, the currency mapping is `0 = USDCx`, `1 = ALEO`, and `2 = USAD`. The frontend wallet provider is configured to request all three programs so users can create and settle auctions in the selected currency.
 
+## Contract Explorer
+
+- Active testnet program: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_21.aleo>
+- Program ID: `shadowbid_marketplace_v2_21.aleo`
+
 ## Repository Layout
 
 ```text

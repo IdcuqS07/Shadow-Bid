@@ -2,6 +2,11 @@
 
 This file is retained for archived `v2.20` deployment reference. The active repo target is now `v2.21`.
 
+Active `v2.21` testnet program:
+
+- <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_21.aleo>
+- Program ID: `shadowbid_marketplace_v2_21.aleo`
+
 ## Prerequisites
 
 - Leo CLI `3.5.0`
@@ -57,6 +62,7 @@ shadowbid_marketplace_v2_20.aleo
 
 - Testnet: <https://explorer.provable.com/testnet>
 - Mainnet: <https://explorer.provable.com/>
+- Active `v2.21` program: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_21.aleo>
 
 ### Run a local smoke test
 
