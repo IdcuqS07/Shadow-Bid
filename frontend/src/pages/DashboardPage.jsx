@@ -310,7 +310,7 @@ export default function DashboardPage() {
       </section>
 
       {/* TX History */}
-      {connected && txHistory.length > 0 && (
+      {connected && (
         <section data-testid="dashboard-tx-history-section">
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0">
@@ -320,21 +320,27 @@ export default function DashboardPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {txHistory.slice(0, 5).map((tx) => (
-                  <a
-                    key={tx.transactionId ?? tx.id}
-                    href={`https://explorer.provable.com/transaction/${tx.transactionId ?? tx.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-lg border border-slate-700/50 bg-slate-800/30 p-3 hover:bg-slate-800/50 transition-colors"
-                  >
-                    <p className="font-mono text-xs text-slate-300 truncate">
-                      {tx.transactionId ?? tx.id}
-                    </p>
-                  </a>
-                ))}
-              </div>
+              {txHistory.length > 0 ? (
+                <div className="space-y-2">
+                  {txHistory.slice(0, 5).map((tx) => (
+                    <a
+                      key={tx.transactionId ?? tx.id}
+                      href={`https://explorer.provable.com/transaction/${tx.transactionId ?? tx.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block rounded-lg border border-slate-700/50 bg-slate-800/30 p-3 hover:bg-slate-800/50 transition-colors"
+                    >
+                      <p className="font-mono text-xs text-slate-300 truncate">
+                        {tx.transactionId ?? tx.id}
+                      </p>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">
+                  Load transaction history on demand to avoid extra wallet approval prompts immediately after connect.
+                </p>
+              )}
             </CardContent>
           </Card>
         </section>

@@ -3,7 +3,7 @@ import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 
 const PROGRAM_ID = 'shadowbid_marketplace_v2_20.aleo';
 
-export function useTxHistory() {
+export function useTxHistory({ autoRefresh = false } = {}) {
   const { connected, requestTransactionHistory } = useWallet();
   const [txHistory, setTxHistory] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -22,8 +22,10 @@ export function useTxHistory() {
   }, [connected, requestTransactionHistory]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (autoRefresh) {
+      refresh();
+    }
+  }, [autoRefresh, refresh]);
 
   return { txHistory, loading, refresh };
 }

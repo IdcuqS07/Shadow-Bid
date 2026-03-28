@@ -30,9 +30,8 @@ import { Network } from '@provablehq/aleo-types';
 import { DecryptPermission } from '@provablehq/aleo-wallet-adaptor-core';
 import '@provablehq/aleo-wallet-adaptor-react-ui/dist/styles.css';
 
-const MARKETPLACE_PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_20.aleo';
-const INITIAL_WALLET_PROGRAMS = [MARKETPLACE_PROGRAM_ID];
-const DEFAULT_WALLET_DECRYPT_PERMISSION = DecryptPermission.UponRequest;
+const INITIAL_WALLET_PROGRAMS = undefined;
+const DEFAULT_WALLET_DECRYPT_PERMISSION = DecryptPermission.NoDecrypt;
 
 function App() {
   return (
@@ -47,8 +46,8 @@ function App() {
       autoConnect={false}
       localNet={false}
       network={Network.TESTNET}
-      // Keep the initial wallet handshake light. Advanced flows can request
-      // extra approvals later when the user actually uses them.
+      // Keep the initial wallet handshake minimal so connecting a wallet does
+      // not pre-approve decrypt access or program permissions up front.
       decryptPermission={DEFAULT_WALLET_DECRYPT_PERMISSION}
       programs={INITIAL_WALLET_PROGRAMS}
       onError={(error) => {

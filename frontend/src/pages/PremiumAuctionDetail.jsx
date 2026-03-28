@@ -1715,6 +1715,10 @@ export default function PremiumAuctionDetail() {
           errorStr.toLowerCase().includes('invalid payload')) {
         errorMsg = '⚠️ Shield could not build the private transaction.\n\n';
         errorMsg += 'Try again with a fresh private record, or switch off `Use Private Credits` and use the public ALEO flow.';
+      } else if (errorStr.toLowerCase().includes('decryption') ||
+                 errorStr.toLowerCase().includes('not allowed')) {
+        errorMsg += 'This wallet session was connected without private record access.\n\n';
+        errorMsg += 'Reconnect with advanced wallet permissions or use the public ALEO flow.';
       } else if (errorStr.toLowerCase().includes('could not read private aleo record balances')) {
         errorMsg += 'Shield returned private records, but their balances could not be read.\n\n';
         errorMsg += 'Refresh the wallet records or use the public ALEO flow.';
