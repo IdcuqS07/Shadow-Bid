@@ -23,26 +23,27 @@ import { AleoWalletProvider } from '@provablehq/aleo-wallet-adaptor-react';
 import { WalletModalProvider } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { PuzzleWalletAdapter } from '@provablehq/aleo-wallet-adaptor-puzzle';
 import { LeoWalletAdapter } from '@provablehq/aleo-wallet-adaptor-leo';
-import { ShieldWalletAdapter } from '@provablehq/aleo-wallet-adaptor-shield';
 import { FoxWalletAdapter } from '@provablehq/aleo-wallet-adaptor-fox';
 import { SoterWalletAdapter } from '@provablehq/aleo-wallet-adaptor-soter';
 import { Network } from '@provablehq/aleo-types';
 import { DecryptPermission } from '@provablehq/aleo-wallet-adaptor-core';
+import SingleApproveShieldWalletAdapter from '@/wallets/SingleApproveShieldWalletAdapter';
 import '@provablehq/aleo-wallet-adaptor-react-ui/dist/styles.css';
 
 const INITIAL_WALLET_PROGRAMS = undefined;
 const DEFAULT_WALLET_DECRYPT_PERMISSION = DecryptPermission.NoDecrypt;
+const WALLET_ADAPTERS = [
+  new SingleApproveShieldWalletAdapter(),
+  new PuzzleWalletAdapter(),
+  new LeoWalletAdapter(),
+  new FoxWalletAdapter(),
+  new SoterWalletAdapter(),
+];
 
 function App() {
   return (
     <AleoWalletProvider
-      wallets={[
-        new ShieldWalletAdapter(),
-        new PuzzleWalletAdapter(),
-        new LeoWalletAdapter(),
-        new FoxWalletAdapter(),
-        new SoterWalletAdapter(),
-      ]}
+      wallets={WALLET_ADAPTERS}
       autoConnect={false}
       localNet={false}
       network={Network.TESTNET}
