@@ -1,12 +1,8 @@
 const configuredLocalApiBase = import.meta.env.VITE_LOCAL_API_URL?.trim();
-const LOCAL_API_BASE = configuredLocalApiBase || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : '');
+const OPS_API_BASE = configuredLocalApiBase || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : '');
 
 async function request(path, options = {}) {
-  if (!LOCAL_API_BASE) {
-    throw new Error('Local API is not configured');
-  }
-
-  const response = await fetch(`${LOCAL_API_BASE}${path}`, {
+  const response = await fetch(`${OPS_API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(options.headers || {}),
@@ -15,7 +11,7 @@ async function request(path, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`Local API request failed (${response.status})`);
+    throw new Error(`Ops API request failed (${response.status})`);
   }
 
   return response.json();

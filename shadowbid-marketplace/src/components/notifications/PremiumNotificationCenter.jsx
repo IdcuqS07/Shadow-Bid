@@ -150,7 +150,9 @@ export default function PremiumNotificationCenter() {
 
             {!isApiAvailable && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-100">
-                Start the local API with `npm run dev:api` to enable notifications, executor insights, and analytics sync.
+                {import.meta.env.DEV
+                  ? 'Start the ops API with `npm run dev:api` to enable notifications, executor insights, and analytics sync.'
+                  : 'Notifications and executor insights are temporarily unavailable while the ops backend reconnects.'}
               </div>
             )}
 

@@ -173,10 +173,11 @@ export default function AdminDashboardV3() {
             <div className="flex items-start gap-3 text-sm text-red-100">
               <AlertCircle className="mt-0.5 h-5 w-5 text-red-300" />
               <div>
-                <div className="font-semibold">Local API is offline</div>
+                <div className="font-semibold">Ops API is offline</div>
                 <div className="mt-1 text-red-100/80">
-                  Start it with `npm run dev:api` inside `shadowbid-marketplace` to enable analytics sync, local
-                  notifications, and executor jobs.
+                  {import.meta.env.DEV
+                    ? 'Start it with `npm run dev:api` inside `shadowbid-marketplace` to enable analytics sync, notifications, and executor jobs.'
+                    : 'This deployment is not reaching the shared operations backend right now, so analytics and automation data are temporarily unavailable.'}
                 </div>
               </div>
             </div>
@@ -214,7 +215,7 @@ export default function AdminDashboardV3() {
             <CardDescription>Executor Queue</CardDescription>
             <CardTitle>{executor.jobs.length}</CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-slate-300">Lifecycle actions currently recommended by the local executor.</CardContent>
+          <CardContent className="text-xs text-slate-300">Lifecycle actions currently recommended by the operations executor.</CardContent>
         </Card>
       </div>
 
@@ -240,7 +241,7 @@ export default function AdminDashboardV3() {
             <CardDescription>Disputes</CardDescription>
             <CardTitle>{analytics?.totals.disputes ?? 0}</CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-slate-300">Cases currently tracked in the local dispute center.</CardContent>
+          <CardContent className="text-xs text-slate-300">Cases currently tracked in the shared dispute center.</CardContent>
         </Card>
       </div>
 
