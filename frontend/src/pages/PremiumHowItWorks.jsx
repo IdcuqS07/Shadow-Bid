@@ -178,7 +178,7 @@ const roleCards = [
     title: 'Seller responsibilities',
     items: [
       'Create the auction with the correct reserve, currency, and evidence metadata',
-      'Close bidding, then determine the winner after bidders reveal',
+      'Close bidding, settle after the reveal timeout, and finalize after the dispute window ends',
       'Finalize or cancel according to reserve and dispute outcomes',
     ],
   },
