@@ -1,6 +1,6 @@
 # ShadowBid
 
-Privacy-focused sealed-bid auctions on Aleo, organized as a cleaner monorepo.
+Maximum privacy. Zero information leakage. Cryptographically verifiable. The future of fair auctions is here.
 
 ## Overview
 
