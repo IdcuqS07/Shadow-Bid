@@ -6,6 +6,11 @@ Sealed bids stay hidden until reveal, while settlement remains contract-verifiab
 
 ShadowBid combines a React marketplace frontend, a `v2.21` Leo contract, and an operations layer for analytics, disputes, watchlists, and executor recommendations. The default user experience lives in the premium routes, while `/standard` remains available for legacy and compatibility testing.
 
+## Live URLs
+
+- App: <https://www.shadowbid.xyz/>
+- Contract explorer: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_21.aleo>
+
 ## What Changed In V2.21
 
 - split the old single challenge window into `reveal_period` and `dispute_period`
