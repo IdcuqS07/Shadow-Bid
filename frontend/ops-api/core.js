@@ -3,12 +3,14 @@ import crypto from 'node:crypto';
 
 export const PLATFORM_ADDRESS = 'aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8';
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Content-Type': 'application/json; charset=utf-8',
-};
+function createCorsHeaders(origin = '*') {
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Content-Type': 'application/json; charset=utf-8',
+  };
+}
 
 export function createDefaultDb() {
   return {
@@ -1184,20 +1186,20 @@ export async function readJsonBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function sendJson(response, statusCode, payload) {
+function sendJson(response, statusCode, payload, corsHeaders) {
   response.statusCode = statusCode;
 
-  for (const [header, value] of Object.entries(CORS_HEADERS)) {
+  for (const [header, value] of Object.entries(corsHeaders)) {
     response.setHeader(header, value);
   }
 
   response.end(JSON.stringify(payload));
 }
 
-function sendNoContent(response) {
+function sendNoContent(response, corsHeaders) {
   response.statusCode = 204;
 
-  for (const [header, value] of Object.entries(CORS_HEADERS)) {
+  for (const [header, value] of Object.entries(corsHeaders)) {
     if (header !== 'Content-Type') {
       response.setHeader(header, value);
     }
@@ -1206,17 +1208,17 @@ function sendNoContent(response) {
   response.end();
 }
 
-function createJsonResponse(statusCode, payload) {
+function createJsonResponse(statusCode, payload, corsHeaders) {
   return new Response(JSON.stringify(payload), {
     status: statusCode,
-    headers: CORS_HEADERS,
+    headers: corsHeaders,
   });
 }
 
-function createNoContentResponse() {
+function createNoContentResponse(corsHeaders) {
   const headers = new Headers();
 
-  for (const [header, value] of Object.entries(CORS_HEADERS)) {
+  for (const [header, value] of Object.entries(corsHeaders)) {
     if (header !== 'Content-Type') {
       headers.set(header, value);
     }
@@ -1238,10 +1240,13 @@ export function createOpsHttpHandler({
   serviceName = 'shadowbid-ops-api',
   environment = process.env.VERCEL_ENV || process.env.NODE_ENV || 'local',
   storageDriver = 'memory',
+  corsOrigin = process.env.OPS_ALLOWED_ORIGIN || '*',
 }) {
+  const corsHeaders = createCorsHeaders(corsOrigin);
+
   return async function handleOpsRequest(request, response) {
     if ((request.method || 'GET').toUpperCase() === 'OPTIONS') {
-      sendNoContent(response);
+      sendNoContent(response, corsHeaders);
       return;
     }
 
@@ -1259,7 +1264,7 @@ export function createOpsHttpHandler({
           sendJson(response, 400, {
             ok: false,
             error: 'Invalid JSON body',
-          });
+          }, corsHeaders);
           return;
         }
       }
@@ -1275,12 +1280,12 @@ export function createOpsHttpHandler({
         body,
       });
 
-      sendJson(response, result.status, result.payload);
+      sendJson(response, result.status, result.payload, corsHeaders);
     } catch (error) {
       sendJson(response, 500, {
         ok: false,
         error: error instanceof Error ? error.message : 'Unknown ops API error',
-      });
+      }, corsHeaders);
     }
   };
 }
@@ -1290,10 +1295,13 @@ export function createOpsFetchHandler({
   serviceName = 'shadowbid-ops-api',
   environment = process.env.VERCEL_ENV || process.env.NODE_ENV || 'production',
   storageDriver = 'memory',
+  corsOrigin = process.env.OPS_ALLOWED_ORIGIN || '*',
 }) {
+  const corsHeaders = createCorsHeaders(corsOrigin);
+
   return async function handleOpsFetch(request) {
     if ((request.method || 'GET').toUpperCase() === 'OPTIONS') {
-      return createNoContentResponse();
+      return createNoContentResponse(corsHeaders);
     }
 
     const url = new URL(request.url);
@@ -1310,7 +1318,7 @@ export function createOpsFetchHandler({
           return createJsonResponse(400, {
             ok: false,
             error: 'Invalid JSON body',
-          });
+          }, corsHeaders);
         }
       }
 
@@ -1325,12 +1333,12 @@ export function createOpsFetchHandler({
         body,
       });
 
-      return createJsonResponse(result.status, result.payload);
+      return createJsonResponse(result.status, result.payload, corsHeaders);
     } catch (error) {
       return createJsonResponse(500, {
         ok: false,
         error: error instanceof Error ? error.message : 'Unknown ops API error',
-      });
+      }, corsHeaders);
     }
   };
 }

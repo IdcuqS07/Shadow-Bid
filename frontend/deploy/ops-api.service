@@ -1,0 +1,16 @@
+[Unit]
+Description=ShadowBid Ops API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/shadow-bid/frontend
+EnvironmentFile=/opt/shadow-bid/frontend/deploy/backend.env
+ExecStart=/usr/bin/node /opt/shadow-bid/frontend/local-api/server.mjs
+Restart=always
+RestartSec=5
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,9 @@
 const configuredLocalApiBase = import.meta.env.VITE_LOCAL_API_URL?.trim();
-const OPS_API_BASE = configuredLocalApiBase || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : '');
+const browserHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+const inferredProductionApiBase = ['shadowbid.xyz', 'www.shadowbid.xyz'].includes(browserHostname)
+  ? 'https://api.shadowbid.xyz'
+  : '';
+const OPS_API_BASE = configuredLocalApiBase || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : inferredProductionApiBase);
 
 async function request(path, options = {}) {
   const response = await fetch(`${OPS_API_BASE}${path}`, {
