@@ -3871,10 +3871,8 @@ export default function PremiumAuctionDetail() {
                         {auction.reserveMet === null ? 'PENDING' : auction.reserveMet ? 'MET' : 'NOT MET'}
                       </span>
                     </div>
-                    {auction.winner && (
+                    {(auction.winningBid || auction.sellerNetAmount !== null) && (
                       <div className="mt-2 pt-2 border-t border-gold-500/30">
-                        <div className="text-white/40 mb-1">Winner</div>
-                        <div className="text-gold-400 break-all">{auction.winner}</div>
                         {auction.winningBid && (
                           <div className="text-cyan-400 mt-1">Winning Bid: {auction.winningBid} {auction.token}</div>
                         )}
@@ -3939,10 +3937,6 @@ export default function PremiumAuctionDetail() {
                           </div>
                           <div className="p-3 bg-void-800 rounded-lg space-y-2 text-xs">
                             <div className="flex items-center justify-between gap-3">
-                              <span className="text-white/40">Winner</span>
-                              <span className="text-gold-400 text-right break-all">{auction.winner || 'Not recorded'}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
                               <span className="text-white/40">Winning Bid</span>
                               <span className="text-cyan-400">{auction.winningBid ? `${auction.winningBid} ${auction.token}` : 'Not recorded'}</span>
                             </div>
@@ -3977,10 +3971,6 @@ export default function PremiumAuctionDetail() {
                           </div>
                           <div className="p-3 bg-void-800 rounded-lg space-y-2 text-xs">
                             <div className="flex items-center justify-between gap-3">
-                              <span className="text-white/40">Winner</span>
-                              <span className="text-gold-400 text-right break-all">{auction.winner || 'Not recorded'}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
                               <span className="text-white/40">Winning Bid</span>
                               <span className="text-cyan-400">{auction.winningBid ? `${auction.winningBid} ${auction.token}` : 'Not recorded'}</span>
                             </div>
@@ -4005,12 +3995,12 @@ export default function PremiumAuctionDetail() {
                           </div>
                           <div className="p-3 bg-void-800 rounded-lg space-y-2 text-xs">
                             <div className="flex items-center justify-between gap-3">
-                              <span className="text-white/40">Winner</span>
-                              <span className="text-gold-400 text-right break-all">{auction.winner || 'Not recorded'}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
                               <span className="text-white/40">Winning Bid</span>
                               <span className="text-cyan-400">{auction.winningBid ? `${auction.winningBid} ${auction.token}` : 'Not recorded'}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-white/40">Seller Net</span>
+                              <span className="text-green-400">{auction.sellerNetAmount !== null ? `${auction.sellerNetAmount} ${auction.token}` : 'Not recorded'}</span>
                             </div>
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-white/40">Receipt Confirmed At</span>
