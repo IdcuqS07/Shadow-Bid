@@ -41,6 +41,29 @@ const contractPillars = [
   },
 ];
 
+const upgradeHighlights = [
+  {
+    title: 'Split reveal and dispute windows',
+    description:
+      'V2.21 stores separate reveal and dispute deadlines, so the contract can distinguish bidder reveal time from the later admin review window.',
+  },
+  {
+    title: 'Timeout settlement replaces the old winner-pick step',
+    description:
+      'The seller now settles after the reveal window ends, and the contract deterministically decides whether the auction advances to challenge or cancels cleanly.',
+  },
+  {
+    title: 'Reserve misses are handled inside settlement',
+    description:
+      'If no valid reveal clears the reserve, V2.21 cancels the auction during timeout settlement instead of relying on a separate seller cancel branch.',
+  },
+  {
+    title: 'Claims follow a strict payout order',
+    description:
+      'Seller payout, bidder refunds, and platform fee claims unlock in sequence so funds move through one consistent post-settlement path.',
+  },
+];
+
 const lifecycleSteps = [
   {
     icon: Store,
@@ -138,6 +161,11 @@ const stateCards = [
     description: 'The winner path has completed and downstream payout and fee claims can proceed.',
   },
   {
+    name: 'CANCELLED',
+    tone: 'border-slate-400/30 bg-slate-400/10 text-slate-200',
+    description: 'The contract exits without a winning settlement, usually because no valid reveal cleared the reserve.',
+  },
+  {
     name: 'DISPUTED',
     tone: 'border-rose-500/30 bg-rose-500/10 text-rose-200',
     description: 'Admin dispute resolution is required before the auction can finish cleanly.',
@@ -225,8 +253,8 @@ export default function PremiumHowItWorks() {
               How ShadowBid Works
             </h1>
             <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/65">
-              This premium flow follows the live V2.21 contract: sealed commits, verified reveals,
-              challenge-aware settlement, dispute readiness, and post-settlement claims for sellers,
+              This premium flow follows the live V2.21 contract: separate reveal and dispute deadlines,
+              timeout settlement, reserve-aware outcomes, and post-settlement claims for sellers,
               bidders, and the platform owner.
             </p>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
@@ -252,6 +280,31 @@ export default function PremiumHowItWorks() {
               <p className="mt-3 text-sm leading-6 text-white/65">{pillar.description}</p>
             </GlassCard>
           ))}
+        </div>
+      </section>
+
+      <section className="relative z-10 px-8 py-12">
+        <div className="mx-auto max-w-7xl">
+          <div className="max-w-3xl">
+            <p className="text-sm font-mono uppercase tracking-[0.25em] text-cyan-300">V2.21 Upgrade</p>
+            <h2 className="mt-3 text-4xl font-display font-bold text-white md:text-5xl">
+              What changed in the live contract flow
+            </h2>
+            <p className="mt-4 text-white/60">
+              These are the behavior changes that matter most when comparing the current premium experience
+              with older ShadowBid lifecycle docs or earlier builds.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {upgradeHighlights.map((item) => (
+              <GlassCard key={item.title} className="p-6">
+                <div className="text-xs font-mono uppercase tracking-[0.22em] text-gold-300">Live now</div>
+                <h3 className="mt-3 text-2xl font-display font-bold text-white">{item.title}</h3>
+                <p className="mt-4 text-sm leading-6 text-white/68">{item.description}</p>
+              </GlassCard>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -329,6 +382,7 @@ export default function PremiumHowItWorks() {
               <div className="mt-8 space-y-4">
                 {[
                   'Reserve visibility is not hidden on-chain. Privacy in V2.21 comes from sealed bids and the reveal window.',
+                  'Reveal and dispute deadlines are separate in V2.21, so timeout settlement and finalization do not share the same clock anymore.',
                   'The winner path must clear the challenge phase before final completion.',
                   'Seller payout and platform fee claim are separate steps; fee claim only unlocks after seller payout.',
                   'Ops Console reads shared lifecycle data, but the premium pages remain the main place where auctions are synced and acted upon.',
