@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
+import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { Shield, Loader2, Bot } from 'lucide-react';
 import PremiumNotificationCenter from '@/components/notifications/PremiumNotificationCenter';
-import WalletControl from '@/components/common/WalletControl';
 
 export default function PremiumNav() {
   const navigate = useNavigate();
@@ -40,7 +40,7 @@ export default function PremiumNav() {
             </div>
             <PremiumNotificationCenter />
             <div className="wallet-button-premium relative">
-              <WalletControl variant="premium" />
+              <WalletMultiButton />
               {connecting && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gold-500/20 rounded-xl backdrop-blur-sm pointer-events-none">
                   <Loader2 className="w-4 h-4 text-gold-500 animate-spin" />

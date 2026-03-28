@@ -1,6 +1,6 @@
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
+import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { useEffect, useState } from 'react';
-import WalletControl from '@/components/common/WalletControl';
 
 export default function WalletDebugPage() {
   const { connected, connecting, wallet, wallets, address, selectWallet } = useWallet();
@@ -31,7 +31,7 @@ export default function WalletDebugPage() {
         {/* Wallet Button */}
         <div className="p-6 bg-void-800 rounded-xl border border-white/10">
           <h2 className="text-xl font-bold mb-4">Connect Wallet</h2>
-          <WalletControl variant="premium" />
+          <WalletMultiButton />
         </div>
 
         {/* Connection Status */}
