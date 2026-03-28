@@ -30,6 +30,8 @@ import { DecryptPermission } from '@provablehq/aleo-wallet-adaptor-core';
 import '@provablehq/aleo-wallet-adaptor-react-ui/dist/styles.css';
 
 const MARKETPLACE_PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_20.aleo';
+const INITIAL_WALLET_PROGRAMS = [MARKETPLACE_PROGRAM_ID];
+const DEFAULT_WALLET_DECRYPT_PERMISSION = DecryptPermission.UponRequest;
 
 function App() {
   return (
@@ -41,11 +43,13 @@ function App() {
         new FoxWalletAdapter(),
         new SoterWalletAdapter(),
       ]}
-      autoConnect={true}
+      autoConnect={false}
       localNet={false}
       network={Network.TESTNET}
-      decryptPermission={DecryptPermission.OnChainHistory}
-      programs={[MARKETPLACE_PROGRAM_ID, "test_usdcx_stablecoin.aleo", "test_usad_stablecoin.aleo", "credits.aleo"]}
+      // Keep the initial wallet handshake light. Advanced flows can request
+      // extra approvals later when the user actually uses them.
+      decryptPermission={DEFAULT_WALLET_DECRYPT_PERMISSION}
+      programs={INITIAL_WALLET_PROGRAMS}
       onError={(error) => {
         console.error('[AleoWalletProvider] Error:', error.message);
         console.error('[AleoWalletProvider] Full error:', error);
