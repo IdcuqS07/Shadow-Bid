@@ -11,12 +11,12 @@ import AdminDashboardV3 from "@/pages/AdminDashboardV3";
 import SettlementPage from "@/pages/SettlementPage";
 import CommitBidPageV2 from "@/pages/CommitBidPageV2";
 import RevealBidPageV2 from "@/pages/RevealBidPageV2";
-import HowItWorksPage from "@/pages/HowItWorksPage";
 import TestUSDCxTransferPage from "@/pages/TestUSDCxTransferPage";
 import PremiumLanding from "@/pages/PremiumLanding";
 import PremiumAuctionList from "@/pages/PremiumAuctionList";
 import PremiumAuctionDetail from "@/pages/PremiumAuctionDetail";
 import PremiumCreateAuction from "@/pages/PremiumCreateAuction";
+import PremiumHowItWorks from "@/pages/PremiumHowItWorks";
 import WalletDebugPage from "@/pages/WalletDebugPage";
 import AdminOnlyRoute from "@/components/auth/AdminOnlyRoute";
 import { AleoWalletProvider } from '@provablehq/aleo-wallet-adaptor-react';
@@ -61,6 +61,8 @@ function App() {
             <Routes>
               {/* Premium Routes - No AppShell (Default) */}
               <Route path="/" element={<PremiumLanding />} />
+              <Route path="/how-it-works" element={<PremiumHowItWorks />} />
+              <Route path="/premium/how-it-works" element={<Navigate to="/how-it-works" replace />} />
               <Route path="/premium-auctions" element={<PremiumAuctionList />} />
               <Route path="/premium-auction/:auctionId" element={<PremiumAuctionDetail />} />
               <Route path="/premium-create" element={<PremiumCreateAuction />} />
@@ -88,7 +90,7 @@ function App() {
                 <Route path="commit-bid" element={<CommitBidPageV2 />} />
                 <Route path="reveal-bid" element={<RevealBidPageV2 />} />
                 <Route path="settlement" element={<SettlementPage />} />
-                <Route path="how-it-works" element={<HowItWorksPage />} />
+                <Route path="how-it-works" element={<Navigate to="/how-it-works" replace />} />
                 <Route path="test-usdcx-transfer" element={<TestUSDCxTransferPage />} />
               </Route>
 
@@ -98,7 +100,6 @@ function App() {
               <Route path="/commit-bid" element={<Navigate to="/standard/commit-bid" replace />} />
               <Route path="/reveal-bid" element={<Navigate to="/standard/reveal-bid" replace />} />
               <Route path="/settlement" element={<Navigate to="/standard/settlement" replace />} />
-              <Route path="/how-it-works" element={<Navigate to="/standard/how-it-works" replace />} />
               <Route path="/test-usdcx-transfer" element={<Navigate to="/standard/test-usdcx-transfer" replace />} />
               
               {/* Redirect old routes to standard */}

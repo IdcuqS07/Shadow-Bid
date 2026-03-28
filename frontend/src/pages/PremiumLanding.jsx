@@ -113,6 +113,13 @@ export default function PremiumLanding() {
               >
                 Launch App
               </PremiumButton>
+              <PremiumButton
+                variant="secondary"
+                size="xl"
+                onClick={() => navigate('/how-it-works')}
+              >
+                How It Works
+              </PremiumButton>
             </div>
 
             {/* Stats */}
@@ -214,7 +221,13 @@ export default function PremiumLanding() {
           <div className="flex items-center justify-between text-sm text-white/40 font-mono">
             <div>© 2026 ShadowBid. Built on Aleo.</div>
             <div className="flex items-center gap-6">
-              <a href="#" className="hover:text-white transition-colors">Docs</a>
+              <button
+                type="button"
+                onClick={() => navigate('/how-it-works')}
+                className="hover:text-white transition-colors"
+              >
+                How It Works
+              </button>
               <a href="#" className="hover:text-white transition-colors">GitHub</a>
               <a href="#" className="hover:text-white transition-colors">Discord</a>
             </div>
