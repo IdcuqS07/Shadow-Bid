@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
+import { toast } from 'sonner';
 import {
   getAuctionInfo, 
   cancelAuction,
@@ -584,6 +585,10 @@ export default function PremiumAuctionDetail() {
     description: '',
     evidence: '',
   });
+  const autoLifecycleRef = useRef({
+    inFlight: false,
+    lastRunAt: new Map(),
+  });
   const [, setCommitmentSyncVersion] = useState(0);
   const storedCommitmentData = address ? getCommitmentData(auctionId, address) : null;
   const submittedCommitmentData = hasSubmittedTransaction(storedCommitmentData) ? storedCommitmentData : null;
@@ -657,6 +662,32 @@ export default function PremiumAuctionDetail() {
       status: 'pending',
       explorerTransactionId: null,
     };
+  };
+
+  const showLifecycleNotice = (message, options = {}) => {
+    const { auto = false, tone = 'info' } = options;
+    if (!message) {
+      return;
+    }
+
+    if (!auto) {
+      alert(message);
+      return;
+    }
+
+    const normalizedMessage = String(message).replace(/\n+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+
+    if (tone === 'success') {
+      toast.success(normalizedMessage);
+      return;
+    }
+
+    if (tone === 'error') {
+      toast.error(normalizedMessage);
+      return;
+    }
+
+    toast(normalizedMessage);
   };
 
   // V2.18 is now default - no need to set version
@@ -1092,7 +1123,8 @@ export default function PremiumAuctionDetail() {
     return false;
   };
 
-  const waitForLifecycleTransaction = async (result, successMessage, pendingMessage) => {
+  const waitForLifecycleTransaction = async (result, successMessage, pendingMessage, options = {}) => {
+    const { auto = false } = options;
     const transactionId =
       typeof result?.walletTransactionId === 'string' && result.walletTransactionId.trim()
         ? result.walletTransactionId
@@ -1107,7 +1139,7 @@ export default function PremiumAuctionDetail() {
         : null;
 
     if (!transactionId) {
-      alert(successMessage);
+      showLifecycleNotice(successMessage, { auto, tone: 'success' });
       await loadAuctionData();
       return;
     }
@@ -1119,9 +1151,9 @@ export default function PremiumAuctionDetail() {
     }
 
     if (confirmation.status === 'confirmed') {
-      alert(successMessage);
+      showLifecycleNotice(successMessage, { auto, tone: 'success' });
     } else {
-      alert(`${pendingMessage}\n\nTransaction ID: ${transactionId}`);
+      showLifecycleNotice(`${pendingMessage}\n\nTransaction ID: ${transactionId}`, { auto, tone: 'info' });
     }
 
     await loadAuctionData();
@@ -1133,8 +1165,9 @@ export default function PremiumAuctionDetail() {
     successMessage,
     pendingMessage,
     statePendingMessage,
+    auto = false,
   }) => {
-    await waitForLifecycleTransaction(result, successMessage, pendingMessage);
+    await waitForLifecycleTransaction(result, successMessage, pendingMessage, { auto });
 
     if (!expectedStatus) {
       return true;
@@ -1148,7 +1181,7 @@ export default function PremiumAuctionDetail() {
     await loadAuctionData();
 
     if (!stateReached && statePendingMessage) {
-      alert(statePendingMessage);
+      showLifecycleNotice(statePendingMessage, { auto, tone: 'info' });
     }
 
     return stateReached;
@@ -1880,9 +1913,10 @@ export default function PremiumAuctionDetail() {
     }
   };
 
-  const handleRevealBid = async () => {
+  const handleRevealBid = async (options = {}) => {
+    const { auto = false } = options;
     if (!connected) {
-      alert('Please connect your wallet first');
+      showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
       return;
     }
     
@@ -1894,7 +1928,7 @@ export default function PremiumAuctionDetail() {
       const commitmentData = submittedCommitmentData;
       
       if (!nonce || !commitmentData) {
-        alert('❌ No bid found for this auction.\n\nYou need to place a bid first before revealing.');
+        showLifecycleNotice('❌ No bid found for this auction.\n\nYou need to place a bid first before revealing.', { auto, tone: 'error' });
         return;
       }
       
@@ -1912,42 +1946,45 @@ export default function PremiumAuctionDetail() {
       await waitForLifecycleTransaction(
         result,
         '✅ Bid Revealed Successfully!\n\nYour bid is now visible on-chain.',
-        '⏳ Reveal submitted, but explorer confirmation is still pending. Refresh the auction after the transaction is confirmed to unlock the next state.'
+        '⏳ Reveal submitted, but explorer confirmation is still pending. Refresh the auction after the transaction is confirmed to unlock the next state.',
+        { auto }
       );
       
     } catch (error) {
       console.error('❌ Error revealing bid:', error);
-      alert(`❌ Failed to reveal bid:\n\n${error.message || error}`);
+      showLifecycleNotice(`❌ Failed to reveal bid:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleCloseAuction = async () => {
+  const handleCloseAuction = async (options = {}) => {
+    const { auto = false } = options;
     if (!connected) {
-      alert('Please connect your wallet first');
+      showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
       return;
     }
 
     if (auction?.status !== 'open') {
-      alert('❌ Auction is no longer open.\n\nRefresh the page to load the latest on-chain state.');
+      showLifecycleNotice('❌ Auction is no longer open.\n\nRefresh the page to load the latest on-chain state.', { auto, tone: 'error' });
       return;
     }
     
     if (auction.seller.toLowerCase() !== address?.toLowerCase()) {
-      alert(`❌ Only the seller can close the auction\n\nSeller: ${auction.seller}\nYour address: ${address}`);
+      showLifecycleNotice(`❌ Only the seller can close the auction\n\nSeller: ${auction.seller}\nYour address: ${address}`, { auto, tone: 'error' });
       return;
     }
 
     if (isClosePending) {
-      alert('⏳ Close Auction already submitted.\n\nWait for the contract state to update to CLOSED before trying again.');
+      showLifecycleNotice('⏳ Close Auction already submitted.\n\nWait for the contract state to update to CLOSED before trying again.', { auto, tone: 'info' });
       return;
     }
 
     if (!auctionCountdownEnded) {
-      alert(
+      showLifecycleNotice(
         `⏳ Auction is still running.\n\n` +
-        `Close Auction becomes available after ${formatUnixTimestamp(auction?.endTimestamp)}.`
+        `Close Auction becomes available after ${formatUnixTimestamp(auction?.endTimestamp)}.`,
+        { auto, tone: 'info' }
       );
       return;
     }
@@ -1984,6 +2021,7 @@ export default function PremiumAuctionDetail() {
         successMessage: '✅ Auction Closed Successfully!\n\nBidders can now reveal their bids.',
         pendingMessage: '⏳ Close auction submitted, but explorer confirmation is still pending. The contract may still appear OPEN until the network confirms the transaction.',
         statePendingMessage: '⏳ Close transaction is confirmed, but the auction mapping still has not updated to CLOSED yet. Use Refresh in a few seconds and check the On-Chain State card again.',
+        auto,
       });
 
       if (stateReached && address) {
@@ -1997,15 +2035,16 @@ export default function PremiumAuctionDetail() {
       }
       setIsClosePending(false);
       console.error('❌ Error closing auction:', error);
-      alert(`❌ Failed to close auction:\n\n${error.message || error}`);
+      showLifecycleNotice(`❌ Failed to close auction:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleClaimRefund = async () => {
+  const handleClaimRefund = async (options = {}) => {
+    const { auto = false } = options;
     if (!connected) {
-      alert('Please connect your wallet first');
+      showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
       return;
     }
     
@@ -2015,7 +2054,7 @@ export default function PremiumAuctionDetail() {
       const commitmentData = submittedCommitmentData;
       
       if (!commitmentData) {
-        alert('❌ No bid found for this auction');
+        showLifecycleNotice('❌ No bid found for this auction', { auto, tone: 'error' });
         return;
       }
       
@@ -2031,7 +2070,7 @@ export default function PremiumAuctionDetail() {
           parseInt(auctionId),
           commitmentData.amount
         );
-        alert('✅ Refund Claimed Successfully!\n\nYour USDCx has been returned.');
+        showLifecycleNotice('✅ Refund Claimed Successfully!\n\nYour USDCx has been returned.', { auto, tone: 'success' });
       } else if (auction.currencyType === 2) {
         // USAD refund
         await claimRefundUSAD(
@@ -2039,7 +2078,7 @@ export default function PremiumAuctionDetail() {
           parseInt(auctionId),
           commitmentData.amount
         );
-        alert('✅ Refund Claimed Successfully!\n\nYour USAD has been returned.');
+        showLifecycleNotice('✅ Refund Claimed Successfully!\n\nYour USAD has been returned.', { auto, tone: 'success' });
       } else {
         const isPrivateRefund = isPrivateCommitment(commitmentData);
         if (isPrivateRefund) {
@@ -2055,10 +2094,11 @@ export default function PremiumAuctionDetail() {
               commitmentData.amount
             );
         }
-        alert(
+        showLifecycleNotice(
           isPrivateRefund
             ? '✅ Refund Claimed Successfully!\n\nYour Aleo credits were returned as a private record.'
-            : '✅ Refund Claimed Successfully!\n\nYour Aleo credits have been returned.'
+            : '✅ Refund Claimed Successfully!\n\nYour Aleo credits have been returned.',
+          { auto, tone: 'success' }
         );
       }
       
@@ -2066,35 +2106,38 @@ export default function PremiumAuctionDetail() {
       
     } catch (error) {
       console.error('❌ Error claiming refund:', error);
-      alert(`❌ Failed to claim refund:\n\n${error.message || error}`);
+      showLifecycleNotice(`❌ Failed to claim refund:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDetermineWinner = async () => {
+  const handleDetermineWinner = async (options = {}) => {
+    const { auto = false } = options;
     if (!connected) {
-      alert('Please connect your wallet first');
+      showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
       return;
     }
 
     if (auction?.status !== 'closed') {
-      alert('❌ Determine Winner is only available after the auction is closed.');
+      showLifecycleNotice('❌ Determine Winner is only available after the auction is closed.', { auto, tone: 'error' });
       return;
     }
 
     if (!determineWinnerWindowEnded) {
-      alert(
+      showLifecycleNotice(
         `⏳ Reveal window is still active.\n\n` +
-        `Determine Winner becomes available after ${revealWindowEndsAtLabel}.`
+        `Determine Winner becomes available after ${revealWindowEndsAtLabel}.`,
+        { auto, tone: 'info' }
       );
       return;
     }
 
     if (!hasRevealedBidCandidate) {
-      alert(
+      showLifecycleNotice(
         '❌ No revealed bids found yet.\n\n' +
-        'The V2.20 contract requires at least one revealed bid before determining a winner.'
+        'The V2.20 contract requires at least one revealed bid before determining a winner.',
+        { auto, tone: 'error' }
       );
       return;
     }
@@ -2114,39 +2157,43 @@ export default function PremiumAuctionDetail() {
         successMessage: '✅ Winner Determined!\n\nThe auction is now in CHALLENGE state. You can continue with the next contract step from the seller controls.',
         pendingMessage: '⏳ Determine winner submitted, but explorer confirmation is still pending. Finalize Winner will appear after the contract reaches CHALLENGE.',
         statePendingMessage: '⏳ Determine Winner transaction is confirmed, but the auction mapping still has not updated to CHALLENGE yet. Refresh again in a few seconds.',
+        auto,
       });
       
     } catch (error) {
       console.error('❌ Error determining winner:', error);
-      alert(`❌ Failed to determine winner:\n\n${error.message || error}`);
+      showLifecycleNotice(`❌ Failed to determine winner:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleFinalizeWinner = async () => {
+  const handleFinalizeWinner = async (options = {}) => {
+    const { auto = false } = options;
     if (!connected) {
-      alert('Please connect your wallet first');
+      showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
       return;
     }
 
     if (auction?.status !== 'challenge') {
-      alert('❌ Finalize Winner is only available during the challenge phase.');
+      showLifecycleNotice('❌ Finalize Winner is only available during the challenge phase.', { auto, tone: 'error' });
       return;
     }
 
     if (!finalizeWinnerWindowEnded) {
-      alert(
+      showLifecycleNotice(
         `⏳ Challenge period is still active.\n\n` +
-        `Finalize Winner becomes available after ${challengeWindowEndsAtLabel}.`
+        `Finalize Winner becomes available after ${challengeWindowEndsAtLabel}.`,
+        { auto, tone: 'info' }
       );
       return;
     }
 
     if (hasActiveOnChainDispute) {
-      alert(
+      showLifecycleNotice(
         '❌ Finalize Winner is blocked while an on-chain dispute is open.\n\n' +
-        'Resolve the dispute before finalizing the auction.'
+        'Resolve the dispute before finalizing the auction.',
+        { auto, tone: 'error' }
       );
       return;
     }
@@ -2170,11 +2217,12 @@ export default function PremiumAuctionDetail() {
         successMessage: '✅ Winner Finalized!\n\nThe auction is now in SETTLED state. Winner and seller actions are available according to the contract.',
         pendingMessage: '⏳ Finalize winner submitted, but explorer confirmation is still pending. Settlement actions will appear after the contract reaches SETTLED.',
         statePendingMessage: '⏳ Finalize Winner transaction is confirmed, but the auction mapping still has not updated to SETTLED yet. Refresh again in a few seconds.',
+        auto,
       });
       
     } catch (error) {
       console.error('❌ Error finalizing winner:', error);
-      alert(`❌ Failed to finalize winner:\n\n${error.message || error}`);
+      showLifecycleNotice(`❌ Failed to finalize winner:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -2225,15 +2273,16 @@ export default function PremiumAuctionDetail() {
     }
   };
 
-  const handleClaimWinning = async () => {
+  const handleClaimWinning = async (options = {}) => {
+    const { auto = false } = options;
     if (!connected) {
-      alert('Please connect your wallet first');
+      showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
       return;
     }
     
     // Check if user is seller
     if (auction.seller?.toLowerCase() !== address?.toLowerCase()) {
-      alert('❌ Only the seller can claim winning bid');
+      showLifecycleNotice('❌ Only the seller can claim winning bid', { auto, tone: 'error' });
       return;
     }
     
@@ -2262,13 +2311,13 @@ export default function PremiumAuctionDetail() {
         await claimWinningUSDCx(executeTransaction, parseInt(auctionId, 10), sellerNetAmountMicro, auction.seller, timestamp);
       }
       
-      alert(`✅ Payment Claimed Successfully!\n\nYou received ${auction.sellerNetAmount || auction.winningBid || auction.minBid} ${auction.token}`);
+      showLifecycleNotice(`✅ Payment Claimed Successfully!\n\nYou received ${auction.sellerNetAmount || auction.winningBid || auction.minBid} ${auction.token}`, { auto, tone: 'success' });
       
       await loadAuctionData();
       
     } catch (error) {
       console.error('❌ Error claiming winning bid:', error);
-      alert(`❌ Failed to claim payment:\n\n${error.message || error}`);
+      showLifecycleNotice(`❌ Failed to claim payment:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -2336,19 +2385,20 @@ export default function PremiumAuctionDetail() {
     }
   };
 
-  const handleClaimPlatformFee = async () => {
+  const handleClaimPlatformFee = async (options = {}) => {
+    const { auto = false } = options;
     if (!connected) {
-      alert('Please connect your wallet first');
+      showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
       return;
     }
 
     if (!isPlatformOwner(address)) {
-      alert('❌ Only the platform owner can claim platform fees');
+      showLifecycleNotice('❌ Only the platform owner can claim platform fees', { auto, tone: 'error' });
       return;
     }
 
     if (!auction.platformFeeMicro) {
-      alert('❌ Platform fee amount is not available yet');
+      showLifecycleNotice('❌ Platform fee amount is not available yet', { auto, tone: 'error' });
       return;
     }
 
@@ -2367,28 +2417,29 @@ export default function PremiumAuctionDetail() {
         await claimPlatformFeeUsdcx(executeTransaction, parseInt(auctionId, 10), auction.platformFeeMicro);
       }
 
-      alert(`✅ Platform Fee Claimed!\n\nReceived ${auction.platformFee || 0} ${auction.token}.`);
+      showLifecycleNotice(`✅ Platform Fee Claimed!\n\nReceived ${auction.platformFee || 0} ${auction.token}.`, { auto, tone: 'success' });
       await loadAuctionData();
     } catch (error) {
       console.error('❌ Error claiming platform fee:', error);
-      alert(`❌ Failed to claim platform fee:\n\n${error.message || error}`);
+      showLifecycleNotice(`❌ Failed to claim platform fee:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
       setIsClaimingFee(false);
     }
   };
 
-  const handleCancelReserveNotMet = async () => {
+  const handleCancelReserveNotMet = async (options = {}) => {
+    const { auto = false } = options;
     if (!connected) {
-      alert('Please connect your wallet first');
+      showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
       return;
     }
 
     if (auction.seller?.toLowerCase() !== address?.toLowerCase()) {
-      alert('❌ Only the seller can cancel an auction after reserve is not met');
+      showLifecycleNotice('❌ Only the seller can cancel an auction after reserve is not met', { auto, tone: 'error' });
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = auto ? true : window.confirm(
       'Cancel this auction because the reserve price was not met?\n\nBidders will be able to claim refunds after cancellation.'
     );
     if (!confirmed) {
@@ -2403,11 +2454,11 @@ export default function PremiumAuctionDetail() {
       }
 
       await cancelAuctionReserveNotMet(executeTransaction, parseInt(auctionId, 10));
-      alert('✅ Auction canceled.\n\nReserve price was not met and bidders can now claim refunds.');
+      showLifecycleNotice('✅ Auction canceled.\n\nReserve price was not met and bidders can now claim refunds.', { auto, tone: 'success' });
       await loadAuctionData();
     } catch (error) {
       console.error('❌ Error cancelling reserve-not-met auction:', error);
-      alert(`❌ Failed to cancel auction:\n\n${error.message || error}`);
+      showLifecycleNotice(`❌ Failed to cancel auction:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
       setIsCancellingReserve(false);
     }
@@ -2693,6 +2744,121 @@ export default function PremiumAuctionDetail() {
     auction?.paymentClaimed &&
     !auction?.platformFeeClaimed
   );
+  const canAutoSellerClaim = Boolean(
+    isSellerView &&
+    auction?.status === 'settled' &&
+    !auction?.paymentClaimed &&
+    (
+      auction?.itemReceived ||
+      auction?.claimableAtReached
+    )
+  );
+
+  const runAutoLifecycleAction = async (actionKey, actionRunner) => {
+    const now = Date.now();
+    const lastRunAt = autoLifecycleRef.current.lastRunAt.get(actionKey) || 0;
+
+    if (autoLifecycleRef.current.inFlight || now - lastRunAt < 15000) {
+      return;
+    }
+
+    autoLifecycleRef.current.inFlight = true;
+    autoLifecycleRef.current.lastRunAt.set(actionKey, now);
+
+    try {
+      await actionRunner();
+    } finally {
+      autoLifecycleRef.current.inFlight = false;
+    }
+  };
+
+  useEffect(() => {
+    if (
+      !auction ||
+      loading ||
+      !connected ||
+      !address ||
+      !executeTransaction ||
+      isSubmitting ||
+      isClaimingFee ||
+      isCancellingReserve
+    ) {
+      return undefined;
+    }
+
+    const lifecycleAction =
+      isSellerView && auction.status === 'open' && auctionCountdownEnded && !isClosePending
+        ? {
+            key: `close_${auction.id}_${address}`,
+            run: () => handleCloseAuction({ auto: true }),
+          }
+        : canRevealBid
+          ? {
+              key: `reveal_${auction.id}_${address}`,
+              run: () => handleRevealBid({ auto: true }),
+            }
+          : isSellerView && auction.status === 'closed' && determineWinnerWindowEnded && hasRevealedBidCandidate
+            ? {
+                key: `determine_${auction.id}_${address}`,
+                run: () => handleDetermineWinner({ auto: true }),
+              }
+            : isSellerView && auction.status === 'challenge' && auction.reserveMet === false
+              ? {
+                  key: `cancel_reserve_${auction.id}_${address}`,
+                  run: () => handleCancelReserveNotMet({ auto: true }),
+                }
+              : isSellerView && auction.status === 'challenge' && auction.reserveMet !== false && finalizeWinnerWindowEnded && !hasActiveOnChainDispute
+                ? {
+                    key: `finalize_${auction.id}_${address}`,
+                    run: () => handleFinalizeWinner({ auto: true }),
+                  }
+                : canClaimRefund
+                  ? {
+                      key: `refund_${auction.id}_${address}`,
+                      run: () => handleClaimRefund({ auto: true }),
+                    }
+                  : canAutoSellerClaim
+                    ? {
+                        key: `seller_claim_${auction.id}_${address}`,
+                        run: () => handleClaimWinning({ auto: true }),
+                      }
+                    : canClaimPlatformFeeAction
+                      ? {
+                          key: `platform_fee_${auction.id}_${address}`,
+                          run: () => handleClaimPlatformFee({ auto: true }),
+                        }
+                      : null;
+
+    if (!lifecycleAction) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      void runAutoLifecycleAction(lifecycleAction.key, lifecycleAction.run);
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [
+    address,
+    auction,
+    auctionCountdownEnded,
+    canAutoSellerClaim,
+    canClaimPlatformFeeAction,
+    canClaimRefund,
+    canRevealBid,
+    connected,
+    determineWinnerWindowEnded,
+    executeTransaction,
+    finalizeWinnerWindowEnded,
+    hasActiveOnChainDispute,
+    hasRevealedBidCandidate,
+    isCancellingReserve,
+    isClaimingFee,
+    isClosePending,
+    isSellerView,
+    isSubmitting,
+    loading,
+  ]);
 
   return (
     <div className="min-h-screen bg-void-900 text-white">
