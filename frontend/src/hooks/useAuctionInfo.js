@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAuctionInfo } from '@/services/aleoService';
+import { getAuctionInfo } from '@/services/aleoServiceV2';
 
 /**
  * Hook to fetch auction info from on-chain mapping

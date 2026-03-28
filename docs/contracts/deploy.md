@@ -1,4 +1,6 @@
-# V2.20 Deployment Guide
+# Historical V2.20 Deployment Guide
+
+This file records the archived `v2.20` rollout that preceded the current `v2.21` repo target.
 
 ## Contract Information
 

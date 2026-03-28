@@ -30,7 +30,9 @@ export default function DashboardPage() {
   // Calculate real KPIs from user data
   const activeAuctionsCount = auctions.filter(a => a.status === 'active').length;
   const totalBidsCount = bids.length;
-  const pendingSettlementsCount = auctions.filter(a => a.status === 'pending_settlement').length;
+  const pendingSettlementsCount = auctions.filter(
+    (auction) => auction.status === 'closed' || auction.status === 'challenge' || auction.status === 'disputed'
+  ).length;
   const settledAuctions = auctions.filter(a => a.status === 'settled').slice(0, 3);
 
   // Fetch winner data for settled auctions

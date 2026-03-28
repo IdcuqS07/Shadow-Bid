@@ -1,127 +1,91 @@
 # Quick Start Guide
 
-## 🚀 Get Started in 5 Minutes
+## Default Routes
 
-### 1. Connect Your Wallet (30 seconds)
+The current user-facing app defaults to the premium flow:
 
-1. Click **"Connect Wallet"** button (top right)
-2. Select your wallet (**Shield** recommended, or Puzzle / Leo / Fox)
-3. Approve the connection
-4. ✅ You're connected!
+- `/`
+- `/premium-auctions`
+- `/premium-create`
+- `/premium-auction/:auctionId`
 
-### 2. Create Your First Auction (2 minutes)
+Compatibility routes still exist under `/standard/*`.
 
-1. Click **"Create Auction"** in navigation
-2. Fill in the form:
-   - **Title**: "My First Auction"
-   - **Category**: "Test"
-   - **Minimum Bid**: "10" (credits)
-   - **Closing Date**: Pick a date (e.g., tomorrow)
-   - **Description**: "Testing the marketplace"
-3. Click **"Publish Auction"**
-4. Approve transaction in wallet
-5. ✅ Auction created! Note the transaction ID
+## 1. Connect A Wallet
 
-### 3. View Your Auction (30 seconds)
+1. Open the site and click `Connect Wallet`.
+2. Choose a wallet. Shield is the recommended path for private ALEO bidding.
+3. Approve the connection request.
+4. If you plan to use private ALEO credits, be ready to approve private-record access when the bid flow asks for it.
 
-1. Go to **Dashboard** or **Auctions** page
-2. Your auction appears at the top!
-3. Click **"View Detail"** to see more
-4. Check **"On-Chain Status"** card for blockchain data
+## 2. Create A V2.21 Auction
 
-### 4. Submit a Test Bid (1 minute)
+1. Open `/premium-create`.
+2. Fill in the auction details:
+   - title and description
+   - minimum bid
+   - reserve price
+   - currency: `ALEO`, `USDCx`, or `USAD`
+   - asset type
+   - auction end time
+   - reveal period
+   - dispute period
+3. Submit the create transaction in your wallet.
+4. After confirmation, the auction appears in `/premium-auctions`.
 
-1. Go to **"Submit Bid"** page
-2. Enter your auction ID (from step 2)
-3. Enter bid amount (above minimum, e.g., "15")
-4. Click **"Commit Bid"**
-5. Approve transaction
-6. ✅ Bid submitted! It's now sealed on-chain
+## 3. Submit A Bid
 
-### 5. Check Your Dashboard (30 seconds)
+1. Open the auction detail page.
+2. Choose the bidding path that matches the auction currency.
+3. Submit the bid.
+4. If you use private ALEO:
+   - Shield may request access to private records
+   - approve the request
+   - the app will save bidder-local nonce and commitment data for reveal later
 
-1. Go to **Dashboard**
-2. See your auction in "Recent Auctions"
-3. Check "My Bids" card for your bid
-4. View "Active Auctions" count updated
+## 4. Close The Auction
 
-## 🎯 What's Next?
+When the end time passes, the contract still remains `OPEN` until the seller closes it.
 
-### For Testing the Full Flow:
+1. The seller opens the auction detail page.
+2. Use `Close Auction`.
+3. After confirmation, the auction moves to `CLOSED` and the reveal window starts.
 
-**Close the Auction:**
-1. Go to **Settlement Center**
-2. Use **Step 1: Close Auction**
-3. Enter your auction ID
-4. Close it
+## 5. Reveal Before The Deadline
 
-**Resolve Bids (if you're the auctioneer):**
-1. Get bid records from your wallet
-2. Use **Step 2: Resolve Bids**
-3. Compare bids to find winner
+1. Bidders who committed must reveal before `reveal_deadline`.
+2. Reveal should usually happen from the same browser and wallet session that placed the bid, because the saved nonce and commitment are stored locally.
+3. Valid reveals become eligible for settlement. Unrevealed bids do not overtake valid revealed bids.
 
-**Declare Winner:**
-1. Use **Step 3: Finish Auction**
-2. Enter auction ID and winning bid
-3. Winner recorded on-chain!
+## 6. Settle After Reveal Timeout
 
-## 💡 Quick Tips
+After the reveal window ends:
 
-### Creating Auctions
-- Use realistic minimum bids
-- Set closing dates in the future
-- Save your transaction IDs
+1. The seller uses `Settle After Reveal Timeout`.
+2. If the reserve is met, the auction moves into `CHALLENGE`.
+3. If no valid reveal remains or the reserve is not met, the contract can cancel the auction.
 
-### Submitting Bids
-- Bid amounts are completely private
-- You can bid on your own auction for testing
-- Bids are final - can't be changed
+## 7. Finalize After The Dispute Window
 
-### Settlement
-- Only seller can close auction
-- Only auctioneer can resolve bids
-- Resolve compares bids privately
+1. During `CHALLENGE`, users can open a dispute if needed.
+2. Once `dispute_deadline` passes and there is no active dispute block, the seller can run `Finalize Winner`.
+3. The auction then moves into settlement completion.
 
-## 📱 Navigation
+## 8. Complete Claims
 
-- **Dashboard** - Overview of everything
-- **Auctions** - Browse all auctions
-- **Create Auction** - Start new auction
-- **Submit Bid** - Place sealed bid
-- **Settlement** - Close and settle auctions
+After settlement:
 
-## 🔍 Checking Transactions
+- the winner can confirm receipt
+- the seller can claim the net payout after receipt confirmation or the confirmation timeout
+- the platform owner can claim the platform fee after seller payment is claimed
+- losing bidders or cancelled-auction participants can claim refunds through the currency-specific refund flow
 
-Every transaction gives you a transaction ID like:
-`at16pmjyk52fl37ctgn585ry7wa93h5y7qy93fqwc3h9xpcpvuk7v9spq4zg4`
+## Local Testing Shortcut
 
-View it on Aleo Explorer:
-https://testnet.explorer.provable.com/transaction/YOUR_TX_ID
+For UI testing without touching production Ops state:
 
-## ⚠️ Common First-Time Issues
+1. Run the frontend locally.
+2. Open `/dev/test-fixtures`.
+3. Click `Seed Fixtures`.
 
-### "Wallet not available"
-- Install a wallet extension first
-- Unlock your wallet
-- Refresh the page
-
-### "Insufficient balance"
-- Get testnet credits from Aleo faucet
-- Need ~2-3 credits for testing
-
-### "Transaction failed"
-- Check you filled all required fields
-- Ensure bid is above minimum
-- Verify auction is still open
-
-## 🎓 Learn More
-
-- **Full Guide**: See [user-guide.md](./user-guide.md)
-- **Troubleshooting**: See [troubleshooting.md](./troubleshooting.md)
-- **Local Storage**: See [local-storage.md](./local-storage.md)
-
-## 🎉 You're Ready!
-
-Start creating auctions and submitting bids. Everything is private and secure with zero-knowledge proofs!
-
-**Need Help?** Check the documentation or open an issue on GitHub.
+This seeds browser-local V2.21 auction scenarios so the premium list, detail page, and Ops console can be exercised quickly.

@@ -1,156 +1,143 @@
-# ShadowBid Marketplace - User Guide
+# ShadowBid Marketplace User Guide
 
-## Getting Started
+## Overview
 
-### 1. Connect Your Wallet
+ShadowBid `v2.21` is a sealed-bid marketplace on Aleo with:
 
-Before using the marketplace, you need to connect an Aleo wallet:
+- three supported currencies: `ALEO`, `USDCx`, and `USAD`
+- split reveal and dispute deadlines
+- dispute-aware settlement
+- seller, winner, and platform-fee claim flows after settlement
 
-- **Shield Wallet** (Recommended)
-- **Puzzle Wallet**
-- **Leo Wallet**
-- **Fox Wallet**
+The default user routes are the premium pages:
 
-Click the "Connect Wallet" button in the top right corner and select your wallet provider.
+- `/premium-auctions`
+- `/premium-create`
+- `/premium-auction/:auctionId`
 
-## For Sellers (Creating Auctions)
+## For Sellers
 
-### Step 1: Create an Auction
+### Create An Auction
 
-1. Navigate to **Create Auction** page
-2. Fill in the auction details:
-   - **Auction Title**: Name of your auction
-   - **Category**: Type of item/service
-   - **Minimum Bid**: Lowest acceptable bid in credits
-   - **Closing Date**: When bidding ends
-   - **Description**: Details about the item/service
+1. Open `/premium-create`.
+2. Fill in:
+   - title, description, and asset details
+   - minimum bid
+   - reserve price
+   - currency
+   - reveal period
+   - dispute period
+3. Submit the transaction from your wallet.
 
-3. Click **Publish Auction**
-4. Approve the transaction in your wallet
-5. Wait for confirmation (you'll receive an AuctionRecord in your wallet)
+Optional seller metadata:
 
-### Step 2: Monitor Bids
+- seller display name
+- proof bundle summary
+- verification details
+- on-chain proof and profile roots
 
-- Go to **Auctions** page to see all active auctions
-- Click on your auction to view details
-- Check the **On-Chain Status** card for real-time blockchain data
-- Note: Bid amounts are private - you won't see them until settlement
+### Close The Auction
 
-### Step 3: Close the Auction
+After the end time passes, the contract still waits for the seller to close the auction.
 
-When the bidding period ends:
+1. Open the auction detail page.
+2. Click `Close Auction`.
+3. The reveal window begins.
 
-1. Go to **Settlement Center**
-2. In **Step 1: Close Auction**, enter your auction ID
-3. Click **Close Auction**
-4. Approve the transaction
+### Settle After Reveal Timeout
+
+Once the reveal window ends:
+
+1. Use `Settle After Reveal Timeout`.
+2. The contract decides whether the auction continues into `CHALLENGE` or cancels.
+3. Reserve handling is part of this timeout settlement in `v2.21`.
+
+### Finalize The Winner
+
+If the auction enters `CHALLENGE`:
+
+1. wait until `dispute_deadline`
+2. make sure there is no unresolved on-chain dispute
+3. use `Finalize Winner`
+
+### Claim Seller Payment
+
+After settlement:
+
+- if the winner confirms receipt, the seller can claim sooner
+- otherwise the seller waits until `claimable_at`
+- the seller then claims the net amount after platform fee calculation
 
 ## For Bidders
 
-### Step 1: Browse Auctions
+### Commit A Bid
 
-1. Go to **Auctions** page
-2. Use filters to find auctions by status or search
-3. Click **View Detail** to see auction information
+1. Open the auction detail page.
+2. Choose the correct currency flow:
+   - public ALEO
+   - private ALEO
+   - USDCx
+   - USAD
+3. Submit the bid transaction.
 
-### Step 2: Submit a Sealed Bid
+If you use private ALEO:
 
-1. Navigate to **Submit Bid** page
-2. Enter:
-   - **Auction ID**: The auction you want to bid on
-   - **Bid Amount**: Your bid in credits (this stays private!)
+- Shield may prompt for private-record access
+- approve the request
+- the app stores your nonce and commitment locally for the reveal step
 
-3. Click **Commit Bid**
-4. Approve the transaction in your wallet
-5. Your bid is now sealed on-chain - no one can see the amount!
+### Reveal The Bid
 
-### Important Notes for Bidders
+If you committed a bid:
 
-- ✅ Your bid amount is completely private
-- ✅ Only the auctioneer can compare bids using ZK proofs
-- ✅ Losing bids are never revealed
-- ✅ Your bid is saved locally in your browser for reference
+1. return after the seller closes the auction
+2. reveal before `reveal_deadline`
+3. use the same browser and wallet session when possible, because reveal depends on the locally saved nonce and commitment
 
-## For Auctioneers (Settlement)
+### Claim A Refund
 
-The auctioneer is responsible for determining the winner using zero-knowledge proofs.
+Refunds are available when:
 
-### Step 1: Close the Auction
+- the auction is cancelled
+- the auction settles and you are not the winner
 
-(Same as seller - see above)
+Use the refund action that matches the auction currency.
 
-### Step 2: Resolve Bids (Find the Winner)
+## For Winners
 
-1. Go to **Settlement Center**
-2. In **Step 2: Resolve Bids**:
-   - Get bid records from your wallet (you own all bid records)
-   - Paste two bid records into the form
-   - Click **Compare Bids**
-   - The higher bid will be returned to your wallet
+After the seller finalizes the winner:
 
-3. Repeat this process:
-   - Use the winning bid from the previous comparison
-   - Compare it with the next bid
-   - Continue until you've compared all bids
+1. review the auction detail page
+2. confirm receipt once the item or outcome is delivered
+3. this unlocks seller payout sooner than waiting for the timeout
 
-### Step 3: Declare the Winner
+## For The Platform Owner
 
-1. In **Step 3: Finish Auction**:
-   - Enter the auction ID
-   - Paste the final winning bid record
-   - Click **Declare Winner**
+The platform owner has two extra responsibilities:
 
-2. The winner's address will be recorded on-chain
-3. The winner receives a bid record with `is_winner: true`
+- review lifecycle readiness, disputes, and executor recommendations in `/ops`
+- claim the platform fee after seller payment has been claimed
 
-## Privacy Features
+If a dispute is escalated, the platform owner can use the dispute resolution actions from the admin console.
 
-### What's Private?
+## Privacy Model
 
-- ✅ Bid amounts (never revealed on-chain)
-- ✅ Losing bids (only auctioneer sees them)
-- ✅ Bid comparisons (done with ZK proofs)
+### Hidden During Commit Phase
 
-### What's Public?
+- bid amounts
+- private ALEO transfer details when the private record flow is used
+- bidder-local nonce and commitment helpers stored in the browser
 
-- ✅ Auction details (title, min bid, end date)
-- ✅ Auction status (open, closed, settled)
-- ✅ Winner's address (after settlement)
-- ❌ Winner's bid amount (stays private!)
+### Visible During Or After Settlement
 
-## Troubleshooting
+- auction metadata
+- escrow totals
+- dispute state
+- seller settlement account on-chain
+- winner address and winning amount after settlement completes
 
-### "Wallet not available" error
+The marketplace masks seller addresses in the main UI by default, but the contract still settles against the seller account on-chain.
 
-- Make sure your wallet extension is installed and unlocked
-- Try refreshing the page
-- Check that you're connected to Aleo testnet
+## Legacy Standard Pages
 
-### Transaction failed
-
-- Ensure you have enough credits for the transaction + fee
-- Check that the auction is in the correct state (open for bids, closed for settlement)
-- Verify all input formats are correct
-
-### Can't see my auction on-chain
-
-- Wait a few moments for the transaction to be confirmed
-- Click the refresh button on the On-Chain Status card
-- Check the transaction on Aleo Explorer
-
-## Tips
-
-💡 **For Sellers**: Set a realistic minimum bid and closing date
-
-💡 **For Bidders**: Your bid is final - make sure you're comfortable with the amount
-
-💡 **For Auctioneers**: Keep track of all bid records in your wallet for the resolve process
-
-💡 **Everyone**: Save transaction IDs for your records
-
-## Support
-
-For issues or questions:
-- Check the transaction on [Aleo Explorer](https://testnet.explorer.provable.com)
-- Review the [Integration Guide](./integration.md) for technical details
-- Open an issue on GitHub
+The repo still contains `/standard/*` pages for compatibility and diagnostics. The premium flow is the primary user path for current `v2.21` behavior.

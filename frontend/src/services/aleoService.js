@@ -1,4 +1,4 @@
-const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_20.aleo';
+const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.explorer.provable.com/v1/testnet';
 const AUCTIONEER = import.meta.env.VITE_AUCTIONEER_ADDRESS || 'aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8';
 
@@ -132,7 +132,7 @@ export async function finishAuction(executeTransaction, auctionId, winningBidRec
 // Query auction info from on-chain mapping
 export async function getAuctionInfo(auctionId) {
   try {
-    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/auctions/${auctionId}u64`);
+    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/auctions/${auctionId}field`);
     if (!res.ok) {
       console.log('[aleoService] getAuctionInfo failed:', res.status, res.statusText);
       return null;
@@ -164,13 +164,14 @@ export async function checkProgramDeployed() {
 
 // Query winner from on-chain mapping
 export async function getAuctionWinner(auctionId) {
-  const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/winners/${auctionId}u64`);
+  const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/highest_bidder/${auctionId}field`);
   if (!res.ok) return null;
   return res.json();
 }
 
-// Query highest bid — not stored on-chain in new contract
-// Winner amount is only known after finish() is called
-export async function getHighestBid() {
-  return null;
+// Query highest bid from the v2.21 tracker mapping.
+export async function getHighestBid(auctionId) {
+  const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/highest_bid/${auctionId}field`);
+  if (!res.ok) return null;
+  return res.json();
 }

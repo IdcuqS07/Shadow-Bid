@@ -14,10 +14,24 @@ import * as AleoServiceV2 from '@/services/aleoServiceV2';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { mapStateToStatus } from '@/lib/auctionUtils';
 
+const EMPTY_ALEO_ADDRESS = 'aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc';
+
 function zkStateFromBidStatus(status) {
   if (status === 'revealed') return 'revealed';
   if (status === 'committed') return 'protected';
   return 'verified';
+}
+
+function formatAddressPreview(value, start = 10, end = 6) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return 'Hidden';
+  }
+
+  if (value.length <= start + end + 3) {
+    return value;
+  }
+
+  return `${value.slice(0, start)}...${value.slice(-end)}`;
 }
 
 export default function AuctionDetailPage() {
@@ -47,14 +61,14 @@ export default function AuctionDetailPage() {
             const sellerMatch = auctionData.match(/seller:\s*([a-z0-9]+)/);
             const winnerMatch = auctionData.match(/winner:\s*([a-z0-9]+)/);
             const winningAmountMatch = auctionData.match(/winning_amount:\s*(\d+)u128/);
-            const totalEscrowedMatch = auctionData.match(/total_escrowed_usdx:\s*(\d+)u128/);
+            const totalEscrowedMatch = auctionData.match(/total_escrowed:\s*(\d+)u128/);
             const stateMatch = auctionData.match(/state:\s*(\d+)u8/);
             
             parsed = {
               seller: sellerMatch ? sellerMatch[1] : null,
-              winner: winnerMatch ? winnerMatch[1] : null,
+              winner: winnerMatch && winnerMatch[1] !== EMPTY_ALEO_ADDRESS ? winnerMatch[1] : null,
               winning_amount: winningAmountMatch ? winningAmountMatch[1] : '0',
-              total_escrowed_usdx: totalEscrowedMatch ? totalEscrowedMatch[1] : '0',
+              total_escrowed: totalEscrowedMatch ? totalEscrowedMatch[1] : '0',
               state: stateMatch ? stateMatch[1] : '0'
             };
             
@@ -184,7 +198,7 @@ export default function AuctionDetailPage() {
             </div>
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-slate-400" />
-              <span className="text-sm text-slate-300">{auction.seller}</span>
+              <span className="text-sm text-slate-300">{formatAddressPreview(auction.seller)}</span>
             </div>
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-slate-400" />
@@ -208,7 +222,7 @@ export default function AuctionDetailPage() {
               ) : winner ? (
                 <>
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Winner Address</p>
-                  <p className="font-mono text-sm text-amber-200 break-all">{winner}</p>
+                  <p className="font-mono text-sm text-amber-200 break-all">{formatAddressPreview(winner, 12, 8)}</p>
                   {highestBid !== null && (
                     <p className="text-sm text-slate-300">
                       Winning Bid:{' '}
@@ -272,7 +286,7 @@ export default function AuctionDetailPage() {
                 <div className="flex justify-between items-center">
                   <p className="text-xs text-slate-400">Total Escrowed</p>
                   <p className="text-sm font-semibold text-slate-200">
-                    {(parseInt(auctionStats.total_escrowed_usdx) / 1_000_000).toLocaleString()} {AleoServiceV2.getCurrencyLabel(currency)}
+                    {(parseInt(auctionStats.total_escrowed || '0', 10) / 1_000_000).toLocaleString()} {AleoServiceV2.getCurrencyLabel(currency)}
                   </p>
                 </div>
               </div>

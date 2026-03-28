@@ -6,7 +6,8 @@ const AUCTION_STATES = {
   CLOSED: 1,
   CHALLENGE: 2,
   SETTLED: 3,
-  CANCELLED: 4
+  CANCELLED: 4,
+  DISPUTED: 5,
 };
 
 const STATE_NAMES = {
@@ -14,10 +15,11 @@ const STATE_NAMES = {
   1: 'CLOSED',
   2: 'CHALLENGE',
   3: 'SETTLED',
-  4: 'CANCELLED'
+  4: 'CANCELLED',
+  5: 'DISPUTED',
 };
 
-const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_20.aleo';
+const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.explorer.provable.com/v1/testnet';
 
 /**
@@ -111,9 +113,13 @@ export function validateAction(action, currentState) {
       requiredState: AUCTION_STATES.CLOSED,
       message: 'Auction must be CLOSED to reveal bids. Seller needs to close the auction first.'
     },
+    'settle_after_reveal_timeout': {
+      requiredState: AUCTION_STATES.CLOSED,
+      message: 'Auction must be CLOSED before the seller can settle it after the reveal deadline.'
+    },
     'determine_winner': {
       requiredState: AUCTION_STATES.CLOSED,
-      message: 'Auction must be CLOSED to determine winner'
+      message: 'Auction must be CLOSED before the seller can settle it after the reveal deadline.'
     },
     'finalize_winner': {
       requiredState: AUCTION_STATES.CHALLENGE,
@@ -154,14 +160,14 @@ export function getStateDescription(state) {
     },
     [AUCTION_STATES.CLOSED]: {
       name: 'CLOSED',
-      description: 'Bidding closed, waiting for reveals',
+      description: 'Bidding closed, reveal window active or waiting for timeout settlement',
       color: 'blue',
       icon: '🔵',
-      allowedActions: ['Reveal Bid', 'Determine Winner (Seller)']
+      allowedActions: ['Reveal Bid', 'Settle After Reveal Timeout (Seller)']
     },
     [AUCTION_STATES.CHALLENGE]: {
       name: 'CHALLENGE',
-      description: 'Winner determined, challenge period active',
+      description: 'Winner selected, dispute window active',
       color: 'yellow',
       icon: '🟡',
       allowedActions: ['Finalize Winner (Seller)']
@@ -175,10 +181,17 @@ export function getStateDescription(state) {
     },
     [AUCTION_STATES.CANCELLED]: {
       name: 'CANCELLED',
-      description: 'Auction cancelled by seller',
+      description: 'Auction cancelled or no valid reveal met the reserve',
       color: 'red',
       icon: '🔴',
       allowedActions: []
+    },
+    [AUCTION_STATES.DISPUTED]: {
+      name: 'DISPUTED',
+      description: 'An on-chain dispute is open and must be resolved before settlement continues',
+      color: 'red',
+      icon: '🟥',
+      allowedActions: ['Resolve Dispute']
     }
   };
   
@@ -201,12 +214,12 @@ export function getNextAction(state, userRole) {
       bidder: 'Commit your bid (two-step process)'
     },
     [AUCTION_STATES.CLOSED]: {
-      seller: 'Wait for bidders to reveal, then determine winner',
-      bidder: 'Reveal your bid with the saved nonce'
+      seller: 'Wait for the reveal deadline, then settle after reveal timeout',
+      bidder: 'Reveal your bid with the saved nonce before the reveal deadline'
     },
     [AUCTION_STATES.CHALLENGE]: {
-      seller: 'Finalize the winner after challenge period',
-      bidder: 'Wait for seller to finalize'
+      seller: 'Finalize the winner after the dispute deadline',
+      bidder: 'Wait for seller to finalize or open a dispute if needed'
     },
     [AUCTION_STATES.SETTLED]: {
       seller: 'Manually settle payments via Shield Wallet',
@@ -215,6 +228,10 @@ export function getNextAction(state, userRole) {
     [AUCTION_STATES.CANCELLED]: {
       seller: 'Auction cancelled',
       bidder: 'Auction cancelled'
+    },
+    [AUCTION_STATES.DISPUTED]: {
+      seller: 'Resolve the dispute before continuing settlement',
+      bidder: 'Wait for dispute resolution'
     }
   };
   

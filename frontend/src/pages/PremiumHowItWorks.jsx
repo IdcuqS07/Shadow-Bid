@@ -27,7 +27,7 @@ const contractPillars = [
   {
     icon: Wallet,
     title: 'Three Settlement Currencies',
-    description: 'V2.20 auctions run with ALEO, USDCx, or USAD while keeping one consistent lifecycle.',
+    description: 'V2.21 auctions run with ALEO, USDCx, or USAD while keeping one consistent lifecycle.',
   },
   {
     icon: Scale,
@@ -51,7 +51,7 @@ const lifecycleSteps = [
     bullets: [
       'Supports ALEO, USDCx, and USAD',
       'Reserve logic is enforced during settlement',
-      'Seller profile and proof roots can be anchored for V2.20 verification workflows',
+      'Seller profile and proof roots can be anchored for V2.21 verification workflows',
     ],
   },
   {
@@ -59,7 +59,7 @@ const lifecycleSteps = [
     role: 'Bidder',
     title: 'Submit a sealed bid',
     description:
-      'Each bidder commits privately to a value and locks funds through the active V2.20 commit path.',
+      'Each bidder commits privately to a value and locks funds through the active V2.21 commit path.',
     bullets: [
       'The bid amount remains private during the commit phase',
       'Escrow is locked on-chain with the commitment',
@@ -93,13 +93,13 @@ const lifecycleSteps = [
   {
     icon: Trophy,
     role: 'Seller',
-    title: 'Determine the winner',
+    title: 'Settle after reveal timeout',
     description:
-      'After reveals are in, the seller triggers winner determination and the auction enters the challenge phase.',
+      'After the reveal window ends, the seller settles the closed auction so the contract either moves into challenge or cancels deterministically.',
     bullets: [
-      'Reserve checks are applied at settlement time',
-      'The challenge phase exists before final completion',
-      'On-chain dispute handling can interrupt finalization when needed',
+      'Reserve checks are applied during timeout settlement',
+      'Successful settlements move into the dispute-ready challenge phase',
+      'No-valid-reveal or reserve-miss cases can cancel cleanly instead of stalling',
     ],
   },
   {
@@ -219,13 +219,13 @@ export default function PremiumHowItWorks() {
           <div className="mx-auto max-w-4xl text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-xs font-mono uppercase tracking-[0.2em] text-cyan-300">
               <Shield className="h-4 w-4" />
-              Contract V2.20 Lifecycle
+              Contract V2.21 Lifecycle
             </div>
             <h1 className="mt-6 text-5xl font-display font-bold leading-tight md:text-7xl">
               How ShadowBid Works
             </h1>
             <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/65">
-              This premium flow follows the live V2.20 contract: sealed commits, verified reveals,
+              This premium flow follows the live V2.21 contract: sealed commits, verified reveals,
               challenge-aware settlement, dispute readiness, and post-settlement claims for sellers,
               bidders, and the platform owner.
             </p>
@@ -260,7 +260,7 @@ export default function PremiumHowItWorks() {
           <div className="max-w-3xl">
             <p className="text-sm font-mono uppercase tracking-[0.25em] text-cyan-300">Lifecycle</p>
             <h2 className="mt-3 text-4xl font-display font-bold text-white md:text-5xl">
-              The V2.20 auction flow from creation to settlement
+              The V2.21 auction flow from creation to settlement
             </h2>
             <p className="mt-4 text-white/60">
               Each step below reflects the current product behavior in premium pages, settlement actions,
@@ -325,10 +325,10 @@ export default function PremiumHowItWorks() {
 
             <GlassCard className="p-8">
               <p className="text-sm font-mono uppercase tracking-[0.25em] text-cyan-300">Settlement Notes</p>
-              <h2 className="mt-3 text-3xl font-display font-bold text-white">Important V2.20 rules</h2>
+              <h2 className="mt-3 text-3xl font-display font-bold text-white">Important V2.21 rules</h2>
               <div className="mt-8 space-y-4">
                 {[
-                  'Reserve visibility is not hidden on-chain. Privacy in V2.20 comes from sealed bids and the reveal window.',
+                  'Reserve visibility is not hidden on-chain. Privacy in V2.21 comes from sealed bids and the reveal window.',
                   'The winner path must clear the challenge phase before final completion.',
                   'Seller payout and platform fee claim are separate steps; fee claim only unlocks after seller payout.',
                   'Ops Console reads shared lifecycle data, but the premium pages remain the main place where auctions are synced and acted upon.',
@@ -379,7 +379,7 @@ export default function PremiumHowItWorks() {
               <div className="max-w-2xl">
                 <p className="text-sm font-mono uppercase tracking-[0.25em] text-cyan-300">Ready to test the flow</p>
                 <h2 className="mt-3 text-4xl font-display font-bold text-white">
-                  Move from the explainer into the live V2.20 experience
+                  Move from the explainer into the live V2.21 experience
                 </h2>
                 <p className="mt-4 text-white/65">
                   Browse the current premium auctions, create a new listing, or open Ops Console if you are reviewing admin-side lifecycle behavior.

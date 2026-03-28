@@ -1,4 +1,6 @@
-# ShadowBid Marketplace V2.20 Deployment
+# Historical ShadowBid Marketplace V2.20 Deployment Record
+
+This file records the previous `v2.20` deployment. Use it as an archive, not as the active `v2.21` rollout note.
 
 - Program: `shadowbid_marketplace_v2_20.aleo`
 - Network: `testnet`

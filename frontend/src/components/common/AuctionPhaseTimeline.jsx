@@ -3,15 +3,23 @@ import { Check } from 'lucide-react';
 const PHASES = [
   { key: 'created',    label: 'Created' },
   { key: 'active',     label: 'Sealed Bid' },
-  { key: 'reveal_open', label: 'Reveal' },
-  { key: 'pending_settlement', label: 'Settlement' },
+  { key: 'closed', label: 'Reveal' },
+  { key: 'challenge', label: 'Dispute' },
   { key: 'settled',    label: 'Settled' },
 ];
 
 const PHASE_ORDER = PHASES.map((p) => p.key);
 
 function getPhaseIndex(status) {
-  const idx = PHASE_ORDER.indexOf(status);
+  const normalizedStatus = ({
+    open: 'active',
+    reveal_open: 'closed',
+    pending_settlement: 'challenge',
+    cancelled: 'challenge',
+    disputed: 'challenge',
+  })[status] || status;
+
+  const idx = PHASE_ORDER.indexOf(normalizedStatus);
   return idx === -1 ? 0 : idx;
 }
 

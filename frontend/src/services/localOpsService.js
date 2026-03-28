@@ -5,6 +5,40 @@ const inferredProductionApiBase = ['shadowbid.xyz', 'www.shadowbid.xyz'].include
   : '';
 const OPS_API_BASE = configuredLocalApiBase || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : inferredProductionApiBase);
 
+function resolveOpsApiDebugInfo() {
+  if (!OPS_API_BASE) {
+    return {
+      configuredBaseUrl: '',
+      baseUrl: '',
+      hostname: '',
+      isConfigured: false,
+      isLocalTarget: false,
+    };
+  }
+
+  try {
+    const fallbackOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    const resolvedUrl = new URL(OPS_API_BASE, fallbackOrigin);
+    const hostname = resolvedUrl.hostname.toLowerCase();
+
+    return {
+      configuredBaseUrl: OPS_API_BASE,
+      baseUrl: resolvedUrl.origin,
+      hostname,
+      isConfigured: true,
+      isLocalTarget: ['localhost', '127.0.0.1', '::1'].includes(hostname),
+    };
+  } catch {
+    return {
+      configuredBaseUrl: OPS_API_BASE,
+      baseUrl: OPS_API_BASE,
+      hostname: '',
+      isConfigured: true,
+      isLocalTarget: false,
+    };
+  }
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${OPS_API_BASE}${path}`, {
     headers: {
@@ -19,6 +53,10 @@ async function request(path, options = {}) {
   }
 
   return response.json();
+}
+
+export function getOpsApiDebugInfo() {
+  return resolveOpsApiDebugInfo();
 }
 
 export async function getLocalApiHealth() {
@@ -216,6 +254,27 @@ export async function updateExecutorSettings(settings) {
     return await request('/api/executor/settings', {
       method: 'POST',
       body: JSON.stringify(settings),
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function resetOpsTestData() {
+  const debugInfo = getOpsApiDebugInfo();
+
+  if (!debugInfo.isLocalTarget) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: `Refusing to reset non-local Ops target: ${debugInfo.baseUrl || 'not configured'}`,
+    };
+  }
+
+  try {
+    return await request('/api/dev/reset', {
+      method: 'POST',
+      body: JSON.stringify({}),
     });
   } catch {
     return null;

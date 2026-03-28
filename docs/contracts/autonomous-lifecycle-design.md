@@ -1,8 +1,8 @@
 # Autonomous Lifecycle Design
 
-This document captures the next-step contract and protocol options for making the ShadowBid auction lifecycle more autonomous than the current `v2.20` flow.
+This document captures follow-up contract and protocol options for making the ShadowBid auction lifecycle more autonomous than the current `v2.21` flow.
 
-It is a design document, not an implementation record. The active on-chain program remains `shadowbid_marketplace_v2_20.aleo`.
+Historical note: this blueprint was originally written while `v2.20` was the live reference, so many comparisons still point back to `v2.20`. Treat it as design context, not as the current implementation record.
 
 ## Why `v2.20` Is Not Enough For Full Autonomy
 
@@ -296,6 +296,6 @@ If the goal is "full autonomous lifecycle with the least user dependency", deleg
 
 ## What This Document Does Not Change
 
-This document does not modify the live `v2.20` contract.
+This document does not modify the current `v2.21` contract.
 
-It is an implementation blueprint for a future contract revision, most likely `v2.21` or a later protocol release.
+It remains an implementation blueprint for a later contract revision beyond the shipped `v2.21` timeout-settlement model.

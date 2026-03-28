@@ -1,4 +1,6 @@
-# V2.20 Manual Deployment Instructions
+# Historical V2.20 Manual Deployment Instructions
+
+This file is retained for archived `v2.20` deployment reference. The active repo target is now `v2.21`.
 
 ## Prerequisites
 

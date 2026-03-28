@@ -11,7 +11,7 @@ import { CheckCircle2, Circle, Clock, ArrowRight } from 'lucide-react';
 const STEPS = {
   CLOSE: { id: 1, label: 'Close Auction', state: 0 },
   REVEAL: { id: 2, label: 'Bidders Reveal', state: 1 },
-  DETERMINE: { id: 3, label: 'Determine Winner', state: 1 },
+  SETTLE: { id: 3, label: 'Settle After Reveal Timeout', state: 1 },
   CHALLENGE: { id: 4, label: 'Challenge Period', state: 2 },
   FINALIZE: { id: 5, label: 'Finalize Winner', state: 2 },
 };
@@ -43,14 +43,16 @@ export function SettlementWizard() {
           const sellerMatch = auction.match(/seller:\s*([a-z0-9]+)/);
           const winnerMatch = auction.match(/winner:\s*([a-z0-9]+)/);
           const winningAmountMatch = auction.match(/winning_amount:\s*(\d+)u128/);
-          const challengeEndMatch = auction.match(/challenge_end_time:\s*(\d+)i64/);
+          const revealDeadlineMatch = auction.match(/reveal_deadline:\s*(\d+)i64/);
+          const disputeDeadlineMatch = auction.match(/dispute_deadline:\s*(\d+)i64/);
           
           parsed = {
             state: stateMatch ? stateMatch[1] : '0',
             seller: sellerMatch ? sellerMatch[1] : null,
             winner: winnerMatch ? winnerMatch[1] : null,
             winning_amount: winningAmountMatch ? winningAmountMatch[1] : '0',
-            challenge_end_time: challengeEndMatch ? challengeEndMatch[1] : '0',
+            reveal_deadline: revealDeadlineMatch ? revealDeadlineMatch[1] : '0',
+            dispute_deadline: disputeDeadlineMatch ? disputeDeadlineMatch[1] : '0',
           };
           
           // NEW: Detect currency
@@ -93,29 +95,21 @@ export function SettlementWizard() {
   const determineCurrentStep = (auction) => {
     const state = parseInt(auction.state);
     const now = Math.floor(Date.now() / 1000);
-    const challengeEnd = parseInt(auction.challenge_end_time);
+    const revealDeadline = parseInt(auction.reveal_deadline || '0', 10);
+    const disputeDeadline = parseInt(auction.dispute_deadline || '0', 10);
     
     if (state === 0) {
       setCurrentStep(STEPS.CLOSE);
     } else if (state === 1) {
-      // Check if winner is determined
-      if (auction.winner && auction.winner !== 'aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc') {
-        if (challengeEnd > now) {
-          setCurrentStep(STEPS.CHALLENGE);
-        } else {
-          setCurrentStep(STEPS.FINALIZE);
-        }
-      } else {
-        setCurrentStep(challengeEnd > now ? STEPS.REVEAL : STEPS.DETERMINE);
-      }
+      setCurrentStep(revealDeadline > now ? STEPS.REVEAL : STEPS.SETTLE);
     } else if (state === 2) {
-      if (challengeEnd > now) {
+      if (disputeDeadline > now) {
         setCurrentStep(STEPS.CHALLENGE);
       } else {
         setCurrentStep(STEPS.FINALIZE);
       }
-    } else if (state === 3) {
-      setCurrentStep(null); // Settled
+    } else {
+      setCurrentStep(null);
     }
   };
 
@@ -138,25 +132,25 @@ export function SettlementWizard() {
     }
   };
 
-  const handleDetermineWinner = async () => {
+  const handleSettleAfterRevealTimeout = async () => {
     if (!connected) {
       toast.error('Please connect your wallet');
       return;
     }
 
     const now = Math.floor(Date.now() / 1000);
-    const challengeEnd = parseInt(auctionInfo?.challenge_end_time || '0', 10);
+    const revealDeadline = parseInt(auctionInfo?.reveal_deadline || '0', 10);
 
-    if (challengeEnd > now) {
-      toast.error('Reveal window is still active. Wait until that deadline passes before determining the winner.');
+    if (revealDeadline > now) {
+      toast.error('Reveal window is still active. Wait until that deadline passes before settling the auction.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const result = await AleoServiceV2.determineWinner(executeTransaction, parseInt(auctionId));
-      toast.success(`Winner determined! TX: ${result?.transactionId?.slice(0, 12)}...`);
-      toast.info('Challenge period started (24 hours)');
+      const result = await AleoServiceV2.settleAfterRevealTimeout(executeTransaction, parseInt(auctionId));
+      toast.success(`Reveal timeout settled! TX: ${result?.transactionId?.slice(0, 12)}...`);
+      toast.info('Auction will move to CHALLENGE if reserve is met, otherwise CANCELLED.');
       await loadAuctionInfo();
     } catch (error) {
       console.error('[SettlementWizard] Error:', error);
@@ -173,9 +167,9 @@ export function SettlementWizard() {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    const challengeEnd = parseInt(auctionInfo?.challenge_end_time || '0', 10);
+    const disputeDeadline = parseInt(auctionInfo?.dispute_deadline || '0', 10);
 
-    if (challengeEnd > now) {
+    if (disputeDeadline > now) {
       toast.error('Challenge period is still active. Wait until that deadline passes before finalizing the winner.');
       return;
     }
@@ -242,11 +236,21 @@ export function SettlementWizard() {
     const unrevealedInfo = checkUnrevealedBids();
 
     if (!currentStep) {
+      const isCancelled = parseInt(auctionInfo?.state || '0', 10) === 4;
+      const isDisputed = parseInt(auctionInfo?.state || '0', 10) === 5;
       return (
         <div className="text-center py-8">
-          <CheckCircle2 className="h-12 w-12 text-green-400 mx-auto mb-3" />
-          <p className="text-lg font-semibold text-white">Auction Settled!</p>
-          <p className="text-sm text-slate-400 mt-1">All steps completed</p>
+          <CheckCircle2 className={`h-12 w-12 mx-auto mb-3 ${isCancelled ? 'text-amber-400' : isDisputed ? 'text-red-400' : 'text-green-400'}`} />
+          <p className="text-lg font-semibold text-white">
+            {isCancelled ? 'Auction Cancelled' : isDisputed ? 'Auction Disputed' : 'Auction Settled!'}
+          </p>
+          <p className="text-sm text-slate-400 mt-1">
+            {isCancelled
+              ? 'Reserve was not met or no valid reveal was recorded.'
+              : isDisputed
+                ? 'Resolve the on-chain dispute before continuing settlement.'
+                : 'All steps completed'}
+          </p>
         </div>
       );
     }
@@ -267,7 +271,7 @@ export function SettlementWizard() {
 
     if (currentStep.id === STEPS.REVEAL.id) {
       const now = Math.floor(Date.now() / 1000);
-      const revealDeadline = parseInt(auctionInfo.challenge_end_time || '0', 10);
+      const revealDeadline = parseInt(auctionInfo.reveal_deadline || '0', 10);
       const remaining = Math.max(0, revealDeadline - now);
       const hours = Math.floor(remaining / 3600);
       const minutes = Math.floor((remaining % 3600) / 60);
@@ -278,13 +282,13 @@ export function SettlementWizard() {
           <div>
             <p className="text-sm font-semibold text-amber-200">Waiting for Bidders to Reveal</p>
             <p className="text-xs text-slate-400 mt-1">
-              Determine Winner unlocks after the reveal window closes, even if some bidders never reveal.
+              Settlement unlocks after the reveal window closes, even if some bidders never reveal.
             </p>
           </div>
           
           <div className="rounded-lg border border-blue-500/20 bg-blue-950/30 p-3 text-left">
             <p className="text-xs text-blue-200">
-              💡 <strong>Reveal window remaining:</strong> {hours}h {minutes}m
+              Reveal window remaining: {hours}h {minutes}m
             </p>
           </div>
           
@@ -301,7 +305,7 @@ export function SettlementWizard() {
       );
     }
 
-    if (currentStep.id === STEPS.DETERMINE.id) {
+    if (currentStep.id === STEPS.SETTLE.id) {
       return (
         <div className="space-y-4">
           {/* Warning about unrevealed bids */}
@@ -319,36 +323,37 @@ export function SettlementWizard() {
                     {unrevealedInfo.message}
                   </p>
                   <p className="text-xs text-amber-400 mt-2">
-                    ⚠️ Only revealed bids will be counted. Unrevealed bids will be ignored.
+                    Only revealed bids will be counted. Unrevealed bids will be ignored.
                   </p>
                 </div>
               </div>
             </div>
           )}
+
+          <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-4 text-left">
+            <p className="text-sm font-semibold text-cyan-200">Settle after reveal timeout</p>
+            <p className="text-xs text-cyan-100 mt-1">
+              This moves the auction to CHALLENGE if the highest revealed bid meets reserve, otherwise to CANCELLED.
+            </p>
+          </div>
           
           <Button
-            onClick={handleDetermineWinner}
+            onClick={handleSettleAfterRevealTimeout}
             disabled={isSubmitting || !connected}
             className="w-full bg-purple-600 hover:bg-purple-700"
             size="lg"
           >
-            {isSubmitting ? 'Determining...' : unrevealedInfo.hasUnrevealed ? 'Determine Winner (Revealed Bids Only)' : 'Determine Winner'}
+            {isSubmitting ? 'Settling...' : 'Settle After Reveal Timeout'}
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
-          
-          {unrevealedInfo.hasUnrevealed && (
-            <p className="text-xs text-center text-slate-400">
-              Proceeding will determine winner from revealed bids only
-            </p>
-          )}
         </div>
       );
     }
 
     if (currentStep.id === STEPS.CHALLENGE.id) {
       const now = Math.floor(Date.now() / 1000);
-      const challengeEnd = parseInt(auctionInfo.challenge_end_time);
-      const remaining = challengeEnd - now;
+      const challengeEnd = parseInt(auctionInfo.dispute_deadline || '0', 10);
+      const remaining = Math.max(0, challengeEnd - now);
       const hours = Math.floor(remaining / 3600);
       const minutes = Math.floor((remaining % 3600) / 60);
 
@@ -359,7 +364,7 @@ export function SettlementWizard() {
           <p className="text-2xl font-bold text-white mt-2">
             {hours}h {minutes}m remaining
           </p>
-          <p className="text-xs text-slate-400 mt-1">Waiting for 24-hour challenge period</p>
+          <p className="text-xs text-slate-400 mt-1">Waiting for the dispute window to end</p>
         </div>
       );
     }
@@ -383,7 +388,7 @@ export function SettlementWizard() {
     <Card className="border-purple-500/20">
       <CardHeader>
         <CardTitle className="text-xl">Settlement Wizard</CardTitle>
-        <p className="text-sm text-slate-400">Guided settlement process for sellers</p>
+        <p className="text-sm text-slate-400">Guided seller flow for the live V2.21 contract</p>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Auction ID Input */}

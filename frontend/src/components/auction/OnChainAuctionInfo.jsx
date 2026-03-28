@@ -3,6 +3,24 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 import { useAuctionInfo } from '@/hooks/useAuctionInfo';
 
+const STATE_LABELS = {
+  0: 'OPEN',
+  1: 'CLOSED',
+  2: 'CHALLENGE',
+  3: 'SETTLED',
+  4: 'CANCELLED',
+  5: 'DISPUTED',
+};
+
+function parseNumericValue(value) {
+  if (value == null) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(String(value).replace(/[^\d-]/g, ''), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function OnChainAuctionInfo({ auctionId }) {
   const { auctionInfo, loading, error, refresh } = useAuctionInfo(auctionId);
 
@@ -37,8 +55,14 @@ export function OnChainAuctionInfo({ auctionId }) {
     );
   }
 
-  const { seller, min_bid, end_block, is_closed, is_settled } = auctionInfo;
-  const minBidCredits = (parseInt(min_bid) / 1_000_000).toFixed(2);
+  const seller = auctionInfo?.seller || 'Unknown';
+  const minBidAmount = parseNumericValue(auctionInfo?.min_bid_amount);
+  const endTime = parseNumericValue(auctionInfo?.end_time);
+  const revealDeadline = parseNumericValue(auctionInfo?.reveal_deadline);
+  const disputeDeadline = parseNumericValue(auctionInfo?.dispute_deadline);
+  const state = parseNumericValue(auctionInfo?.state);
+  const stateLabel = STATE_LABELS[state] || 'UNKNOWN';
+  const minBidCredits = minBidAmount !== null ? (minBidAmount / 1_000_000).toFixed(2) : '0.00';
 
   return (
     <Card>
@@ -59,14 +83,14 @@ export function OnChainAuctionInfo({ auctionId }) {
             <p className="mt-1 font-semibold text-white">{minBidCredits} credits</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">End Block</p>
-            <p className="mt-1 font-mono text-sm text-white">{end_block}</p>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">End Time</p>
+            <p className="mt-1 font-mono text-sm text-white">{endTime ?? 'Not set'}</p>
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Status</p>
             <div className="mt-1 flex gap-2">
               <div className="flex items-center gap-1">
-                {is_closed ? (
+                {state >= 1 ? (
                   <CheckCircle2 className="h-3 w-3 text-green-400" />
                 ) : (
                   <XCircle className="h-3 w-3 text-slate-500" />
@@ -74,7 +98,7 @@ export function OnChainAuctionInfo({ auctionId }) {
                 <span className="text-xs text-slate-300">Closed</span>
               </div>
               <div className="flex items-center gap-1">
-                {is_settled ? (
+                {state === 3 ? (
                   <CheckCircle2 className="h-3 w-3 text-green-400" />
                 ) : (
                   <XCircle className="h-3 w-3 text-slate-500" />
@@ -82,6 +106,18 @@ export function OnChainAuctionInfo({ auctionId }) {
                 <span className="text-xs text-slate-300">Settled</span>
               </div>
             </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">State</p>
+            <p className="mt-1 font-mono text-sm text-white">{stateLabel}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Reveal Deadline</p>
+            <p className="mt-1 font-mono text-sm text-white">{revealDeadline ?? 'Not set'}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Dispute Deadline</p>
+            <p className="mt-1 font-mono text-sm text-white">{disputeDeadline ?? 'Not set'}</p>
           </div>
         </div>
       </CardContent>

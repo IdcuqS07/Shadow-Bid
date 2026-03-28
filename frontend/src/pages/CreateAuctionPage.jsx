@@ -34,7 +34,7 @@ export default function CreateAuctionPage() {
 
   const handlePublishAuction = async () => {
     console.log('[CreateAuction] Starting publish auction');
-    console.log('[CreateAuction] Contract Version: V2.3');
+    console.log('[CreateAuction] Contract Version: V2.21');
     console.log('[CreateAuction] Connected:', connected);
     console.log('[CreateAuction] Form:', form);
     
@@ -57,49 +57,56 @@ export default function CreateAuctionPage() {
     try {
       const auctionId = Date.now() % (2 ** 32);
       const minBidAmount = Math.round(parseFloat(form.minBid.replace(/[^0-9.]/g, '')) * 1_000_000);
-      const currencyType = form.currency === 'aleo' ? 1 : 0;  // NEW: Currency type
+      const currencyType = form.currency === 'aleo' ? 1 : 0;
       
       const endTime = Math.floor(form.closingDate.getTime() / 1000);
-      const challengePeriod = 86400;
+      const revealPeriod = 86400;
+      const disputePeriod = 86400;
 
       console.log('[CreateAuction] Auction params:', {
         auctionId,
         minBidAmount,
-        currencyType,           // NEW
-        currency: form.currency, // NEW
+        reservePrice: minBidAmount,
+        currencyType,
+        currency: form.currency,
+        assetType: 0,
         endTime,
         endTimeDate: new Date(endTime * 1000).toISOString(),
-        challengePeriod,
-        version: 'v2.14'
+        revealPeriod,
+        disputePeriod,
+        version: 'v2.21'
       });
 
-      toast.info(`Submitting ${form.currency === 'aleo' ? 'Aleo' : 'USDC'} auction to blockchain...`);
+      toast.info(`Submitting ${form.currency === 'aleo' ? 'Aleo' : 'USDCx'} auction to blockchain...`);
       const result = await AleoServiceV2.createAuction(
         executeTransaction, 
         auctionId, 
         minBidAmount,
-        currencyType,           // NEW: Pass currency type
+        minBidAmount,
+        currencyType,
+        0,
         endTime, 
-        challengePeriod
+        revealPeriod,
+        disputePeriod
       );
       
       console.log('[CreateAuction] Transaction result:', result);
       
       // Save auction locally
-      const currencyLabel = form.currency === 'aleo' ? 'Aleo' : 'USDC';
+      const currencyLabel = form.currency === 'aleo' ? 'Aleo' : 'USDCx';
       const auctionData = {
         auctionId,
         title: form.title,
         category: form.category || 'General',
         description: form.description,
-        currency: form.currency,                                    // NEW
-        currency_type: currencyType,                                // NEW
-        minBid: `${minBidAmount / 1_000_000} ${currencyLabel}`,    // Updated
+        currency: form.currency,
+        currency_type: currencyType,
+        minBid: `${minBidAmount / 1_000_000} ${currencyLabel}`,
         endTime,
         closingDate: form.closingDate.toLocaleDateString(),
         seller: address,
         txId: result?.transactionId,
-        version: 'v2.14'                                            // Updated
+        version: 'v2.21'
       };
       
       console.log('[CreateAuction] Saving auction locally:', auctionData);
@@ -108,7 +115,7 @@ export default function CreateAuctionPage() {
       toast.success(`${currencyLabel} auction created! TX: ${result?.transactionId?.slice(0, 12)}...`);
       toast.success('Auction saved to your dashboard!');
 
-      setForm({ title: '', category: '', minBid: '', closingDate: undefined, description: '' });
+      setForm({ title: '', category: '', currency: 'usdcx', minBid: '', closingDate: undefined, description: '' });
     } catch (error) {
       console.error('[CreateAuction] Error:', error);
       toast.error(`Failed: ${error.message}`);

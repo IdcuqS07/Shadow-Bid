@@ -1,219 +1,191 @@
 # Troubleshooting Guide
 
-## Common Issues and Solutions
+## Wallet And Connection Issues
 
-### Wallet Connection Issues
+### Problem: Wallet not available
 
-#### Problem: "Wallet not available" error
-**Solutions:**
-1. Ensure wallet extension is installed
-2. Unlock your wallet
-3. Refresh the page
-4. Check wallet is connected to Aleo testnet
-5. Try disconnecting and reconnecting
+Solutions:
 
-#### Problem: Wallet doesn't show up in connection modal
-**Solutions:**
-1. Install a supported wallet (Shield recommended, or Puzzle / Leo / Fox)
-2. Restart your browser
-3. Check browser console for errors
+1. make sure the wallet extension is installed and unlocked
+2. reconnect the wallet from the site
+3. refresh the page
+4. confirm the wallet is using Aleo testnet
 
-### Transaction Errors
+### Problem: `Decrypt permission denied`
 
-#### Problem: "Insufficient balance" error
-**Solutions:**
-1. Check your wallet balance
-2. Get testnet credits from Aleo faucet
-3. Ensure you have enough for transaction + fee (~1-2 credits)
+This usually happens when a private ALEO bid tries to read Shield records without the required wallet permission.
 
-#### Problem: Transaction stuck/pending
-**Solutions:**
-1. Wait 30-60 seconds for confirmation
-2. Check transaction on Aleo Explorer
-3. If failed, try again with higher fee
-4. Ensure network is not congested
+Solutions:
 
-#### Problem: "Program not found" error
-**Solutions:**
-1. Verify `.env.local` has correct VITE_PROGRAM_ID
-2. Check program is deployed on testnet
-3. Ensure you're connected to testnet (not mainnet)
+1. disconnect Shield from the site
+2. reconnect it
+3. retry the private ALEO bid
+4. approve the private-record or decrypt request when Shield prompts
+5. if needed, fall back to the public ALEO flow
 
-### Auction Creation Issues
+### Problem: `Program not found`
 
-#### Problem: Can't create auction
-**Solutions:**
-1. Verify all required fields are filled
-2. Check minimum bid is a valid number
-3. Ensure closing date is in the future
-4. Confirm wallet is connected
+Solutions:
 
-#### Problem: Auction not showing on-chain
-**Solutions:**
-1. Wait for transaction confirmation (30-60 seconds)
-2. Click refresh button on On-Chain Status card
-3. Check transaction status on explorer
-4. Verify transaction succeeded
+1. verify `VITE_PROGRAM_ID=shadowbid_marketplace_v2_21.aleo`
+2. verify `VITE_API_BASE` points to the intended network explorer
+3. make sure the wallet and app are both targeting testnet
 
-### Bidding Issues
+## Auction Creation Issues
 
-#### Problem: Can't submit bid
-**Solutions:**
-1. Verify auction is still open (not closed)
-2. Check bid amount is above minimum
-3. Ensure you have sufficient balance
-4. Confirm auction ID is correct
+### Problem: Cannot create auction
 
-#### Problem: Bid not saved locally
-**Solutions:**
-1. Check browser localStorage is enabled
-2. Don't use private/incognito mode
-3. Clear browser cache and try again
-4. Transaction must succeed for bid to be saved
+Solutions:
 
-#### Problem: Can't see my bid amount
-**Solutions:**
-This is expected! Bid amounts are private on-chain.
-- Your bid is saved locally in "My Bids" card
-- Only you can see your bid amount
-- Auctioneer sees bid records but amounts are encrypted
+1. verify all required fields are filled
+2. check that minimum bid and reserve are valid numbers
+3. ensure the end time is in the future
+4. confirm reveal and dispute periods are set
+5. make sure the wallet is connected and funded
 
-### Settlement Issues
+### Problem: Auction appears in UI but not from explorer reads
 
-#### Problem: Can't close auction
-**Solutions:**
-1. Verify you're the seller (auction creator)
-2. Check auction is not already closed
-3. Ensure auction ID is correct
-4. Confirm wallet is connected
+Solutions:
 
-#### Problem: Can't resolve bids
-**Solutions:**
-1. Verify you're the auctioneer
-2. Check auction is closed first
-3. Ensure bid records are in correct format
-4. Copy full record from wallet (including all fields)
-5. Both records must have same owner (auctioneer)
+1. wait for transaction confirmation
+2. refresh the auction page
+3. check the transaction on Aleo Explorer
+4. verify the correct program ID and auction ID are being used
 
-#### Problem: "Invalid record format" error
-**Solutions:**
-1. Copy entire record from wallet
-2. Don't modify the record manually
-3. Ensure no extra spaces or line breaks
-4. Record should be valid JSON-like format
+## Bid And Reveal Issues
 
-#### Problem: Can't finish auction
-**Solutions:**
-1. Verify auction is closed
-2. Check you have the winning bid record
-3. Ensure auction is not already settled
-4. Confirm auction ID matches the bid record
+### Problem: Cannot place a bid
 
-### Display Issues
+Solutions:
 
-#### Problem: On-Chain Status shows "not found"
-**Solutions:**
-1. Wait for transaction confirmation
-2. Click refresh button
-3. Verify auction was created successfully
-4. Check transaction on explorer
+1. verify the auction is still `OPEN`
+2. check the bid amount is above the minimum
+3. confirm you have enough balance and fee budget
+4. verify the wallet supports the selected currency path
 
-#### Problem: Balance not updating
-**Solutions:**
-1. Click refresh button
-2. Wait for transaction confirmation
-3. Check wallet directly
-4. Reconnect wallet
+### Problem: Private ALEO bid keeps failing
 
-#### Problem: Transaction history empty
-**Solutions:**
-1. Ensure wallet is connected
-2. Click refresh button
-3. Check you have made transactions
-4. Verify wallet address is correct
+Solutions:
 
-### Browser Issues
+1. make sure Shield exposes private credits to the app
+2. refresh wallet records
+3. reconnect Shield if the session was connected without decrypt access
+4. verify you actually hold a spendable private ALEO record
+5. if the issue persists, use the public ALEO flow
 
-#### Problem: UI not loading correctly
-**Solutions:**
-1. Clear browser cache
-2. Hard refresh (Ctrl+Shift+R or Cmd+Shift+R)
-3. Try different browser
-4. Check browser console for errors
+### Problem: Reveal button is missing
 
-#### Problem: Styles look broken
-**Solutions:**
-1. Ensure JavaScript is enabled
-2. Clear browser cache
-3. Check network connection
-4. Verify all assets loaded (check Network tab)
+Common causes:
 
-## Error Messages Explained
+- the auction is not yet `CLOSED`
+- the reveal deadline already passed
+- the bid was placed from another browser or wallet
+- local nonce or commitment data was cleared
 
-### "Wallet not available"
-Your wallet extension is not detected or not connected.
+Solutions:
 
-### "Please connect your wallet first"
-You need to connect a wallet before performing this action.
+1. make sure the seller already closed the auction
+2. confirm the current wallet matches the wallet that submitted the bid
+3. reveal from the same browser session when possible
+4. restore the saved nonce and commitment data if you backed them up
 
-### "Please fill in all fields"
-Required form fields are missing or empty.
+### Problem: Bid exists on-chain, but reveal still cannot proceed
 
-### "Insufficient balance"
-You don't have enough credits for the transaction + fee.
+Solutions:
 
-### "Failed to fetch"
-Network error - check your internet connection.
+1. check local storage for `nonce_<auctionId>_<wallet>`
+2. check local storage for `commitment_<auctionId>_<wallet>`
+3. avoid clearing browser data before reveal
+4. verify the reveal deadline has not expired
 
-### "Transaction failed"
-The blockchain transaction was rejected. Check error details.
+## Settlement Issues
 
-### "Auction not found"
-The auction ID doesn't exist on-chain or hasn't been created yet.
+### Problem: Cannot close auction
 
-### "Invalid auction ID"
-The auction ID format is incorrect (should be a number).
+Solutions:
 
-## Getting Help
+1. verify you are the seller
+2. make sure the auction is still `OPEN`
+3. make sure the end time has passed
+4. confirm the wallet supports transaction execution
 
-### Before Asking for Help
+### Problem: Cannot settle after reveal timeout
 
-1. Check this troubleshooting guide
-2. Review the [User Guide](./user-guide.md)
-3. Check transaction on [Aleo Explorer](https://testnet.explorer.provable.com)
-4. Look at browser console for errors (F12)
+Solutions:
 
-### Information to Provide
+1. verify the auction is `CLOSED`
+2. wait until `reveal_deadline`
+3. refresh the auction state before retrying
 
-When reporting issues, include:
-- Transaction ID (if applicable)
-- Error message (exact text)
-- Steps to reproduce
-- Wallet type and version
-- Browser and version
-- Screenshots (if relevant)
+### Problem: Cannot finalize winner
 
-### Resources
+Solutions:
 
-- [Aleo Explorer](https://testnet.explorer.provable.com)
-- [Aleo Documentation](https://developer.aleo.org)
-- [Leo Language Guide](https://developer.aleo.org/leo)
-- Project GitHub Issues
+1. verify the auction is in `CHALLENGE`
+2. wait until `dispute_deadline`
+3. check whether an on-chain dispute is still active
+4. refresh the auction detail page and retry
 
-## Debug Mode
+### Problem: Seller cannot claim payment yet
 
-To enable detailed logging:
+Solutions:
 
-1. Open browser console (F12)
-2. Look for `[aleoService]` logs
-3. Check for error stack traces
-4. Note any failed network requests
+1. verify the auction is `SETTLED`
+2. wait for winner receipt confirmation, or
+3. wait until `claimable_at`
+4. refresh the auction state before retrying
 
-## Still Having Issues?
+### Problem: Platform fee claim is unavailable
 
-If you've tried everything above:
+Solutions:
 
-1. Open an issue on GitHub with details
-2. Include all relevant information
-3. Attach screenshots if helpful
-4. Be patient - we'll help you resolve it!
+1. verify seller payment was already claimed
+2. make sure the platform owner wallet is connected
+3. confirm the platform fee has not already been claimed
+
+## Ops Console Issues
+
+### Problem: `/ops` is empty
+
+Common causes:
+
+- no premium auction pages have synced snapshots yet
+- the shared Ops API is offline
+- the wrong wallet is connected
+
+Solutions:
+
+1. open premium auction pages first so snapshots sync
+2. verify the Ops API health endpoint
+3. if local, run `npm run dev:api`
+4. if production, confirm the app can reach `https://api.shadowbid.xyz`
+
+## Browser And Display Issues
+
+### Problem: The site still shows an old version after deploy
+
+Solutions:
+
+1. hard refresh the page
+2. open the site with a cache-busting query string
+3. clear the browser cache if needed
+
+### Problem: Balances do not match the wallet right away
+
+Solutions:
+
+1. refresh the wallet connection
+2. wait for transaction confirmation
+3. reconnect the wallet if the balance source looks stale
+
+## Information To Collect When Reporting A Bug
+
+Include:
+
+- transaction ID, if available
+- exact error message
+- wallet type
+- browser version
+- route you were using
+- whether the issue happened on premium or standard pages
+- whether the same browser session was used for both bid and reveal

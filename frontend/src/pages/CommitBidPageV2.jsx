@@ -118,7 +118,7 @@ export default function CommitBidPageV2() {
         toast.info('Step 1/2: Transferring Aleo credits...');
         toast.info('⚠️ Please approve the first transaction');
         
-        const contractAddress = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_16.aleo';
+        const contractAddress = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
         
         console.log('[CommitBid] Step 1: Transfer params:', {
           to: contractAddress,

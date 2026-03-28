@@ -36,7 +36,7 @@ export default function PremiumNav() {
               Ops Console
             </button>
             <div className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-lg text-xs font-mono text-green-400">
-              Contract V2.20
+              Contract V2.21
             </div>
             <PremiumNotificationCenter />
             <div className="wallet-button-premium relative">

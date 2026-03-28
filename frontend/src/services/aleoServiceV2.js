@@ -1,13 +1,14 @@
-// Aleo Service V2 - For shadowbid_marketplace_v2_20.aleo
-// V2.20: Security hardening, keeper lifecycle, dispute resolution, proof anchors
+// Aleo Service V2 - For shadowbid_marketplace_v2_21.aleo
+// V2.21: Split deadlines, reveal-timeout settlement, dispute resolution, proof anchors
 // V2.19: Platform fee (2.5%), reserve price, settlement timing fix
 
-const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_20.aleo';
+const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.explorer.provable.com/v1/testnet';
 
 // V2.19 NEW: Platform fee configuration
 const PLATFORM_FEE_RATE = 250; // 2.5% (250 basis points / 10000)
-const PLATFORM_ADDRESS = 'aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8';
+export const PLATFORM_ADDRESS = 'aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8';
+export const EMPTY_ALEO_ADDRESS = 'aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc';
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -78,10 +79,14 @@ export function normalizeAuctionInfoResponse(data) {
     'min_bid_amount',
     'currency_type',
     'end_time',
+    'reveal_period',
+    'dispute_period',
     'challenge_period',
     'state',
     'winner',
     'winning_amount',
+    'reveal_deadline',
+    'dispute_deadline',
     'challenge_end_time',
     'total_escrowed',
     'asset_type',
@@ -110,6 +115,34 @@ export function normalizeAuctionInfoResponse(data) {
   }
 
   return Object.keys(normalized).length > 0 ? normalized : data;
+}
+
+async function loadFixtureValue(loaderName, ...args) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const fixtureModule = await import('@/lib/testData/shadowbidV221Fixtures');
+    const loader = fixtureModule?.[loaderName];
+    return typeof loader === 'function' ? loader(...args) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchJsonWithFixtureFallback(path, loaderName, loaderArgs = [], normalizeValue = (value) => value) {
+  try {
+    const res = await fetch(`${API_BASE}${path}`);
+    if (res.ok) {
+      return normalizeValue(await res.json());
+    }
+  } catch {
+    // Fall back to local fixture data when explorer access is unavailable.
+  }
+
+  const fallbackValue = await loadFixtureValue(loaderName, ...loaderArgs);
+  return normalizeValue(fallbackValue);
 }
 
 // V2.19 NEW: Helper functions for platform fee and reserve price
@@ -267,17 +300,28 @@ export function generateCommitment(amountUsdx, nonce) {
   return `${commitment}field`;
 }
 
-// 1. Create Auction (V2.19 - With Reserve Price)
-// Params: auction_id, min_bid_amount, reserve_price, currency_type (0=USDCx, 1=Aleo, 2=USAD), asset_type (0-7), end_time, challenge_period
-export async function createAuction(executeTransaction, auctionId, minBidAmount, reservePrice, currencyType, assetType, endTime, challengePeriod = 86400) {
+// 1. Create Auction (V2.21 - Split reveal/dispute periods)
+// Params: auction_id, min_bid_amount, reserve_price, currency_type (0=USDCx, 1=Aleo, 2=USAD), asset_type (0-7), end_time, reveal_period, dispute_period
+export async function createAuction(
+  executeTransaction,
+  auctionId,
+  minBidAmount,
+  reservePrice,
+  currencyType,
+  assetType,
+  endTime,
+  revealPeriod = 86400,
+  disputePeriod = revealPeriod
+) {
   const inputs = [
     `${auctionId}field`,
     `${minBidAmount}u128`,
-    `${reservePrice}u128`,        // V2.19 NEW: Reserve price
-    `${currencyType}u8`,          // Currency type
-    `${assetType}u8`,             // Asset type
+    `${reservePrice}u128`,
+    `${currencyType}u8`,
+    `${assetType}u8`,
     `${endTime}i64`,
-    `${challengePeriod}i64`
+    `${revealPeriod}i64`,
+    `${disputePeriod}i64`
   ];
   
   return requestTx(executeTransaction, 'create_auction', inputs);
@@ -304,7 +348,7 @@ export async function commitBid(executeTransaction, auctionId, commitment, amoun
   return requestTx(executeTransaction, 'commit_bid', inputs);
 }
 
-// 3. Close Auction (V2.20 keeper-friendly)
+// 3. Close Auction (V2.21 keeper-friendly)
 export async function closeAuction(executeTransaction, auctionId, closedAt = null) {
   const timestamp = closedAt || getCurrentTimestamp();
   return requestTx(executeTransaction, 'close_auction', [
@@ -313,7 +357,7 @@ export async function closeAuction(executeTransaction, auctionId, closedAt = nul
   ]);
 }
 
-// 4. Reveal Bid (V2.20 reveal timestamp)
+// 4. Reveal Bid (V2.21 reveal timestamp)
 // Params: auction_id, amount_usdx (private), nonce (private), revealed_at
 export async function revealBid(executeTransaction, auctionId, amountUsdx, nonce, revealedAt = null) {
   const timestamp = revealedAt || getCurrentTimestamp();
@@ -331,21 +375,26 @@ export async function revealBid(executeTransaction, auctionId, amountUsdx, nonce
   return requestTx(executeTransaction, 'reveal_bid', inputs);
 }
 
-// 5. Determine Winner (V2.20 keeper-friendly)
-export async function determineWinner(executeTransaction, auctionId, determinedAt = null) {
-  const timestamp = determinedAt || getCurrentTimestamp();
-  return requestTx(executeTransaction, 'determine_winner', [
+// 5. Settle After Reveal Timeout (V2.21 keeper-friendly)
+export async function settleAfterRevealTimeout(executeTransaction, auctionId, settledAt = null) {
+  const timestamp = settledAt || getCurrentTimestamp();
+  return requestTx(executeTransaction, 'settle_after_reveal_timeout', [
     `${auctionId}field`,
     `${timestamp}i64`
   ]);
 }
 
-// 6. Finalize Winner (V2.19 - With Timestamp)
+// Backward-compatible alias for older UI flows.
+export async function determineWinner(executeTransaction, auctionId, determinedAt = null) {
+  return settleAfterRevealTimeout(executeTransaction, auctionId, determinedAt);
+}
+
+// 6. Finalize Winner (V2.21 - After dispute deadline)
 export async function finalizeWinner(executeTransaction, auctionId, finalizedAt = null) {
   const timestamp = finalizedAt || getCurrentTimestamp();
   return requestTx(executeTransaction, 'finalize_winner', [
     `${auctionId}field`,
-    `${timestamp}i64`       // V2.19 NEW: finalized_at timestamp
+    `${timestamp}i64`
   ]);
 }
 
@@ -388,12 +437,12 @@ export async function processRefund(executeTransaction, bidderAddress, refundAmo
 // Get auction info from on-chain mapping
 export async function getAuctionInfo(auctionId) {
   try {
-    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/auctions/${auctionId}field`);
-    if (!res.ok) {
-      return null;
-    }
-    const data = await res.json();
-    return normalizeAuctionInfoResponse(data);
+    return await fetchJsonWithFixtureFallback(
+      `/program/${PROGRAM_ID}/mapping/auctions/${auctionId}field`,
+      'getMockFixtureAuctionInfo',
+      [auctionId],
+      normalizeAuctionInfoResponse
+    );
   } catch (error) {
     console.error('[aleoServiceV2] getAuctionInfo error:', error);
     return null;
@@ -415,7 +464,7 @@ export async function getCommitment(auctionId) {
 // Get escrow info
 export async function getEscrow(auctionId) {
   try {
-    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/usdx_escrow/${auctionId}field`);
+    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/escrow/${auctionId}field`);
     if (!res.ok) return null;
     return res.json();
   } catch (error) {
@@ -427,9 +476,11 @@ export async function getEscrow(auctionId) {
 // Get highest bid
 export async function getHighestBid(auctionId) {
   try {
-    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/highest_bid/${auctionId}field`);
-    if (!res.ok) return null;
-    return res.json();
+    return await fetchJsonWithFixtureFallback(
+      `/program/${PROGRAM_ID}/mapping/highest_bid/${auctionId}field`,
+      'getMockFixtureHighestBid',
+      [auctionId]
+    );
   } catch (error) {
     console.error('[aleoServiceV2] getHighestBid error:', error);
     return null;
@@ -439,9 +490,11 @@ export async function getHighestBid(auctionId) {
 // Get highest bidder
 export async function getHighestBidder(auctionId) {
   try {
-    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/highest_bidder/${auctionId}field`);
-    if (!res.ok) return null;
-    return res.json();
+    return await fetchJsonWithFixtureFallback(
+      `/program/${PROGRAM_ID}/mapping/highest_bidder/${auctionId}field`,
+      'getMockFixtureHighestBidder',
+      [auctionId]
+    );
   } catch (error) {
     console.error('[aleoServiceV2] getHighestBidder error:', error);
     return null;
@@ -678,15 +731,47 @@ export function getAuctionCurrency(auctionInfo) {
   
   if (typeof auctionInfo === 'string') {
     const match = auctionInfo.match(/currency_type:\s*(\d+)u8/);
-    return match ? (match[1] === '1' ? 'aleo' : 'usdcx') : 'usdcx';
+    if (!match) {
+      return 'usdcx';
+    }
+
+    if (match[1] === '1') {
+      return 'aleo';
+    }
+
+    if (match[1] === '2') {
+      return 'usad';
+    }
+
+    return 'usdcx';
   }
-  
-  return auctionInfo.currency_type === 1 ? 'aleo' : 'usdcx';
+
+  const parsedType = typeof auctionInfo.currency_type === 'string'
+    ? parseInt(auctionInfo.currency_type, 10)
+    : auctionInfo.currency_type;
+
+  if (parsedType === 1) {
+    return 'aleo';
+  }
+
+  if (parsedType === 2) {
+    return 'usad';
+  }
+
+  return 'usdcx';
 }
 
 // Helper: Get currency label
 export function getCurrencyLabel(currency) {
-  return currency === 'aleo' ? 'Aleo' : 'USDC';
+  if (currency === 'aleo') {
+    return 'Aleo';
+  }
+
+  if (currency === 'usad') {
+    return 'USAD';
+  }
+
+  return 'USDCx';
 }
 
 // Helper: Get currency icon
@@ -1303,14 +1388,12 @@ export async function claimPlatformFeeUsad(executeTransaction, auctionId, feeAmo
 }
 
 // Cancel Auction - Reserve Not Met
-export async function cancelAuctionReserveNotMet(executeTransaction, auctionId) {
-  return requestTx(executeTransaction, 'cancel_auction_reserve_not_met', [
-    `${auctionId}field`
-  ]);
+export async function cancelAuctionReserveNotMet(executeTransaction, auctionId, settledAt = null) {
+  return settleAfterRevealTimeout(executeTransaction, auctionId, settledAt);
 }
 
 // ========================================
-// V2.20 NEW FUNCTIONS
+// V2.21 NEW FUNCTIONS
 // ========================================
 
 export async function upsertSellerProfileOnChain(
@@ -1366,11 +1449,11 @@ export async function resolveDisputeRefundWinnerOnChain(executeTransaction, auct
 
 export async function getSellerProfileOnChain(address) {
   try {
-    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/seller_profiles/${address}`);
-    if (!res.ok) {
-      return null;
-    }
-    return res.json();
+    return await fetchJsonWithFixtureFallback(
+      `/program/${PROGRAM_ID}/mapping/seller_profiles/${address}`,
+      'getMockFixtureSellerProfile',
+      [address]
+    );
   } catch (error) {
     console.error('[aleoServiceV2] getSellerProfileOnChain error:', error);
     return null;
@@ -1379,11 +1462,11 @@ export async function getSellerProfileOnChain(address) {
 
 export async function getAuctionProofRootOnChain(auctionId) {
   try {
-    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/auction_proof_root/${auctionId}field`);
-    if (!res.ok) {
-      return null;
-    }
-    return res.json();
+    return await fetchJsonWithFixtureFallback(
+      `/program/${PROGRAM_ID}/mapping/auction_proof_root/${auctionId}field`,
+      'getMockFixtureProofRoot',
+      [auctionId]
+    );
   } catch (error) {
     console.error('[aleoServiceV2] getAuctionProofRootOnChain error:', error);
     return null;
@@ -1392,11 +1475,11 @@ export async function getAuctionProofRootOnChain(auctionId) {
 
 export async function getAuctionDisputeRootOnChain(auctionId) {
   try {
-    const res = await fetch(`${API_BASE}/program/${PROGRAM_ID}/mapping/auction_dispute_root/${auctionId}field`);
-    if (!res.ok) {
-      return null;
-    }
-    return res.json();
+    return await fetchJsonWithFixtureFallback(
+      `/program/${PROGRAM_ID}/mapping/auction_dispute_root/${auctionId}field`,
+      'getMockFixtureDisputeRoot',
+      [auctionId]
+    );
   } catch (error) {
     console.error('[aleoServiceV2] getAuctionDisputeRootOnChain error:', error);
     return null;

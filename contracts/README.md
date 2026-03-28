@@ -1,6 +1,6 @@
 # ShadowBid Contracts
 
-This directory contains the active ShadowBid `v2.20` Leo program.
+This directory contains the active ShadowBid `v2.21` Leo program.
 
 ## Contents
 
@@ -9,7 +9,7 @@ This directory contains the active ShadowBid `v2.20` Leo program.
 
 ## Supported Currencies
 
-The active `v2.20` contract supports one native currency and two ARC-21 stablecoins:
+The active `v2.21` contract supports one native currency and two ARC-21 stablecoins:
 
 | `currency_type` | Currency | Program | Contract path |
 | --- | --- | --- | --- |
@@ -28,7 +28,9 @@ leo build
 
 ## Deploy and Validation
 
-- Deployment guide: [docs/contracts/deploy.md](../docs/contracts/deploy.md)
-- Manual instructions: [docs/contracts/deployment-instructions.md](../docs/contracts/deployment-instructions.md)
-- Latest deployment record: [docs/contracts/deployment-success.md](../docs/contracts/deployment-success.md)
+- Historical V2.20 deployment guide: [docs/contracts/deploy.md](../docs/contracts/deploy.md)
+- Historical V2.20 manual instructions: [docs/contracts/deployment-instructions.md](../docs/contracts/deployment-instructions.md)
+- Historical V2.20 deployment record: [docs/contracts/deployment-success.md](../docs/contracts/deployment-success.md)
 - Next-step autonomy design: [docs/contracts/autonomous-lifecycle-design.md](../docs/contracts/autonomous-lifecycle-design.md)
+- `v2.21` contract spec: [docs/contracts/v2.21-technical-spec.md](../docs/contracts/v2.21-technical-spec.md)
+- `v2.21` rollout checklist: [docs/contracts/v2.21-implementation-checklist.md](../docs/contracts/v2.21-implementation-checklist.md)

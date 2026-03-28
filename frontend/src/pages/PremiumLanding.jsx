@@ -21,26 +21,26 @@ export default function PremiumLanding() {
     {
       icon: Shield,
       title: 'Zero-Knowledge Proofs',
-      description: 'Bid commitments stay hidden until reveal phase through the V2.20 sealed commit-reveal flow.',
-      version: 'V2.20',
+      description: 'Bid commitments stay hidden until reveal phase through the V2.21 sealed commit-reveal flow.',
+      version: 'V2.21',
     },
     {
       icon: Lock,
       title: 'Sealed-Bid Auctions',
       description: 'No one can see your bid. Fair competition without information asymmetry.',
-      version: 'V2.20',
+      version: 'V2.21',
     },
     {
       icon: DollarSign,
       title: '3 Payment Currencies',
-      description: 'Create auctions in ALEO, USDCx, or USAD with the active V2.20 contract flow.',
-      version: 'V2.20',
+      description: 'Create auctions in ALEO, USDCx, or USAD with the active V2.21 contract flow.',
+      version: 'V2.21',
     },
     {
       icon: Package,
       title: 'Reserve + Fee Controls',
-      description: 'V2.20 adds security hardening, dispute resolution, and keeper-ready lifecycle controls for real-world items.',
-      version: 'V2.20',
+      description: 'V2.21 adds split deadlines, dispute resolution, and keeper-ready lifecycle controls for real-world items.',
+      version: 'V2.21',
     },
   ];
 
@@ -101,8 +101,8 @@ export default function PremiumLanding() {
 
             {/* Subheadline */}
             <p className="text-xl text-white/60 max-w-2xl mx-auto leading-relaxed">
-              Maximum privacy. Zero information leakage. Cryptographically verifiable.
-              The future of fair auctions is here.
+              Sealed bids stay hidden until reveal, while settlement remains contract-verifiable.
+              Privacy by default, with on-chain accountability where the auction flow requires it.
             </p>
 
             {/* CTA Buttons */}
@@ -127,7 +127,7 @@ export default function PremiumLanding() {
               {[
                 { value: '40%', label: 'Lower Gas Costs' },
                 { value: '3', label: 'Currencies' },
-                { value: '100%', label: 'Privacy' },
+                { value: 'Sealed', label: 'Bid Privacy' },
               ].map((stat, i) => (
                 <div key={i} className="text-center">
                   <div className="text-4xl font-display font-bold text-gold-500 mb-2">

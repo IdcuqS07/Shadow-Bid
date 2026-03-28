@@ -189,7 +189,7 @@ export default function PremiumCreateAuction() {
       icon: Shield,
       color: 'gold',
       available: true,
-      version: 'V2.20',
+      version: 'V2.21',
     },
   ];
 
@@ -240,9 +240,16 @@ export default function PremiumCreateAuction() {
       // Calculate end time using flexible units for easier testing.
       const endTime = Math.floor(Date.now() / 1000) + durationSeconds;
       
-      // V2.20 now enforces lifecycle windows on-chain.
-      // Keep the default shorter on testnet so close -> reveal -> determine -> finalize remains demo-friendly.
-      const challengePeriod = Number.parseInt(import.meta.env.VITE_CHALLENGE_PERIOD_SECONDS || '900', 10);
+      // V2.21 splits reveal and dispute windows on-chain.
+      // Keep shorter defaults on testnet so the full lifecycle remains demo-friendly.
+      const revealPeriod = Number.parseInt(
+        import.meta.env.VITE_REVEAL_PERIOD_SECONDS || import.meta.env.VITE_CHALLENGE_PERIOD_SECONDS || '900',
+        10
+      );
+      const disputePeriod = Number.parseInt(
+        import.meta.env.VITE_DISPUTE_PERIOD_SECONDS || import.meta.env.VITE_CHALLENGE_PERIOD_SECONDS || '900',
+        10
+      );
       
       console.log('📝 Creating auction with params:', {
         auctionId,
@@ -250,7 +257,8 @@ export default function PremiumCreateAuction() {
         currencyType,
         currency: formData.currency,
         endTime,
-        challengePeriod,
+        revealPeriod,
+        disputePeriod,
         title: formData.title,
       });
       
@@ -275,7 +283,8 @@ export default function PremiumCreateAuction() {
         currencyType,
         parseInt(formData.assetType),         // Asset type
         endTime,
-        challengePeriod
+        revealPeriod,
+        disputePeriod
       );
       
       console.log('✅ Auction created successfully:', result);
@@ -374,7 +383,7 @@ export default function PremiumCreateAuction() {
           disclosureRoot
         );
       } catch (anchorError) {
-        console.error('⚠️ Failed to anchor V2.20 proof metadata on-chain:', anchorError);
+        console.error('⚠️ Failed to anchor V2.21 proof metadata on-chain:', anchorError);
         anchorWarnings.push(anchorError.message || String(anchorError));
       }
 
@@ -429,8 +438,8 @@ export default function PremiumCreateAuction() {
       alert(
         `✅ Auction Created Successfully!\n\nAuction ID: ${auctionId}\nTransaction submitted to blockchain.` +
         (anchorWarnings.length > 0
-          ? `\n\n⚠️ V2.20 proof anchoring was skipped:\n${anchorWarnings.join('\n')}`
-          : `\n\nV2.20 seller profile and proof roots were also anchored on-chain.`)
+          ? `\n\n⚠️ V2.21 proof anchoring was skipped:\n${anchorWarnings.join('\n')}`
+          : `\n\nV2.21 seller profile and proof roots were also anchored on-chain.`)
       );
       
       // Navigate to auction list
@@ -555,7 +564,7 @@ export default function PremiumCreateAuction() {
             {/* Version Badge */}
             <div className="px-3 py-1 bg-gold-500/10 border border-gold-500/30 rounded-lg">
               <span className="text-xs font-mono text-gold-400">
-                V2.20 • Security • Dispute • RWA
+                V2.21 • Split Deadlines • Dispute • RWA
               </span>
             </div>
           </div>
@@ -606,7 +615,7 @@ export default function PremiumCreateAuction() {
                       Asset Category
                       <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
                         <CheckCircle className="w-3 h-3" />
-                        V2.20
+                        V2.21
                       </span>
                     </label>
                     <select
@@ -654,7 +663,7 @@ export default function PremiumCreateAuction() {
                         <span className="ml-2 text-red-400">*</span>
                         <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
                           <CheckCircle className="w-3 h-3" />
-                          V2.20
+                          V2.21
                         </span>
                       </label>
                       
@@ -915,7 +924,7 @@ export default function PremiumCreateAuction() {
                     <div className="flex items-start gap-3">
                       <Info className="mt-0.5 h-5 w-5 text-cyan-400" />
                       <div className="text-xs leading-relaxed text-white/65">
-                        Seller profile roots and proof roots are anchored to V2.20. Full documents, supporting files,
+                        Seller profile roots and proof roots are anchored to V2.21. Full documents, supporting files,
                         and evidence references are kept in the app data layer for richer UI panels and ops workflows.
                       </div>
                     </div>
@@ -930,7 +939,7 @@ export default function PremiumCreateAuction() {
                 <div className="grid grid-cols-2 gap-4">
                   {auctionFormats.length === 1 && (
                     <div className="col-span-2 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-xs text-white/60">
-                      Contract V2.20 currently supports sealed-bid auctions only.
+                      Contract V2.21 currently supports sealed-bid auctions only.
                     </div>
                   )}
                   {auctionFormats.map((format) => (
@@ -995,7 +1004,7 @@ export default function PremiumCreateAuction() {
                   <div className="flex items-start gap-3">
                     <Info className="w-5 h-5 text-cyan-400 mt-0.5" />
                     <div className="text-xs text-white/60">
-                      <span className="text-cyan-400 font-mono">Privacy-First:</span> The active V2.20 contract exposes sealed-bid auction creation only, so this UI is locked to the same format.
+                      <span className="text-cyan-400 font-mono">Privacy-First:</span> The active V2.21 contract exposes sealed-bid auction creation only, so this UI is locked to the same format.
                     </div>
                   </div>
                 </div>
@@ -1045,7 +1054,7 @@ export default function PremiumCreateAuction() {
                   <div className="flex items-start gap-3">
                     <Info className="w-5 h-5 text-cyan-400 mt-0.5" />
                     <div className="text-xs text-white/60">
-                      <span className="text-cyan-400 font-mono">V2.20</span> supports 3 currencies: Aleo Credits, USDCx, and USAD.
+                      <span className="text-cyan-400 font-mono">V2.21</span> supports 3 currencies: Aleo Credits, USDCx, and USAD.
                       <span className="text-cyan-400 font-mono"> Reserve Price</span> is enforced during settlement, and platform fees are calculated automatically on the winning bid.
                     </div>
                   </div>
@@ -1130,7 +1139,7 @@ export default function PremiumCreateAuction() {
                           <span className="text-white/40">Loading...</span>
                         ) : (
                           <>
-                            {formatBalance(balances.ALEO)} <span className="text-lg text-white/40">ALEO</span>
+                            {formatBalance(balances.ALEO, 'ALEO')} <span className="text-lg text-white/40">ALEO</span>
                           </>
                         )}
                       </div>
@@ -1147,7 +1156,7 @@ export default function PremiumCreateAuction() {
                           <span className="text-white/40">Loading...</span>
                         ) : (
                           <>
-                            {formatBalance(balances.USDCx)} <span className="text-lg text-white/40">USDCx</span>
+                            {formatBalance(balances.USDCx, 'USDCx')} <span className="text-lg text-white/40">USDCx</span>
                           </>
                         )}
                       </div>
@@ -1170,7 +1179,7 @@ export default function PremiumCreateAuction() {
                           <>--- <span className="text-lg text-white/40">USAD</span></>
                         ) : (
                           <span className="text-blue-500">
-                            {formatBalance(balances.USAD)} <span className="text-lg text-white/40">USAD</span>
+                            {formatBalance(balances.USAD, 'USAD')} <span className="text-lg text-white/40">USAD</span>
                           </span>
                         )}
                       </div>
@@ -1209,7 +1218,7 @@ export default function PremiumCreateAuction() {
                           <span className="font-mono text-sm">Sealed Commit-Reveal</span>
                           <span className="inline-flex items-center gap-1 rounded border border-green-500/40 bg-green-500/20 px-2 py-0.5 text-xs font-mono text-green-400">
                             <CheckCircle className="h-3 w-3" />
-                            V2.20 Live
+                            V2.21 Live
                           </span>
                         </div>
                         <div className="text-xs text-white/60">
@@ -1231,7 +1240,7 @@ export default function PremiumCreateAuction() {
                           </span>
                         </div>
                         <div className="text-xs text-white/60">
-                          Reserve protection is active in V2.20, but the reserve itself is not hidden by the contract.
+                          Reserve protection is active in V2.21, but the reserve itself is not hidden by the contract.
                         </div>
                       </div>
                       <span className="font-mono text-right text-sm text-gold-400">{reserveVisibilityLabel}</span>
@@ -1248,7 +1257,7 @@ export default function PremiumCreateAuction() {
                         Contract Reality
                       </div>
                       <div className="text-xs text-white/60">
-                        V2.20 privacy comes from sealed bid commitments and the reveal window. Reserve hiding is not configurable on-chain in the current contract.
+                        V2.21 privacy comes from sealed bid commitments and the reveal window. Reserve hiding is not configurable on-chain in the current contract.
                       </div>
                     </div>
                   </div>

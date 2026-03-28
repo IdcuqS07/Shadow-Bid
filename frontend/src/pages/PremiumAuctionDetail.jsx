@@ -25,7 +25,7 @@ import {
   claimRefundAleo,
   claimRefundAleoPrivate,
   claimRefundUSAD,
-  determineWinner,
+  settleAfterRevealTimeout,
   finalizeWinner,
   getAuctionDisputeRootOnChain,
   getAuctionProofRootOnChain,
@@ -45,7 +45,6 @@ import {
   claimPlatformFeeAleo,
   claimPlatformFeeUsdcx,
   claimPlatformFeeUsad,
-  cancelAuctionReserveNotMet,
   getCurrentTimestamp,
   getAssetTypeName,
   getAssetTypeIcon,
@@ -55,6 +54,7 @@ import {
 import {
   createDispute,
   createOffer,
+  getOpsApiDebugInfo,
   getAuctionProofBundle,
   getDisputes,
   getOffers,
@@ -539,6 +539,18 @@ function formatOnChainValue(value) {
   return String(value);
 }
 
+function formatAddressPreview(value, start = 10, end = 6) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return 'Hidden';
+  }
+
+  if (value.length <= start + end + 3) {
+    return value;
+  }
+
+  return `${value.slice(0, start)}...${value.slice(-end)}`;
+}
+
 export default function PremiumAuctionDetail() {
   const { auctionId } = useParams();
   const navigate = useNavigate();
@@ -817,12 +829,24 @@ export default function PremiumAuctionDetail() {
       const currency = currencyType === 1 ? 'ALEO' : currencyType === 0 ? 'USDCx' : 'USAD';
       
       const assetType = parseAleoInteger(onChainData?.asset_type) ?? Number(auctionMetadata?.assetType || 0);
+      const state = parseAleoInteger(onChainData?.state) ?? 0;
+      const status = CONTRACT_STATUS_BY_STATE[state] || 'open';
       const itemReceived = parseAleoBoolean(onChainData?.item_received) ?? false;
       const paymentClaimed = parseAleoBoolean(onChainData?.payment_claimed) ?? false;
       const itemReceivedAt = parseAleoInteger(onChainData?.item_received_at) ?? 0;
       const paymentClaimedAt = parseAleoInteger(onChainData?.payment_claimed_at) ?? 0;
-      const challengePeriod = parseAleoInteger(onChainData?.challenge_period) ?? 0;
-      const challengeEndTime = parseAleoInteger(onChainData?.challenge_end_time) ?? 0;
+      const revealPeriod = parseAleoInteger(onChainData?.reveal_period)
+        ?? parseAleoInteger(onChainData?.challenge_period)
+        ?? 0;
+      const disputePeriod = parseAleoInteger(onChainData?.dispute_period)
+        ?? parseAleoInteger(onChainData?.challenge_period)
+        ?? 0;
+      const revealDeadline = parseAleoInteger(onChainData?.reveal_deadline)
+        ?? (state === 1 ? parseAleoInteger(onChainData?.challenge_end_time) : 0)
+        ?? 0;
+      const disputeDeadline = parseAleoInteger(onChainData?.dispute_deadline)
+        ?? (state >= 2 ? parseAleoInteger(onChainData?.challenge_end_time) : 0)
+        ?? 0;
       const confirmationTimeout = parseAleoInteger(onChainData?.confirmation_timeout) ?? getAssetTypeTimeout(assetType) * 24 * 3600;
       const totalEscrowedMicro = parseAleoInteger(onChainData?.total_escrowed) ?? 0;
       const settledAt = parseAleoInteger(onChainData?.settled_at) ?? 0;
@@ -842,9 +866,6 @@ export default function PremiumAuctionDetail() {
       
       const now = Math.floor(Date.now() / 1000);
       const timeRemaining = endTime - now;
-      
-      const state = parseAleoInteger(onChainData?.state) ?? 0;
-      const status = CONTRACT_STATUS_BY_STATE[state] || 'open';
       
       // Parse winner and winning amount directly from auction info
       let winnerAddress = null;
@@ -934,8 +955,10 @@ export default function PremiumAuctionDetail() {
         token: currency,
         currencyType,
         assetType,
-        challengePeriod,
-        challengeEndTime,
+        revealPeriod,
+        disputePeriod,
+        revealDeadline,
+        disputeDeadline,
         totalEscrowed: totalEscrowedMicro / 1_000_000,
         totalEscrowedMicro,
         hasEscrow: totalEscrowedMicro > 0,
@@ -958,12 +981,15 @@ export default function PremiumAuctionDetail() {
         paymentClaimedAt,
         confirmationTimeout,
         confirmationTimeoutDays: Math.max(1, Math.round(confirmationTimeout / 86400)),
-        contractVersion: 'V2.20',
+        contractVersion: 'V2.21',
         sellerDisplayName: auctionMetadata?.sellerDisplayName || null,
         itemPhotos: Array.isArray(auctionMetadata?.itemPhotos) ? auctionMetadata.itemPhotos : [],
         sellerVerification: auctionMetadata?.sellerVerification || null,
         assetProof: auctionMetadata?.assetProof || null,
         proofFiles: Array.isArray(auctionMetadata?.proofFiles) ? auctionMetadata.proofFiles : [],
+        offers: Array.isArray(auctionMetadata?.offers) ? auctionMetadata.offers : [],
+        disputes: Array.isArray(auctionMetadata?.disputes) ? auctionMetadata.disputes : [],
+        isFixture: Boolean(auctionMetadata?.isFixture || auctionMetadata?.mockOnChain),
       };
       
       setAuction(auctionData);
@@ -1039,9 +1065,33 @@ export default function PremiumAuctionDetail() {
         return;
       }
 
-      setReputation(reputationResponse);
-      setOffers(offersResponse);
-      setDisputes(disputesResponse);
+      const fallbackReputation = auction.isFixture && auction.sellerVerification
+        ? {
+            wallet: auction.seller,
+            trustScore: auction.sellerVerification.status === 'verified' ? 82 : 61,
+            verificationStatus: auction.sellerVerification.status || 'pending',
+            seller: {
+              auctionsCreated: 1,
+              auctionsSettled: auction.status === 'settled' ? 1 : 0,
+              auctionsCancelled: auction.status === 'cancelled' ? 1 : 0,
+              successRate: auction.status === 'settled' ? 1 : 0,
+              averageSettlementHours: null,
+              disputeRatio: auction.status === 'disputed' ? 1 : 0,
+            },
+            bidder: {
+              participations: 0,
+              wins: 0,
+              winRate: 0,
+              offersSubmitted: Array.isArray(auction.offers) ? auction.offers.length : 0,
+              disputesOpened: Array.isArray(auction.disputes) ? auction.disputes.length : 0,
+            },
+            updatedAt: new Date().toISOString(),
+          }
+        : null;
+
+      setReputation(reputationResponse || fallbackReputation);
+      setOffers(Array.isArray(offersResponse) && offersResponse.length > 0 ? offersResponse : (auction.offers || []));
+      setDisputes(Array.isArray(disputesResponse) && disputesResponse.length > 0 ? disputesResponse : (auction.disputes || []));
       setWatchlist(watchlistResponse);
     };
 
@@ -1071,6 +1121,11 @@ export default function PremiumAuctionDetail() {
     }
 
     const syncSnapshot = async () => {
+      const opsDebugInfo = getOpsApiDebugInfo();
+      if (auction.isFixture && !opsDebugInfo.isLocalTarget) {
+        return;
+      }
+
       await syncAuctionSnapshot({
         ...auction,
         itemPhotosCount: Array.isArray(auction.itemPhotos) ? auction.itemPhotos.length : 0,
@@ -1105,13 +1160,14 @@ export default function PremiumAuctionDetail() {
   const waitForAuctionState = async (expectedStatus, options = {}) => {
     const attempts = options.attempts ?? 10;
     const intervalMs = options.intervalMs ?? 2000;
+    const expectedStatuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
 
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const onChainData = await getAuctionInfo(auctionId);
       const state = parseAleoInteger(onChainData?.state);
       const currentStatus = state === null ? null : CONTRACT_STATUS_BY_STATE[state];
 
-      if (currentStatus === expectedStatus) {
+      if (currentStatus && expectedStatuses.includes(currentStatus)) {
         return true;
       }
 
@@ -1162,6 +1218,7 @@ export default function PremiumAuctionDetail() {
   const waitForLifecycleState = async ({
     result,
     expectedStatus,
+    expectedStatuses,
     successMessage,
     pendingMessage,
     statePendingMessage,
@@ -1169,11 +1226,13 @@ export default function PremiumAuctionDetail() {
   }) => {
     await waitForLifecycleTransaction(result, successMessage, pendingMessage, { auto });
 
-    if (!expectedStatus) {
+    const expected = expectedStatuses || expectedStatus;
+
+    if (!expected) {
       return true;
     }
 
-    const stateReached = await waitForAuctionState(expectedStatus, {
+    const stateReached = await waitForAuctionState(expected, {
       attempts: 8,
       intervalMs: 2000,
     });
@@ -1366,11 +1425,11 @@ export default function PremiumAuctionDetail() {
       }
       
       // CRITICAL: credits.aleo/transfer_public requires ACCOUNT ADDRESS, not program name
-      // Program name: shadowbid_marketplace_v2_20.aleo
+      // Program name: shadowbid_marketplace_v2_21.aleo
       // Program account: Need to query or compute from program ID
       
       // Temporary: Try with program name (may not work for all wallets)
-      const programId = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_20.aleo';
+      const programId = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
       
       const transferInputs = [
         programId,  // Try program name - wallet may resolve to address
@@ -1751,7 +1810,8 @@ export default function PremiumAuctionDetail() {
       } else if (errorStr.toLowerCase().includes('decryption') ||
                  errorStr.toLowerCase().includes('not allowed')) {
         errorMsg += 'This wallet session was connected without private record access.\n\n';
-        errorMsg += 'Reconnect with advanced wallet permissions or use the public ALEO flow.';
+        errorMsg += 'Disconnect Shield, connect again, approve the private-record request, then retry.\n\n';
+        errorMsg += 'If it still fails, use the public ALEO flow.';
       } else if (errorStr.toLowerCase().includes('could not read private aleo record balances')) {
         errorMsg += 'Shield returned private records, but their balances could not be read.\n\n';
         errorMsg += 'Refresh the wallet records or use the public ALEO flow.';
@@ -1787,7 +1847,7 @@ export default function PremiumAuctionDetail() {
         errorMsg += 'Check your Shield balance, private records, and network connection.';
       } else {
         errorMsg += errorStr;
-        errorMsg += '\n\nTry refreshing Shield or using the public ALEO flow.';
+        errorMsg += '\n\nTry disconnecting and reconnecting Shield, then use the public ALEO flow if needed.';
       }
       
       console.error('❌ Private bid failed:', errorMsg);
@@ -2112,7 +2172,7 @@ export default function PremiumAuctionDetail() {
     }
   };
 
-  const handleDetermineWinner = async (options = {}) => {
+  const handleSettleAfterRevealTimeout = async (options = {}) => {
     const { auto = false } = options;
     if (!connected) {
       showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
@@ -2120,24 +2180,15 @@ export default function PremiumAuctionDetail() {
     }
 
     if (auction?.status !== 'closed') {
-      showLifecycleNotice('❌ Determine Winner is only available after the auction is closed.', { auto, tone: 'error' });
+      showLifecycleNotice('❌ Timeout settlement is only available after the auction is closed.', { auto, tone: 'error' });
       return;
     }
 
-    if (!determineWinnerWindowEnded) {
+    if (!revealTimeoutWindowEnded) {
       showLifecycleNotice(
         `⏳ Reveal window is still active.\n\n` +
-        `Determine Winner becomes available after ${revealWindowEndsAtLabel}.`,
+        `Settle After Reveal Timeout becomes available after ${revealWindowEndsAtLabel}.`,
         { auto, tone: 'info' }
-      );
-      return;
-    }
-
-    if (!hasRevealedBidCandidate) {
-      showLifecycleNotice(
-        '❌ No revealed bids found yet.\n\n' +
-        'The V2.20 contract requires at least one revealed bid before determining a winner.',
-        { auto, tone: 'error' }
       );
       return;
     }
@@ -2149,20 +2200,20 @@ export default function PremiumAuctionDetail() {
         throw new Error('Wallet does not support transactions');
       }
       
-      const result = await determineWinner(executeTransaction, parseInt(auctionId));
+      const result = await settleAfterRevealTimeout(executeTransaction, parseInt(auctionId, 10), getCurrentTimestamp());
 
       await waitForLifecycleState({
         result,
-        expectedStatus: 'challenge',
-        successMessage: '✅ Winner Determined!\n\nThe auction is now in CHALLENGE state. You can continue with the next contract step from the seller controls.',
-        pendingMessage: '⏳ Determine winner submitted, but explorer confirmation is still pending. Finalize Winner will appear after the contract reaches CHALLENGE.',
-        statePendingMessage: '⏳ Determine Winner transaction is confirmed, but the auction mapping still has not updated to CHALLENGE yet. Refresh again in a few seconds.',
+        expectedStatuses: ['challenge', 'cancelled'],
+        successMessage: '✅ Reveal Timeout Settled!\n\nThe contract will now move to CHALLENGE if reserve is met, otherwise to CANCELLED.',
+        pendingMessage: '⏳ Reveal-timeout settlement submitted, but explorer confirmation is still pending. Refresh again in a few seconds.',
+        statePendingMessage: '⏳ Reveal-timeout settlement is confirmed, but the auction mapping has not updated yet. Refresh again in a few seconds.',
         auto,
       });
       
     } catch (error) {
-      console.error('❌ Error determining winner:', error);
-      showLifecycleNotice(`❌ Failed to determine winner:\n\n${error.message || error}`, { auto, tone: 'error' });
+      console.error('❌ Error settling after reveal timeout:', error);
+      showLifecycleNotice(`❌ Failed to settle after reveal timeout:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -2180,9 +2231,9 @@ export default function PremiumAuctionDetail() {
       return;
     }
 
-    if (!finalizeWinnerWindowEnded) {
+    if (!disputeWindowEnded) {
       showLifecycleNotice(
-        `⏳ Challenge period is still active.\n\n` +
+        `⏳ Dispute window is still active.\n\n` +
         `Finalize Winner becomes available after ${challengeWindowEndsAtLabel}.`,
         { auto, tone: 'info' }
       );
@@ -2347,14 +2398,14 @@ export default function PremiumAuctionDetail() {
     if (auction.hasEscrow) {
       alert(
         '❌ Cancel Unavailable\n\n' +
-        'Contract V2.20 only allows canceling an auction while total escrow is still 0.'
+        'Contract V2.21 only allows canceling an auction while total escrow is still 0.'
       );
       return;
     }
 
     const confirmCancel = window.confirm(
       'Cancel this auction?\n\n' +
-      'This action follows the V2.20 contract and is only available before any escrowed bids exist.'
+      'This action follows the V2.21 contract and is only available before any escrowed bids exist.'
     );
     if (!confirmCancel) return;
     
@@ -2429,39 +2480,10 @@ export default function PremiumAuctionDetail() {
 
   const handleCancelReserveNotMet = async (options = {}) => {
     const { auto = false } = options;
-    if (!connected) {
-      showLifecycleNotice('Please connect your wallet first', { auto, tone: 'error' });
-      return;
-    }
-
-    if (auction.seller?.toLowerCase() !== address?.toLowerCase()) {
-      showLifecycleNotice('❌ Only the seller can cancel an auction after reserve is not met', { auto, tone: 'error' });
-      return;
-    }
-
-    const confirmed = auto ? true : window.confirm(
-      'Cancel this auction because the reserve price was not met?\n\nBidders will be able to claim refunds after cancellation.'
+    showLifecycleNotice(
+      'ℹ️ In V2.21, reserve-miss handling is part of Settle After Reveal Timeout.\n\nUse the closed-state settlement action after the reveal deadline passes.',
+      { auto, tone: 'info' }
     );
-    if (!confirmed) {
-      return;
-    }
-
-    setIsCancellingReserve(true);
-
-    try {
-      if (!executeTransaction) {
-        throw new Error('Wallet does not support transactions');
-      }
-
-      await cancelAuctionReserveNotMet(executeTransaction, parseInt(auctionId, 10));
-      showLifecycleNotice('✅ Auction canceled.\n\nReserve price was not met and bidders can now claim refunds.', { auto, tone: 'success' });
-      await loadAuctionData();
-    } catch (error) {
-      console.error('❌ Error cancelling reserve-not-met auction:', error);
-      showLifecycleNotice(`❌ Failed to cancel auction:\n\n${error.message || error}`, { auto, tone: 'error' });
-    } finally {
-      setIsCancellingReserve(false);
-    }
   };
 
   const handleToggleWatchlist = async () => {
@@ -2605,7 +2627,7 @@ export default function PremiumAuctionDetail() {
           label: 'Anchored on-chain',
           note: result?.transactionId
             ? `Transaction submitted: ${result.transactionId}`
-            : 'Dispute root submitted to the V2.20 contract.',
+            : 'Dispute root submitted to the V2.21 contract.',
         };
 
         const updatedDispute = await updateDispute(createdDispute.id, {
@@ -2627,10 +2649,10 @@ export default function PremiumAuctionDetail() {
           : 'Local case saved and dispute root submitted on-chain.';
       } catch (error) {
         console.error('⚠️ Failed to open dispute on-chain:', error);
-        onChainResultMessage = `Saved locally, but V2.20 dispute anchoring failed.\n\n${error.message || error}`;
+        onChainResultMessage = `Saved locally, but V2.21 dispute anchoring failed.\n\n${error.message || error}`;
       }
     } else if (!canOpenOnChainDispute) {
-      onChainResultMessage = 'Saved locally. V2.20 dispute opening is only available once the auction reaches challenge or settled state.';
+      onChainResultMessage = 'Saved locally. V2.21 dispute opening is only available once the auction reaches challenge or settled state.';
     } else if (!executeTransaction) {
       onChainResultMessage = 'Saved locally. Reconnect a wallet with transaction support to also open the dispute on-chain.';
     }
@@ -2672,15 +2694,15 @@ export default function PremiumAuctionDetail() {
     auction?.endTimestamp &&
     Math.floor(Date.now() / 1000) >= auction.endTimestamp
   );
-  const determineWinnerWindowEnded = Boolean(
+  const revealTimeoutWindowEnded = Boolean(
     auction?.status === 'closed' &&
-    auction?.challengeEndTime &&
-    Math.floor(Date.now() / 1000) >= auction.challengeEndTime
+    auction?.revealDeadline &&
+    Math.floor(Date.now() / 1000) >= auction.revealDeadline
   );
-  const finalizeWinnerWindowEnded = Boolean(
+  const disputeWindowEnded = Boolean(
     auction?.status === 'challenge' &&
-    auction?.challengeEndTime &&
-    Math.floor(Date.now() / 1000) >= auction.challengeEndTime
+    auction?.disputeDeadline &&
+    Math.floor(Date.now() / 1000) >= auction.disputeDeadline
   );
   const hasRevealedBidCandidate = Boolean(
     auction?.winningAmountMicro &&
@@ -2689,6 +2711,7 @@ export default function PremiumAuctionDetail() {
   const storedNonce = getNonce(auctionId, address);
   const canRevealBid = Boolean(
     auction?.status === 'closed' &&
+    (!auction?.revealDeadline || Math.floor(Date.now() / 1000) <= auction.revealDeadline) &&
     submittedCommitmentData &&
     storedNonce
   );
@@ -2703,8 +2726,8 @@ export default function PremiumAuctionDetail() {
   const paymentClaimedAtLabel = formatUnixTimestamp(auction?.paymentClaimedAt);
   const settledAtLabel = formatUnixTimestamp(auction?.settledAt);
   const claimableAtLabel = formatUnixTimestamp(auction?.claimableAt);
-  const revealWindowEndsAtLabel = formatUnixTimestamp(auction?.challengeEndTime);
-  const challengeWindowEndsAtLabel = formatUnixTimestamp(auction?.challengeEndTime);
+  const revealWindowEndsAtLabel = formatUnixTimestamp(auction?.revealDeadline);
+  const challengeWindowEndsAtLabel = formatUnixTimestamp(auction?.disputeDeadline);
   const platformFeeClaimedAtLabel = formatUnixTimestamp(auction?.platformFeeClaimedAt);
   const settlementOutcomeSummary = auction?.winner
     ? isWinnerView
@@ -2722,6 +2745,7 @@ export default function PremiumAuctionDetail() {
       : [];
   const itemPhotos = Array.isArray(auction?.itemPhotos) ? auction.itemPhotos : [];
   const sellerDisplayName = auction?.sellerDisplayName || resolvedSellerVerification?.sellerDisplayName || null;
+  const sellerAddressPreview = formatAddressPreview(auction?.seller);
   const verificationStatus = resolvedSellerVerification?.status || 'pending';
   const verificationTone = verificationStatus === 'verified'
     ? 'text-green-300 border-green-500/30 bg-green-500/10'
@@ -2797,17 +2821,12 @@ export default function PremiumAuctionDetail() {
               key: `reveal_${auction.id}_${address}`,
               run: () => handleRevealBid({ auto: true }),
             }
-          : isSellerView && auction.status === 'closed' && determineWinnerWindowEnded && hasRevealedBidCandidate
+          : isSellerView && auction.status === 'closed' && revealTimeoutWindowEnded
             ? {
-                key: `determine_${auction.id}_${address}`,
-                run: () => handleDetermineWinner({ auto: true }),
+                key: `settle_reveal_timeout_${auction.id}_${address}`,
+                run: () => handleSettleAfterRevealTimeout({ auto: true }),
               }
-            : isSellerView && auction.status === 'challenge' && auction.reserveMet === false
-              ? {
-                  key: `cancel_reserve_${auction.id}_${address}`,
-                  run: () => handleCancelReserveNotMet({ auto: true }),
-                }
-              : isSellerView && auction.status === 'challenge' && auction.reserveMet !== false && finalizeWinnerWindowEnded && !hasActiveOnChainDispute
+            : isSellerView && auction.status === 'challenge' && disputeWindowEnded && !hasActiveOnChainDispute
                 ? {
                     key: `finalize_${auction.id}_${address}`,
                     run: () => handleFinalizeWinner({ auto: true }),
@@ -2847,17 +2866,16 @@ export default function PremiumAuctionDetail() {
     canClaimRefund,
     canRevealBid,
     connected,
-    determineWinnerWindowEnded,
+    disputeWindowEnded,
     executeTransaction,
-    finalizeWinnerWindowEnded,
     hasActiveOnChainDispute,
-    hasRevealedBidCandidate,
     isCancellingReserve,
     isClaimingFee,
     isClosePending,
     isSellerView,
     isSubmitting,
     loading,
+    revealTimeoutWindowEnded,
   ]);
 
   return (
@@ -3026,16 +3044,17 @@ export default function PremiumAuctionDetail() {
                   {auction.contractVersion}
                 </span>
               </div>
-              <div className="space-y-4">
+                <div className="space-y-4">
                 <div className="flex items-center justify-between py-3 border-b border-white/5">
-                  <span className="text-white/60 font-mono text-sm">Seller</span>
-                  <div className="text-right">
-                    {sellerDisplayName && (
-                      <div className="text-xs font-mono uppercase tracking-[0.18em] text-cyan-300">
-                        {sellerDisplayName}
-                      </div>
-                    )}
-                    <span className="font-mono text-cyan-400">{auction.seller}</span>
+                  <span className="text-white/60 font-mono text-sm">Seller Profile</span>
+                  <div className="max-w-sm text-right">
+                    <div className="text-xs font-mono uppercase tracking-[0.18em] text-cyan-300">
+                      {sellerDisplayName || 'Masked seller ID'}
+                    </div>
+                    <div className="mt-1 font-mono text-cyan-400">{sellerAddressPreview}</div>
+                    <div className="mt-1 text-[11px] leading-relaxed text-white/40">
+                      Marketplace view masks the full seller wallet by default. Settlement still resolves against the on-chain seller account.
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-white/5">
@@ -3048,7 +3067,7 @@ export default function PremiumAuctionDetail() {
                     <span className="text-lg">{getAssetTypeIcon(auction.assetType)}</span>
                     <span className="font-mono text-gold-500">{getAssetTypeName(auction.assetType)}</span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
-                      V2.20
+                      V2.21
                     </span>
                   </div>
                 </div>
@@ -3057,8 +3076,12 @@ export default function PremiumAuctionDetail() {
                   <span className="font-mono text-cyan-400">{auction.contractState}</span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-white/5">
-                  <span className="text-white/60 font-mono text-sm">Challenge Period</span>
-                  <span className="font-mono text-cyan-400">{Math.max(1, Math.round(auction.challengePeriod / 3600))} hours</span>
+                  <span className="text-white/60 font-mono text-sm">Reveal Period</span>
+                  <span className="font-mono text-cyan-400">{Math.max(1, Math.round((auction.revealPeriod || 0) / 3600))} hours</span>
+                </div>
+                <div className="flex items-center justify-between py-3 border-b border-white/5">
+                  <span className="text-white/60 font-mono text-sm">Dispute Period</span>
+                  <span className="font-mono text-cyan-400">{Math.max(1, Math.round((auction.disputePeriod || 0) / 3600))} hours</span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-white/5">
                   <span className="text-white/60 font-mono text-sm">Confirmation Timeout</span>
@@ -3204,7 +3227,7 @@ export default function PremiumAuctionDetail() {
                   </div>
 
                   <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-                    <div className="text-xs font-mono uppercase tracking-[0.18em] text-cyan-300">V2.20 On-Chain Anchors</div>
+                    <div className="text-xs font-mono uppercase tracking-[0.18em] text-cyan-300">V2.21 On-Chain Anchors</div>
                     <div className="mt-4 space-y-3 text-sm">
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-white/45">Seller profile</div>
@@ -3529,7 +3552,7 @@ export default function PremiumAuctionDetail() {
                     </div>
                     <div className="mt-2 text-xs text-white/45">
                       {canOpenOnChainDispute
-                        ? 'This auction can anchor a dispute directly to the V2.20 contract from this page.'
+                        ? 'This auction can anchor a dispute directly to the V2.21 contract from this page.'
                         : 'Dispute anchoring becomes available after the auction reaches challenge or settled state.'}
                     </div>
                   </div>
@@ -3585,7 +3608,7 @@ export default function PremiumAuctionDetail() {
                       Private Sealed-Bid Auction
                     </div>
                     <div className="text-xs text-white/60">
-                      Contract V2.20 stores sealed commitments, escrow, reserve checks, dispute state, and fee accounting, but it does not expose a public per-bid history list in this UI.
+                      Contract V2.21 stores sealed commitments, escrow, reserve checks, dispute state, and fee accounting, but it does not expose a public per-bid history list in this UI.
                     </div>
                   </div>
                 </div>
@@ -3596,6 +3619,7 @@ export default function PremiumAuctionDetail() {
                   <div className="text-xs font-mono text-white/40 mb-2">Visible From Contract</div>
                   <div className="space-y-2 text-sm text-white/60">
                     <div>• Auction state: {auction.contractState}</div>
+                    <div>• Seller settlement account exists on-chain, even when the marketplace masks it in the main UI</div>
                     <div>• Escrowed total: {auction.totalEscrowed.toFixed(2)} {auction.token}</div>
                     <div>• Winner address and winning amount after settlement steps</div>
                     <div>• Receipt confirmation and payment claimed flags</div>
@@ -3650,7 +3674,7 @@ export default function PremiumAuctionDetail() {
                           </div>
                           {isPrivateCommitment(submittedCommitmentData) && (
                             <div className="mt-2 text-xs text-gold-400">
-                              ✨ Maximum privacy achieved
+                              Private transfer enabled
                             </div>
                           )}
                         </div>
@@ -3788,7 +3812,7 @@ export default function PremiumAuctionDetail() {
                               <Shield className="w-4 h-4 text-gold-500" />
                               <span className="text-sm font-mono text-white">Use Private Credits</span>
                               <span className="px-2 py-0.5 bg-gold-500/20 border border-gold-500/40 rounded text-xs font-mono text-gold-400">
-                                V2.20
+                                V2.21
                               </span>
                             </div>
                             <button
@@ -3852,7 +3876,7 @@ export default function PremiumAuctionDetail() {
                                 Two-Step Process for Aleo Credits
                               </div>
                               <div className="text-xs text-white/60 mb-3">
-                                Contract V2.20 public ALEO flow uses transfer first, then commitment
+                                Contract V2.21 public ALEO flow uses transfer first, then commitment
                               </div>
                             </div>
                           </div>
@@ -4092,7 +4116,7 @@ export default function PremiumAuctionDetail() {
                         <div className="font-mono text-sm text-amber-400">Countdown Ended, Contract Still OPEN</div>
                       </div>
                       <div className="text-xs text-white/60">
-                        Auction time has passed, but the contract will stay in <span className="text-cyan-400">OPEN</span> until the seller clicks <span className="text-gold-400">Close Auction</span>. Reveal, determine winner, and finalize winner buttons only appear after the on-chain state moves forward.
+                        Auction time has passed, but the contract will stay in <span className="text-cyan-400">OPEN</span> until the seller clicks <span className="text-gold-400">Close Auction</span>. Reveal, timeout settlement, and finalization buttons only appear after the on-chain state moves forward.
                       </div>
                     </div>
                   )}
@@ -4245,8 +4269,8 @@ export default function PremiumAuctionDetail() {
                           <div className="text-xs text-white/60">
                             {hasActiveOnChainDispute
                               ? 'An on-chain dispute is open. Resolve it before finalizing the winner.'
-                              : finalizeWinnerWindowEnded
-                                ? 'The challenge window is over. The seller can now finalize the winner.'
+                              : disputeWindowEnded
+                                ? 'The dispute window is over. The seller can now finalize the winner.'
                                 : `A winner is selected, but finalization unlocks after ${challengeWindowEndsAtLabel}.`}
                           </div>
                         </div>
@@ -4254,14 +4278,14 @@ export default function PremiumAuctionDetail() {
                         <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
                           <div className="flex items-center gap-2 mb-2">
                             <Clock className="w-5 h-5 text-cyan-400" />
-                            <div className="font-mono text-sm text-cyan-400">Settlement Status: Waiting for Winner Determination</div>
+                            <div className="font-mono text-sm text-cyan-400">Settlement Status: Waiting for Reveal Timeout Settlement</div>
                           </div>
                           <div className="text-xs text-white/60">
-                            {determineWinnerWindowEnded
+                            {revealTimeoutWindowEnded
                               ? hasRevealedBidCandidate
-                                ? 'The reveal window is over. You can now determine the winner from the highest valid revealed bid.'
-                                : 'The reveal window is over, but no revealed bid is recorded on-chain yet.'
-                              : `Bids can still be revealed until ${revealWindowEndsAtLabel}. Determine Winner unlocks after that deadline.`}
+                                ? 'The reveal window is over. Settle the auction to move into challenge if the reserve is met.'
+                                : 'The reveal window is over. Settle the auction and the contract will cancel it if no valid reveal is recorded.'
+                              : `Bids can still be revealed until ${revealWindowEndsAtLabel}. Settlement unlocks after that deadline.`}
                           </div>
                         </div>
                       ) : null}
@@ -4302,50 +4326,39 @@ export default function PremiumAuctionDetail() {
                         </PremiumButton>
                       )}
                       
-                      {/* Step 2: Determine Winner */}
+                      {/* Step 2: Settle After Reveal Timeout */}
                       {auction.status === 'closed' && (
                         <PremiumButton 
                           className="w-full"
-                          onClick={handleDetermineWinner}
-                          disabled={isSubmitting || !determineWinnerWindowEnded || !hasRevealedBidCandidate}
+                          onClick={handleSettleAfterRevealTimeout}
+                          disabled={isSubmitting || !revealTimeoutWindowEnded}
                         >
                           {isSubmitting
                             ? 'Processing...'
-                            : !determineWinnerWindowEnded
+                            : !revealTimeoutWindowEnded
                               ? '2️⃣ Waiting for Reveal Window'
-                              : !hasRevealedBidCandidate
-                                ? '2️⃣ No Revealed Bids Yet'
-                                : '2️⃣ Determine Winner'}
+                              : hasRevealedBidCandidate
+                                ? '2️⃣ Settle After Reveal Timeout'
+                                : '2️⃣ Settle and Cancel if Needed'}
                         </PremiumButton>
                       )}
                       
-                      {/* Step 3: Finalize Winner / Cancel Reserve Not Met */}
+                      {/* Step 3: Finalize Winner */}
                       {auction.status === 'challenge' && (
-                        auction.reserveMet === false ? (
-                          <PremiumButton 
-                            className="w-full"
-                            onClick={handleCancelReserveNotMet}
-                            disabled={isSubmitting || isCancellingReserve}
-                            variant="ghost"
-                          >
-                            {isCancellingReserve ? 'Canceling...' : '3️⃣ Cancel Auction (Reserve Not Met)'}
-                          </PremiumButton>
-                        ) : (
-                          <PremiumButton 
-                            className="w-full"
-                            onClick={handleFinalizeWinner}
-                            disabled={isSubmitting || !finalizeWinnerWindowEnded || hasActiveOnChainDispute}
-                            variant="secondary"
-                          >
-                            {isSubmitting
-                              ? 'Finalizing...'
-                              : hasActiveOnChainDispute
-                                ? '3️⃣ Resolve Dispute First'
-                                : !finalizeWinnerWindowEnded
-                                  ? '3️⃣ Waiting for Challenge Window'
-                                  : '3️⃣ Finalize Winner'}
-                          </PremiumButton>
-                        )
+                        <PremiumButton 
+                          className="w-full"
+                          onClick={handleFinalizeWinner}
+                          disabled={isSubmitting || !disputeWindowEnded || hasActiveOnChainDispute}
+                          variant="secondary"
+                        >
+                          {isSubmitting
+                            ? 'Finalizing...'
+                            : hasActiveOnChainDispute
+                              ? '3️⃣ Resolve Dispute First'
+                              : !disputeWindowEnded
+                                ? '3️⃣ Waiting for Dispute Window'
+                                : '3️⃣ Finalize Winner'}
+                        </PremiumButton>
                       )}
                       
                       {/* Step 4: Claim Winning Bid */}
@@ -4363,7 +4376,7 @@ export default function PremiumAuctionDetail() {
                       {/* Workflow guide */}
                       <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                         <div className="text-xs text-white/60">
-                          <div className="font-mono text-cyan-400 mb-2">Seller Workflow (V2.20):</div>
+                          <div className="font-mono text-cyan-400 mb-2">Seller Workflow (V2.21):</div>
                           <div className="space-y-1">
                             <div className={auction.status === 'open' && !auction.hasEscrow ? 'text-gold-400' : 'text-white/40'}>
                               🚫 Cancel auction while escrow is still 0
@@ -4372,13 +4385,10 @@ export default function PremiumAuctionDetail() {
                               1️⃣ Close auction
                             </div>
                             <div className={auction.status === 'closed' ? 'text-gold-400' : 'text-white/40'}>
-                              2️⃣ Determine winner after bidders reveal
+                              2️⃣ Settle after reveal timeout
                             </div>
-                            <div className={auction.status === 'challenge' && auction.reserveMet !== false ? 'text-gold-400' : 'text-white/40'}>
-                              3️⃣ Finalize winner if reserve is met
-                            </div>
-                            <div className={auction.status === 'challenge' && auction.reserveMet === false ? 'text-gold-400' : 'text-white/40'}>
-                              3️⃣ Cancel auction if reserve is not met
+                            <div className={auction.status === 'challenge' ? 'text-gold-400' : 'text-white/40'}>
+                              3️⃣ Finalize winner after dispute window
                             </div>
                             <div className={auction.status === 'settled' && !auction.paymentClaimed ? 'text-gold-400' : 'text-white/40'}>
                               4️⃣ Claim seller net after receipt or timeout
@@ -4653,7 +4663,7 @@ export default function PremiumAuctionDetail() {
                       {submittedCommitmentData && (
                         <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                           <div className="text-xs text-white/60">
-                            <div className="font-mono text-cyan-400 mb-2">Bidder Workflow (V2.20):</div>
+                            <div className="font-mono text-cyan-400 mb-2">Bidder Workflow (V2.21):</div>
                             <div className="space-y-1">
                               <div className={auction.status === 'open' ? 'text-gold-400' : 'text-white/40'}>
                                 ⏳ Wait for auction to close

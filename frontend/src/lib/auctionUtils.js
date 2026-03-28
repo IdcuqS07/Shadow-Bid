@@ -6,10 +6,11 @@
  * Map on-chain state number to UI status string
  * State constants from smart contract:
  * OPEN: 0u8
- * REVEAL: 1u8
+ * CLOSED: 1u8
  * CHALLENGE: 2u8
  * SETTLED: 3u8
  * CANCELLED: 4u8
+ * DISPUTED: 5u8
  */
 export function mapStateToStatus(state) {
   const stateNum = typeof state === 'string' ? parseInt(state.replace('u8', '')) : state;
@@ -18,13 +19,15 @@ export function mapStateToStatus(state) {
     case 0:
       return 'active'; // OPEN
     case 1:
-      return 'reveal_open'; // REVEAL
+      return 'closed'; // CLOSED
     case 2:
-      return 'pending_settlement'; // CHALLENGE
+      return 'challenge'; // CHALLENGE
     case 3:
       return 'settled'; // SETTLED
     case 4:
       return 'cancelled'; // CANCELLED
+    case 5:
+      return 'disputed'; // DISPUTED
     default:
       return 'active';
   }

@@ -248,26 +248,30 @@ function deriveExecutorJobs(db) {
     }
 
     if (auction.status === 'closed') {
+      const revealWindowEnded = !auction.revealDeadline || auction.revealDeadline <= now;
       jobs.push({
         ...baseJob,
-        id: `determine_${auction.id}`,
-        action: 'determine_winner',
+        id: `settle_reveal_timeout_${auction.id}`,
+        action: 'settle_after_reveal_timeout',
         priority: 'medium',
-        ready: true,
-        reason: 'Auction is closed and ready for winner determination.',
+        ready: revealWindowEnded,
+        reason: revealWindowEnded
+          ? 'Reveal window ended, so the seller can settle the auction and move it to CHALLENGE or CANCELLED.'
+          : `Reveal window still active for ${formatTimeDistance(auction.revealDeadline - now)}.`,
       });
     }
 
     if (auction.status === 'challenge') {
+      const disputeWindowEnded = !auction.disputeDeadline || auction.disputeDeadline <= now;
       jobs.push({
         ...baseJob,
         id: `challenge_${auction.id}`,
-        action: auction.reserveMet === false ? 'cancel_auction_reserve_not_met' : 'finalize_winner',
+        action: 'finalize_winner',
         priority: 'high',
-        ready: true,
-        reason: auction.reserveMet === false
-          ? 'Reserve was not met, so the seller can cancel and unlock refunds.'
-          : 'Winner can be finalized from the challenge phase.',
+        ready: disputeWindowEnded,
+        reason: disputeWindowEnded
+          ? 'Dispute window ended, so the seller can finalize the winner.'
+          : `Dispute window still active for ${formatTimeDistance(auction.disputeDeadline - now)}.`,
       });
     }
 
@@ -565,13 +569,21 @@ function sanitizeSnapshot(snapshot) {
     winner: snapshot.winner || null,
     token: snapshot.token || 'ALEO',
     endTimestamp: toNumber(snapshot.endTimestamp, 0),
+    revealPeriod: toNumber(snapshot.revealPeriod, 0),
+    disputePeriod: toNumber(snapshot.disputePeriod, 0),
+    revealDeadline: toNumber(snapshot.revealDeadline, 0),
+    disputeDeadline: toNumber(snapshot.disputeDeadline, 0),
     reservePrice: toNumber(snapshot.reservePrice, 0),
+    reservePriceMicro: snapshot.reservePriceMicro ?? null,
     reserveMet: typeof snapshot.reserveMet === 'boolean' ? snapshot.reserveMet : snapshot.reserveMet ?? null,
     settledAt: toNumber(snapshot.settledAt, 0),
     claimableAt: toNumber(snapshot.claimableAt, 0),
     itemReceived: Boolean(snapshot.itemReceived),
+    itemReceivedAt: toNumber(snapshot.itemReceivedAt, 0),
     paymentClaimed: Boolean(snapshot.paymentClaimed),
+    paymentClaimedAt: toNumber(snapshot.paymentClaimedAt, 0),
     platformFeeClaimed: Boolean(snapshot.platformFeeClaimed),
+    platformFeeClaimedAt: toNumber(snapshot.platformFeeClaimedAt, 0),
     winningBid: snapshot.winningBid ?? 0,
     winningAmountMicro: snapshot.winningAmountMicro ?? null,
     platformFee: snapshot.platformFee ?? 0,
@@ -580,6 +592,7 @@ function sanitizeSnapshot(snapshot) {
     sellerNetAmountMicro: snapshot.sellerNetAmountMicro ?? null,
     totalEscrowed: snapshot.totalEscrowed ?? 0,
     totalEscrowedMicro: snapshot.totalEscrowedMicro ?? null,
+    confirmationTimeout: toNumber(snapshot.confirmationTimeout, 0),
     assetType: toNumber(snapshot.assetType, 0),
     currencyType: toNumber(snapshot.currencyType, 1),
     itemPhotosCount: toNumber(snapshot.itemPhotosCount, 0),
@@ -640,6 +653,27 @@ async function runOpsRoute({
         storageDriver,
         db,
       }),
+    };
+  }
+
+  if (environment !== 'production' && method === 'POST' && pathname === '/api/dev/reset') {
+    const db = createDefaultDb();
+    await storage.saveDb(db);
+
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        reset: true,
+        environment,
+        totals: {
+          auctions: 0,
+          disputes: 0,
+          offers: 0,
+          watchlists: 0,
+        },
+        generatedAt: new Date().toISOString(),
+      },
     };
   }
 

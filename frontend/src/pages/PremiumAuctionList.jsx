@@ -1,8 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { getAuctionInfo, getAssetTypeName, getAssetTypeIcon } from '@/services/aleoServiceV2';
 import {
+  calculatePlatformFee,
+  calculateSellerNetAmount,
+  EMPTY_ALEO_ADDRESS,
+  getAuctionInfo,
+  getAssetTypeName,
+  getAssetTypeIcon,
+} from '@/services/aleoServiceV2';
+import {
+  getOpsApiDebugInfo,
   getSavedSearches,
   getWatchlist,
   saveSavedSearches,
@@ -10,6 +18,7 @@ import {
   syncAuctionRole,
   syncAuctionSnapshot,
 } from '@/services/localOpsService';
+import { mapStateToStatus } from '@/lib/auctionUtils';
 import GlassCard from '@/components/premium/GlassCard';
 import PremiumButton from '@/components/premium/PremiumButton';
 import PremiumNav from '@/components/premium/PremiumNav';
@@ -27,6 +36,60 @@ function parseAleoInteger(value) {
   }
 
   return null;
+}
+
+function parseAleoUnsignedIntegerString(value) {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.trunc(value).toString();
+  }
+
+  if (typeof value === 'bigint' && value >= 0n) {
+    return value.toString();
+  }
+
+  if (typeof value === 'string') {
+    const match = value.trim().match(/^(\d+)(?:u\d+)?(?:\.(?:public|private))?$/);
+    return match ? match[1] : null;
+  }
+
+  return null;
+}
+
+function parseAleoBoolean(value) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+  }
+
+  return null;
+}
+
+function microToDisplayAmount(value) {
+  const parsedValue = parseAleoInteger(value);
+  return parsedValue !== null ? parsedValue / 1_000_000 : 0;
+}
+
+function getContractStateLabel(state) {
+  switch (state) {
+    case 0:
+      return 'OPEN';
+    case 1:
+      return 'CLOSED';
+    case 2:
+      return 'CHALLENGE';
+    case 3:
+      return 'SETTLED';
+    case 4:
+      return 'CANCELLED';
+    case 5:
+      return 'DISPUTED';
+    default:
+      return 'OPEN';
+  }
 }
 
 function getAuctionMetadataEndTime(auction) {
@@ -67,6 +130,7 @@ export default function PremiumAuctionList() {
     categories: [],
   });
   const [savedSearches, setSavedSearches] = useState([]);
+  const opsDebugInfo = getOpsApiDebugInfo();
 
   // V2.18 is now default - no need to set version
 
@@ -118,38 +182,94 @@ export default function PremiumAuctionList() {
             const now = Math.floor(Date.now() / 1000);
             const endTime = parseAleoInteger(onChainData?.end_time) || getAuctionMetadataEndTime(auction) || (now + 24 * 3600);
             const timeRemaining = endTime - now;
-            
-            let status = 'active';
-            if (timeRemaining < 0) {
-              status = 'ended';
-            } else if (timeRemaining < 3600) {
-              status = 'ending-soon';
-            }
-            
+            const state = parseAleoInteger(onChainData?.state);
+            const status = state !== null
+              ? mapStateToStatus(state)
+              : timeRemaining <= 0
+                ? 'closed'
+                : 'active';
+            const isEndingSoon = status === 'active' && timeRemaining > 0 && timeRemaining < 3600;
+
             // Format time remaining
             const hours = Math.floor(timeRemaining / 3600);
             const minutes = Math.floor((timeRemaining % 3600) / 60);
             const timeString = timeRemaining > 0 
               ? `${hours}h ${minutes}m`
               : 'Ended';
-            
+
+            const fallbackCurrencyType =
+              auction.currency === 'ALEO'
+                ? 1
+                : auction.currency === 'USAD'
+                  ? 2
+                  : 0;
+            const currencyType = parseAleoInteger(onChainData?.currency_type) ?? fallbackCurrencyType;
+            const winningAmountMicro = parseAleoUnsignedIntegerString(onChainData?.winning_amount);
+            const currentBid = winningAmountMicro
+              ? microToDisplayAmount(winningAmountMicro).toFixed(1)
+              : auction.minBid;
+            const winner = typeof onChainData?.winner === 'string' && onChainData.winner !== EMPTY_ALEO_ADDRESS
+              ? onChainData.winner
+              : null;
+            const reservePriceMicro = parseAleoUnsignedIntegerString(onChainData?.reserve_price)
+              ?? (
+                auction.reservePrice
+                  ? `${Math.round(parseFloat(auction.reservePrice) * 1_000_000)}`
+                  : null
+              );
+            const platformFeeMicro = parseAleoUnsignedIntegerString(onChainData?.platform_fee_amount)
+              ?? (winningAmountMicro ? calculatePlatformFee(winningAmountMicro) : null);
+            const sellerNetAmountMicro = parseAleoUnsignedIntegerString(onChainData?.seller_net_amount)
+              ?? (winningAmountMicro ? calculateSellerNetAmount(winningAmountMicro) : null);
+            const totalEscrowedMicro = parseAleoUnsignedIntegerString(onChainData?.total_escrowed) || '0';
+
             const auctionData = {
               id: auction.id,
               title: auction.title,
               format: 'Sealed-Bid',
-              currentBid: onChainData?.highest_bid ? (parseInt(onChainData.highest_bid) / 1_000_000).toFixed(1) : auction.minBid,
+              currentBid,
               minBid: auction.minBid,
               endTime: timeString,
               status,
+              contractState: getContractStateLabel(state),
+              state,
+              isEndingSoon,
               bidCount: onChainData?.bid_count || 0,
               currency: auction.currency || 'ALEO',
+              currencyType,
               assetType: auction.assetType || 0, // NEW: Asset type
-              seller: auction.creator || null,
+              seller: onChainData?.seller || auction.creator || null,
+              winner,
+              winningBid: winningAmountMicro ? microToDisplayAmount(winningAmountMicro) : 0,
+              winningAmountMicro,
+              endTimestamp: endTime,
+              revealPeriod: parseAleoInteger(onChainData?.reveal_period) ?? parseAleoInteger(onChainData?.challenge_period) ?? 0,
+              disputePeriod: parseAleoInteger(onChainData?.dispute_period) ?? parseAleoInteger(onChainData?.challenge_period) ?? 0,
+              revealDeadline: parseAleoInteger(onChainData?.reveal_deadline) ?? 0,
+              disputeDeadline: parseAleoInteger(onChainData?.dispute_deadline) ?? 0,
               reservePrice: auction.reservePrice || auction.minBid || '0',
+              reservePriceMicro,
+              reserveMet: parseAleoBoolean(onChainData?.reserve_met),
+              settledAt: parseAleoInteger(onChainData?.settled_at) ?? 0,
+              claimableAt: parseAleoInteger(onChainData?.claimable_at) ?? 0,
+              itemReceived: parseAleoBoolean(onChainData?.item_received) ?? false,
+              itemReceivedAt: parseAleoInteger(onChainData?.item_received_at) ?? 0,
+              paymentClaimed: parseAleoBoolean(onChainData?.payment_claimed) ?? false,
+              paymentClaimedAt: parseAleoInteger(onChainData?.payment_claimed_at) ?? 0,
+              platformFeeClaimed: parseAleoBoolean(onChainData?.platform_fee_claimed) ?? false,
+              platformFeeClaimedAt: parseAleoInteger(onChainData?.platform_fee_claimed_at) ?? 0,
+              platformFee: microToDisplayAmount(platformFeeMicro),
+              platformFeeMicro,
+              sellerNetAmount: microToDisplayAmount(sellerNetAmountMicro),
+              sellerNetAmountMicro,
+              totalEscrowed: microToDisplayAmount(totalEscrowedMicro),
+              totalEscrowedMicro,
+              confirmationTimeout: parseAleoInteger(onChainData?.confirmation_timeout) ?? 0,
               proofFilesCount: Array.isArray(auction.proofFiles) ? auction.proofFiles.length : 0,
               itemPhotosCount: Array.isArray(auction.itemPhotos) ? auction.itemPhotos.length : 0,
               verificationStatus: auction.sellerVerification?.status || 'pending',
               featured: false,
+              isFixture: Boolean(auction.isFixture || auction.mockOnChain),
             };
             
             console.log(`✅ Processed auction ${auction.id}:`, auctionData);
@@ -165,10 +285,45 @@ export default function PremiumAuctionList() {
               minBid: auction.minBid,
               endTime: 'Loading...',
               status: 'active',
+              contractState: 'OPEN',
+              state: 0,
+              isEndingSoon: false,
               bidCount: 0,
               currency: auction.currency || 'ALEO',
+              currencyType: auction.currency === 'ALEO' ? 1 : auction.currency === 'USAD' ? 2 : 0,
               assetType: auction.assetType || 0, // NEW: Asset type
+              seller: auction.creator || null,
+              winner: null,
+              winningBid: 0,
+              winningAmountMicro: null,
+              endTimestamp: getAuctionMetadataEndTime(auction),
+              revealPeriod: 0,
+              disputePeriod: 0,
+              revealDeadline: 0,
+              disputeDeadline: 0,
+              reservePrice: auction.reservePrice || auction.minBid || '0',
+              reservePriceMicro: null,
+              reserveMet: null,
+              settledAt: 0,
+              claimableAt: 0,
+              itemReceived: false,
+              itemReceivedAt: 0,
+              paymentClaimed: false,
+              paymentClaimedAt: 0,
+              platformFeeClaimed: false,
+              platformFeeClaimedAt: 0,
+              platformFee: 0,
+              platformFeeMicro: null,
+              sellerNetAmount: 0,
+              sellerNetAmountMicro: null,
+              totalEscrowed: 0,
+              totalEscrowedMicro: '0',
+              confirmationTimeout: 0,
+              proofFilesCount: Array.isArray(auction.proofFiles) ? auction.proofFiles.length : 0,
+              itemPhotosCount: Array.isArray(auction.itemPhotos) ? auction.itemPhotos.length : 0,
+              verificationStatus: auction.sellerVerification?.status || 'pending',
               featured: false,
+              isFixture: Boolean(auction.isFixture || auction.mockOnChain),
             };
           }
         })
@@ -186,33 +341,44 @@ export default function PremiumAuctionList() {
       console.log('📊 Final auctions list:', auctionsWithData);
       setAuctions(auctionsWithData);
 
-      await Promise.allSettled(auctionsWithData.map(async (auction) => {
+      await Promise.allSettled(auctionsWithData
+        .filter((auction) => opsDebugInfo.isLocalTarget || !auction.isFixture)
+        .map(async (auction) => {
         await syncAuctionSnapshot({
           id: auction.id,
           title: auction.title,
-          status: auction.status === 'active' || auction.status === 'ending-soon' ? 'open' : 'closed',
-          contractState: auction.status.toUpperCase(),
+          status: auction.status,
+          contractState: auction.contractState,
           seller: auction.seller,
-          winner: null,
+          winner: auction.winner,
           token: auction.currency,
-          endTimestamp: getAuctionMetadataEndTime(myAuctions.find((item) => item.id === auction.id)),
+          endTimestamp: auction.endTimestamp ?? getAuctionMetadataEndTime(myAuctions.find((item) => item.id === auction.id)),
+          revealPeriod: auction.revealPeriod,
+          disputePeriod: auction.disputePeriod,
+          revealDeadline: auction.revealDeadline,
+          disputeDeadline: auction.disputeDeadline,
           reservePrice: parseFloat(auction.reservePrice || '0'),
-          reserveMet: null,
-          settledAt: 0,
-          claimableAt: 0,
-          itemReceived: false,
-          paymentClaimed: false,
-          platformFeeClaimed: false,
-          winningBid: parseFloat(auction.currentBid || '0'),
-          winningAmountMicro: null,
-          platformFee: 0,
-          platformFeeMicro: null,
-          sellerNetAmount: 0,
-          sellerNetAmountMicro: null,
-          totalEscrowed: 0,
-          totalEscrowedMicro: 0,
+          reservePriceMicro: auction.reservePriceMicro,
+          reserveMet: auction.reserveMet,
+          settledAt: auction.settledAt,
+          claimableAt: auction.claimableAt,
+          itemReceived: auction.itemReceived,
+          itemReceivedAt: auction.itemReceivedAt,
+          paymentClaimed: auction.paymentClaimed,
+          paymentClaimedAt: auction.paymentClaimedAt,
+          platformFeeClaimed: auction.platformFeeClaimed,
+          platformFeeClaimedAt: auction.platformFeeClaimedAt,
+          winningBid: auction.winningBid ?? parseFloat(auction.currentBid || '0'),
+          winningAmountMicro: auction.winningAmountMicro,
+          platformFee: auction.platformFee,
+          platformFeeMicro: auction.platformFeeMicro,
+          sellerNetAmount: auction.sellerNetAmount,
+          sellerNetAmountMicro: auction.sellerNetAmountMicro,
+          totalEscrowed: auction.totalEscrowed,
+          totalEscrowedMicro: auction.totalEscrowedMicro,
+          confirmationTimeout: auction.confirmationTimeout,
           assetType: auction.assetType,
-          currencyType: auction.currency === 'ALEO' ? 1 : auction.currency === 'USAD' ? 2 : 0,
+          currencyType: auction.currencyType,
           itemPhotosCount: auction.itemPhotosCount,
           proofFilesCount: auction.proofFilesCount,
           verificationStatus: auction.verificationStatus,
@@ -276,7 +442,13 @@ export default function PremiumAuctionList() {
 
   const filteredAuctions = auctions.filter(auction => {
     // Status filter
-    if (filter !== 'all' && auction.status !== filter) return false;
+    if (filter !== 'all') {
+      if (filter === 'ending-soon') {
+        if (!auction.isEndingSoon) return false;
+      } else if (auction.status !== filter) {
+        return false;
+      }
+    }
     
     // Category filter (NEW)
     if (categoryFilter !== 'all' && auction.assetType !== parseInt(categoryFilter)) return false;
@@ -312,8 +484,8 @@ export default function PremiumAuctionList() {
             </div>
 
             {/* Status Filters */}
-            <div className="flex items-center gap-3">
-              {['all', 'active', 'ending-soon'].map((f) => (
+            <div className="flex items-center gap-3 flex-wrap">
+              {['all', 'active', 'closed', 'challenge', 'settled', 'cancelled', 'disputed', 'ending-soon'].map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
@@ -387,7 +559,7 @@ export default function PremiumAuctionList() {
             </div>
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
               <CheckCircle className="w-3 h-3" />
-              V2.20
+              V2.21
             </span>
           </div>
 
@@ -421,10 +593,10 @@ export default function PremiumAuctionList() {
             <Info className="w-5 h-5 text-cyan-400 mt-0.5" />
             <div className="flex-1">
               <div className="font-mono text-sm text-cyan-400 mb-1">
-                Currently Running: V2.20 (Production)
+                Currently Running: V2.21 (Production)
               </div>
               <div className="text-xs text-white/60">
-                All auctions here use the contract-backed V2.20 sealed-bid flow with reserve price, secure payout checks, dispute resolution, and RWA settlement fields.
+                All auctions here use the contract-backed V2.21 sealed-bid flow with reserve price, secure payout checks, dispute resolution, and RWA settlement fields.
               </div>
             </div>
           </div>
@@ -434,9 +606,9 @@ export default function PremiumAuctionList() {
         <div className="grid grid-cols-4 gap-6 mb-12">
           {[
             { label: 'Active Auctions', value: auctions.filter(a => a.status === 'active').length, icon: TrendingUp },
-            { label: 'Total Auctions', value: auctions.length, icon: Shield },
-            { label: 'Watchlist', value: watchlist.auctionIds.length, icon: Bookmark },
-            { label: 'Ending Soon', value: auctions.filter(a => a.status === 'ending-soon').length, icon: Clock },
+            { label: 'Challenge', value: auctions.filter(a => a.status === 'challenge').length, icon: Shield },
+            { label: 'Disputed', value: auctions.filter(a => a.status === 'disputed').length, icon: Bookmark },
+            { label: 'Settled', value: auctions.filter(a => a.status === 'settled').length, icon: Clock },
           ].map((stat, i) => (
             <GlassCard key={i} className="p-6">
               <div className="flex items-start justify-between mb-4">

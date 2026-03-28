@@ -1,6 +1,75 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 
+const TOKEN_DECIMALS = {
+  ALEO: 6,
+  USDCx: 6,
+  USAD: 6,
+};
+
+function extractAtomicUnits(raw) {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.trunc(raw);
+  }
+
+  if (typeof raw === 'bigint') {
+    return Number(raw);
+  }
+
+  if (typeof raw === 'string') {
+    const match = raw.match(/-?\d+/);
+    return match ? Number.parseInt(match[0], 10) : null;
+  }
+
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const parsed = extractAtomicUnits(item);
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
+  if (typeof raw === 'object') {
+    const prioritizedKeys = ['value', 'amount', 'balance', 'data', 'plaintext'];
+
+    for (const key of prioritizedKeys) {
+      if (key in raw) {
+        const parsed = extractAtomicUnits(raw[key]);
+        if (parsed !== null) {
+          return parsed;
+        }
+      }
+    }
+
+    for (const value of Object.values(raw)) {
+      const parsed = extractAtomicUnits(value);
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function toDisplayBalance(raw, token) {
+  const atomicUnits = extractAtomicUnits(raw);
+  const decimals = TOKEN_DECIMALS[token] ?? 6;
+
+  if (atomicUnits === null || !Number.isFinite(atomicUnits)) {
+    return 0;
+  }
+
+  return atomicUnits / (10 ** decimals);
+}
+
 export const useMultiCurrencyBalance = () => {
   const { connected, address } = useWallet();
   const [balances, setBalances] = useState({
@@ -48,23 +117,11 @@ export const useMultiCurrencyBalance = () => {
           try {
             const raw = await aleoRes.json();
             console.log('[useMultiCurrencyBalance] Aleo raw response:', raw);
-            
-            // Handle different response formats
-            let microcredits = 0;
-            if (typeof raw === 'number') {
-              microcredits = raw;
-            } else if (typeof raw === 'string') {
-              microcredits = parseInt(raw.replace(/[^0-9]/g, ''), 10);
-            } else if (raw && typeof raw === 'object') {
-              // If response is an object, try to extract the value
-              microcredits = parseInt(String(raw.value || raw.amount || raw).replace(/[^0-9]/g, ''), 10);
-            }
-            
+
+            const microcredits = extractAtomicUnits(raw);
             console.log('[useMultiCurrencyBalance] Aleo microcredits:', microcredits);
-            
-            if (!isNaN(microcredits) && isFinite(microcredits)) {
-              aleoBalance = microcredits / 1_000_000;
-            }
+
+            aleoBalance = toDisplayBalance(raw, 'ALEO');
           } catch (err) {
             console.error('[useMultiCurrencyBalance] Error parsing Aleo balance:', err);
           }
@@ -83,23 +140,11 @@ export const useMultiCurrencyBalance = () => {
           try {
             const raw = await usdcxRes.json();
             console.log('[useMultiCurrencyBalance] USDCx raw response:', raw);
-            
-            // Handle different response formats
-            let microusdcx = 0;
-            if (typeof raw === 'number') {
-              microusdcx = raw;
-            } else if (typeof raw === 'string') {
-              microusdcx = parseInt(raw.replace(/[^0-9]/g, ''), 10);
-            } else if (raw && typeof raw === 'object') {
-              // If response is an object, try to extract the value
-              microusdcx = parseInt(String(raw.value || raw.amount || raw).replace(/[^0-9]/g, ''), 10);
-            }
-            
+
+            const microusdcx = extractAtomicUnits(raw);
             console.log('[useMultiCurrencyBalance] USDCx microusdcx:', microusdcx);
-            
-            if (!isNaN(microusdcx) && isFinite(microusdcx)) {
-              usdcxBalance = microusdcx / 1_000_000;
-            }
+
+            usdcxBalance = toDisplayBalance(raw, 'USDCx');
           } catch (err) {
             console.error('[useMultiCurrencyBalance] Error parsing USDCx balance:', err);
           }
@@ -118,23 +163,11 @@ export const useMultiCurrencyBalance = () => {
           try {
             const raw = await usadRes.json();
             console.log('[useMultiCurrencyBalance] USAD raw response:', raw);
-            
-            // Handle different response formats
-            let microusad = 0;
-            if (typeof raw === 'number') {
-              microusad = raw;
-            } else if (typeof raw === 'string') {
-              microusad = parseInt(raw.replace(/[^0-9]/g, ''), 10);
-            } else if (raw && typeof raw === 'object') {
-              // If response is an object, try to extract the value
-              microusad = parseInt(String(raw.value || raw.amount || raw).replace(/[^0-9]/g, ''), 10);
-            }
-            
+
+            const microusad = extractAtomicUnits(raw);
             console.log('[useMultiCurrencyBalance] USAD microusad:', microusad);
-            
-            if (!isNaN(microusad) && isFinite(microusad)) {
-              usadBalance = microusad / 1_000_000;
-            }
+
+            usadBalance = toDisplayBalance(raw, 'USAD');
           } catch (err) {
             console.error('[useMultiCurrencyBalance] Error parsing USAD balance:', err);
           }
@@ -178,12 +211,22 @@ export const useMultiCurrencyBalance = () => {
     return () => clearInterval(interval);
   }, [connected, address]);
 
-  const formatBalance = (balance) => {
+  const formatBalance = (balance, token = 'ALEO') => {
     if (balance === null || balance === undefined) return '---';
-    if (isNaN(balance) || !isFinite(balance)) return '0.00';
-    return balance.toLocaleString('en-US', { 
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2 
+    if (isNaN(balance) || !isFinite(balance)) return '0';
+
+    const absoluteBalance = Math.abs(balance);
+    const isStablecoin = token === 'USDCx' || token === 'USAD';
+    const maximumFractionDigits = absoluteBalance >= 100
+      ? 2
+      : absoluteBalance >= 1
+        ? isStablecoin ? 2 : 4
+        : 6;
+
+    return balance.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits,
+      useGrouping: true,
     });
   };
 

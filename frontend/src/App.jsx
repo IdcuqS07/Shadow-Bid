@@ -17,6 +17,7 @@ import PremiumAuctionList from "@/pages/PremiumAuctionList";
 import PremiumAuctionDetail from "@/pages/PremiumAuctionDetail";
 import PremiumCreateAuction from "@/pages/PremiumCreateAuction";
 import PremiumHowItWorks from "@/pages/PremiumHowItWorks";
+import TestDataSeederPage from "@/pages/TestDataSeederPage";
 import WalletDebugPage from "@/pages/WalletDebugPage";
 import AdminOnlyRoute from "@/components/auth/AdminOnlyRoute";
 import WalletDiagnostics from "@/components/common/WalletDiagnostics";
@@ -32,7 +33,7 @@ import SingleApproveShieldWalletAdapter from '@/wallets/SingleApproveShieldWalle
 import '@provablehq/aleo-wallet-adaptor-react-ui/dist/styles.css';
 
 const INITIAL_WALLET_PROGRAMS = undefined;
-const DEFAULT_WALLET_DECRYPT_PERMISSION = DecryptPermission.NoDecrypt;
+const DEFAULT_WALLET_DECRYPT_PERMISSION = DecryptPermission.UponRequest;
 const WALLET_ADAPTERS = [
   new SingleApproveShieldWalletAdapter(),
   new PuzzleWalletAdapter(),
@@ -48,8 +49,9 @@ function App() {
       autoConnect={false}
       localNet={false}
       network={Network.TESTNET}
-      // Keep the initial wallet handshake minimal so connecting a wallet does
-      // not pre-approve decrypt access or program permissions up front.
+      // Ask wallets to grant decrypt access only when a private-record flow
+      // explicitly needs it, which keeps normal browsing lightweight while
+      // still allowing Shield private bidding to request records on demand.
       decryptPermission={DEFAULT_WALLET_DECRYPT_PERMISSION}
       programs={INITIAL_WALLET_PROGRAMS}
       onError={(error) => {
@@ -69,6 +71,7 @@ function App() {
               <Route path="/premium-auctions" element={<PremiumAuctionList />} />
               <Route path="/premium-auction/:auctionId" element={<PremiumAuctionDetail />} />
               <Route path="/premium-create" element={<PremiumCreateAuction />} />
+              <Route path="/dev/test-fixtures" element={<TestDataSeederPage />} />
               <Route path="/wallet-debug" element={<WalletDebugPage />} />
               <Route
                 path="/ops"

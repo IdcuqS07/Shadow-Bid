@@ -120,10 +120,11 @@ export default function AuctionsPage() {
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
-              <option value="reveal_open">Reveal Open</option>
-              <option value="pending_settlement">Pending Settlement</option>
+              <option value="closed">Closed</option>
+              <option value="challenge">Challenge</option>
               <option value="settled">Settled</option>
               <option value="cancelled">Cancelled</option>
+              <option value="disputed">Disputed</option>
             </select>
           </div>
           <Button asChild data-testid="auctions-create-button">

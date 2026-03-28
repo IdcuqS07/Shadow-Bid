@@ -205,7 +205,7 @@ export default function HowItWorksPage() {
               </Card>
             </div>
 
-            {/* Step 5: Determine Winner */}
+            {/* Step 5: Settle After Reveal Timeout */}
             <div className="flex gap-6 items-start">
               <div className="flex-shrink-0 flex items-center justify-center h-16 w-16 rounded-full bg-pink-500/20 border-2 border-pink-500 relative z-10">
                 <Trophy className="h-8 w-8 text-pink-400" />
@@ -213,20 +213,20 @@ export default function HowItWorksPage() {
               <Card className="flex-1 border-pink-500/20">
                 <CardContent className="pt-6 space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-semibold text-white">5. Determine Winner</h3>
+                    <h3 className="text-xl font-semibold text-white">5. Settle After Reveal Timeout</h3>
                     <span className="text-xs text-pink-400 font-semibold">SELLER</span>
                   </div>
                   <p className="text-sm text-slate-400">
-                    Seller determines winner in O(1) operation - highest revealed bid wins instantly
+                    After the reveal window ends, the seller settles the auction so the contract either enters challenge or cancels without stalling.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <span className="inline-flex items-center gap-1 text-xs bg-slate-700/50 px-2 py-1 rounded">
                       <CheckCircle2 className="h-3 w-3 text-green-400" />
-                      Constant time O(1)
+                      Timeout-based continuation
                     </span>
                     <span className="inline-flex items-center gap-1 text-xs bg-slate-700/50 px-2 py-1 rounded">
                       <CheckCircle2 className="h-3 w-3 text-green-400" />
-                      Challenge period starts
+                      Challenge phase starts only when settlement succeeds
                     </span>
                   </div>
                 </CardContent>
@@ -327,7 +327,7 @@ export default function HowItWorksPage() {
                 <h3 className="text-lg font-semibold text-white">Challenge Period</h3>
               </div>
               <p className="text-sm text-slate-400">
-                24-hour challenge period after winner determination ensures fairness and allows dispute resolution if needed.
+                The dispute window begins only after timeout settlement succeeds, giving participants time to raise and resolve disputes before finalization.
               </p>
             </CardContent>
           </Card>
