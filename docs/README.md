@@ -13,6 +13,7 @@ This directory groups the supporting guides for the current ShadowBid `v2.22` st
 - [frontend/integration.md](frontend/integration.md) frontend-to-contract integration notes for `aleoServiceV2.js`
 - [frontend/local-storage.md](frontend/local-storage.md) local browser state used by the current UI
 - [frontend/ops-console.md](frontend/ops-console.md) admin-side analytics, executor, and dispute workspace
+- [frontend/wave-5-milestone.md](frontend/wave-5-milestone.md) execution plan for the marketplace trust, ops, and premium UX wave on top of `v2.22`
 
 ## Contract Design And Rollout
 

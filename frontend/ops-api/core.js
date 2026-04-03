@@ -2,6 +2,7 @@
 import crypto from 'node:crypto';
 
 export const PLATFORM_ADDRESS = 'aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8';
+export const OPS_DB_SCHEMA_VERSION = 2;
 
 function resolveCorsOrigin(configuredOrigin = '*', requestOrigin = '') {
   if (!configuredOrigin || configuredOrigin === '*') {
@@ -34,8 +35,33 @@ function createCorsHeaders(origin = '*') {
   };
 }
 
-export function createDefaultDb() {
+function createDbMeta(meta = {}) {
+  const now = new Date().toISOString();
+  const createdAt = typeof meta.createdAt === 'string' && meta.createdAt ? meta.createdAt : now;
+  const updatedAt = typeof meta.updatedAt === 'string' && meta.updatedAt ? meta.updatedAt : createdAt;
+  const lastMigrationAt = typeof meta.lastMigrationAt === 'string' && meta.lastMigrationAt
+    ? meta.lastMigrationAt
+    : createdAt;
+
   return {
+    schemaVersion: OPS_DB_SCHEMA_VERSION,
+    revision: toNumber(meta.revision, 0),
+    createdAt,
+    updatedAt,
+    lastMigrationAt,
+  };
+}
+
+export function createDefaultDb() {
+  const now = new Date().toISOString();
+
+  return {
+    meta: createDbMeta({
+      createdAt: now,
+      updatedAt: now,
+      lastMigrationAt: now,
+      revision: 0,
+    }),
     settings: {
       executor: {
         enabled: true,
@@ -62,10 +88,20 @@ export function createDefaultDb() {
 
 export function mergeDefaults(db = {}) {
   const defaults = createDefaultDb();
+  const sourceMeta = db.meta && typeof db.meta === 'object' ? db.meta : {};
+  const needsMigration = !db.meta || toNumber(sourceMeta.schemaVersion, 0) !== OPS_DB_SCHEMA_VERSION;
+  const normalizedMeta = createDbMeta(sourceMeta);
 
   return {
     ...defaults,
     ...db,
+    meta: {
+      ...normalizedMeta,
+      schemaVersion: OPS_DB_SCHEMA_VERSION,
+      lastMigrationAt: needsMigration
+        ? new Date().toISOString()
+        : normalizedMeta.lastMigrationAt,
+    },
     settings: {
       ...defaults.settings,
       ...(db.settings || {}),
@@ -99,6 +135,20 @@ export function deserializeDb(raw) {
   }
 
   return mergeDefaults(JSON.parse(raw));
+}
+
+export function prepareDbForSave(db) {
+  const normalized = mergeDefaults(db);
+
+  return {
+    ...normalized,
+    meta: {
+      ...normalized.meta,
+      schemaVersion: OPS_DB_SCHEMA_VERSION,
+      revision: toNumber(normalized.meta?.revision, 0) + 1,
+      updatedAt: new Date().toISOString(),
+    },
+  };
 }
 
 function normalizeAddress(value) {
@@ -157,6 +207,104 @@ function formatTimeDistance(seconds) {
   }
 
   return `${minutes}m`;
+}
+
+function toOptionalTrimmedString(value, fallback = null) {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : fallback;
+}
+
+function sanitizeProofAttachment(attachment, options = {}) {
+  if (!attachment || typeof attachment !== 'object') {
+    return null;
+  }
+
+  const {
+    fallbackName = 'Attachment',
+    keepData = true,
+  } = options;
+
+  const sanitized = {
+    name: toOptionalTrimmedString(attachment.name, fallbackName),
+    type: toOptionalTrimmedString(attachment.type, 'application/octet-stream'),
+    size: Math.max(0, toNumber(attachment.size, 0)),
+  };
+
+  if (keepData && typeof attachment.data === 'string' && attachment.data.trim()) {
+    sanitized.data = attachment.data;
+  }
+
+  return sanitized;
+}
+
+function sanitizeAttachmentList(values, options = {}) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value, index) => sanitizeProofAttachment(value, {
+      ...options,
+      fallbackName: `${options.fallbackName || 'Attachment'} ${index + 1}`,
+    }))
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function sanitizeSellerVerification(value, options = {}) {
+  const verification = value && typeof value === 'object' ? value : {};
+  const now = new Date().toISOString();
+  const allowedStatuses = new Set(['pending', 'submitted', 'verified']);
+  const allowedTiers = new Set(['standard', 'enhanced', 'institutional']);
+  const wallet = normalizeAddress(options.wallet || verification.wallet);
+
+  return {
+    wallet: wallet || null,
+    sellerDisplayName: toOptionalTrimmedString(verification.sellerDisplayName),
+    status: allowedStatuses.has(verification.status) ? verification.status : 'pending',
+    tier: allowedTiers.has(verification.tier) ? verification.tier : 'standard',
+    issuingAuthority: toOptionalTrimmedString(verification.issuingAuthority),
+    certificateId: toOptionalTrimmedString(verification.certificateId),
+    provenanceNote: toOptionalTrimmedString(verification.provenanceNote),
+    authenticityGuarantee: toOptionalTrimmedString(verification.authenticityGuarantee),
+    submittedAt: toOptionalTrimmedString(verification.submittedAt),
+    createdAt: toOptionalTrimmedString(verification.createdAt, now),
+    updatedAt: now,
+  };
+}
+
+function sanitizeAuctionProofBundle(value, options = {}) {
+  const proofBundle = value && typeof value === 'object' ? value : {};
+  const now = new Date().toISOString();
+  const proofFiles = sanitizeAttachmentList(proofBundle.proofFiles, {
+    fallbackName: 'Proof file',
+    keepData: true,
+  });
+  const itemPhotos = sanitizeAttachmentList(proofBundle.itemPhotos, {
+    fallbackName: 'Item photo',
+    keepData: true,
+  });
+
+  return {
+    auctionId: String(options.auctionId || proofBundle.auctionId || ''),
+    seller: normalizeAddress(proofBundle.seller) || null,
+    token: toOptionalTrimmedString(proofBundle.token, 'ALEO'),
+    assetType: toNumber(proofBundle.assetType, 0),
+    summary: toOptionalTrimmedString(proofBundle.summary),
+    provenanceNote: toOptionalTrimmedString(proofBundle.provenanceNote),
+    authenticityGuarantee: toOptionalTrimmedString(proofBundle.authenticityGuarantee),
+    certificateId: toOptionalTrimmedString(proofBundle.certificateId),
+    proofFiles,
+    itemPhotos,
+    proofFilesCount: proofFiles.length,
+    itemPhotosCount: itemPhotos.length,
+    createdAt: toOptionalTrimmedString(proofBundle.createdAt, now),
+    updatedAt: now,
+  };
 }
 
 function generateId(prefix) {
@@ -571,6 +719,24 @@ function listAuctionSnapshots(db) {
 }
 
 function sanitizeSnapshot(snapshot) {
+  const sellerVerification = sanitizeSellerVerification({
+    ...(snapshot.sellerVerification || {}),
+    wallet: snapshot.sellerVerification?.wallet || snapshot.seller,
+    sellerDisplayName: snapshot.sellerDisplayName ?? snapshot.sellerVerification?.sellerDisplayName,
+    status: snapshot.verificationStatus ?? snapshot.sellerVerification?.status,
+  });
+  const assetProof = sanitizeAuctionProofBundle({
+    ...(snapshot.assetProof || {}),
+    auctionId: snapshot.id,
+    seller: snapshot.seller,
+    token: snapshot.token || snapshot.currency,
+    assetType: snapshot.assetType,
+    summary: snapshot.assetProof?.summary ?? snapshot.proofSummary,
+    provenanceNote: snapshot.assetProof?.provenanceNote ?? snapshot.provenanceNote,
+    authenticityGuarantee: snapshot.assetProof?.authenticityGuarantee ?? snapshot.authenticityGuarantee,
+    certificateId: snapshot.assetProof?.certificateId ?? snapshot.certificateId,
+  });
+
   return {
     id: String(snapshot.id),
     title: snapshot.title || `Auction #${snapshot.id}`,
@@ -609,20 +775,31 @@ function sanitizeSnapshot(snapshot) {
     confirmationTimeout: toNumber(snapshot.confirmationTimeout, 0),
     assetType: toNumber(snapshot.assetType, 0),
     currencyType: toNumber(snapshot.currencyType, 1),
-    itemPhotosCount: toNumber(snapshot.itemPhotosCount, 0),
-    proofFilesCount: toNumber(snapshot.proofFilesCount, 0),
-    verificationStatus: snapshot.verificationStatus || 'pending',
+    sellerVerification,
+    sellerDisplayName: snapshot.sellerDisplayName || sellerVerification.sellerDisplayName,
+    assetProof,
+    itemPhotosCount: toNumber(snapshot.itemPhotosCount, assetProof.itemPhotosCount),
+    proofFilesCount: toNumber(snapshot.proofFilesCount, assetProof.proofFilesCount),
+    verificationStatus: snapshot.verificationStatus || sellerVerification.status || 'pending',
     updatedAt: new Date().toISOString(),
   };
 }
 
-function createHealthPayload({ serviceName, environment, storageDriver, db }) {
+function createHealthPayload({ serviceName, environment, storageDriver, db, storageInfo = null }) {
   return {
     ok: true,
     service: serviceName,
     environment,
     storageDriver,
     platformAddress: PLATFORM_ADDRESS,
+    database: {
+      schemaVersion: toNumber(db.meta?.schemaVersion, OPS_DB_SCHEMA_VERSION),
+      revision: toNumber(db.meta?.revision, 0),
+      createdAt: db.meta?.createdAt || null,
+      updatedAt: db.meta?.updatedAt || null,
+      lastMigrationAt: db.meta?.lastMigrationAt || null,
+    },
+    storage: storageInfo,
     totals: {
       auctions: Object.keys(db.auctions || {}).length,
       disputes: Object.keys(db.disputes || {}).length,
@@ -657,7 +834,10 @@ async function runOpsRoute({
   body,
 }) {
   if (method === 'GET' && pathname === '/api/health') {
-    const db = await storage.loadDb();
+    const [db, storageInfo] = await Promise.all([
+      storage.loadDb(),
+      typeof storage.getInfo === 'function' ? storage.getInfo() : Promise.resolve(null),
+    ]);
 
     return {
       status: 200,
@@ -666,6 +846,7 @@ async function runOpsRoute({
         environment,
         storageDriver,
         db,
+        storageInfo,
       }),
     };
   }
@@ -914,12 +1095,11 @@ async function runOpsRoute({
     }
 
     if (method === 'PUT') {
-      db.sellerVerifications[wallet] = {
+      db.sellerVerifications[wallet] = sanitizeSellerVerification({
         ...(db.sellerVerifications[wallet] || {}),
         ...(body || {}),
         wallet,
-        updatedAt: new Date().toISOString(),
-      };
+      }, { wallet });
       await storage.saveDb(db);
 
       return {
@@ -947,12 +1127,11 @@ async function runOpsRoute({
     }
 
     if (method === 'PUT') {
-      db.auctionProofs[auctionId] = {
+      db.auctionProofs[auctionId] = sanitizeAuctionProofBundle({
         ...(db.auctionProofs[auctionId] || {}),
         ...(body || {}),
         auctionId,
-        updatedAt: new Date().toISOString(),
-      };
+      }, { auctionId });
       await storage.saveDb(db);
 
       return {
@@ -1090,13 +1269,21 @@ async function runOpsRoute({
       db.disputes[disputeId] = {
         id: disputeId,
         auctionId,
+        auctionTitle: toOptionalTrimmedString(body?.auctionTitle),
+        auctionStatus: toOptionalTrimmedString(body?.auctionStatus),
+        contractState: toOptionalTrimmedString(body?.contractState),
         wallet,
         seller: body?.seller || null,
+        sellerDisplayName: toOptionalTrimmedString(body?.sellerDisplayName),
         role: body?.role || 'bidder',
+        token: toOptionalTrimmedString(body?.token),
         title: body?.title || 'Dispute opened',
         description: body?.description || '',
         evidence: Array.isArray(body?.evidence) ? body.evidence : [],
         status: body?.status || 'open',
+        requestedResolution: toOptionalTrimmedString(body?.requestedResolution),
+        onChainDisputeRoot: toOptionalTrimmedString(body?.onChainDisputeRoot),
+        onChainTransactionId: toOptionalTrimmedString(body?.onChainTransactionId),
         timeline: [
           {
             at: new Date().toISOString(),
@@ -1145,9 +1332,17 @@ async function runOpsRoute({
       ...(body || {}),
       id: disputeId,
       auctionId: existingDispute.auctionId,
+      auctionTitle: body?.auctionTitle ?? existingDispute.auctionTitle ?? null,
+      auctionStatus: body?.auctionStatus ?? existingDispute.auctionStatus ?? null,
+      contractState: body?.contractState ?? existingDispute.contractState ?? null,
       wallet: existingDispute.wallet,
       seller: body?.seller ?? existingDispute.seller,
+      sellerDisplayName: body?.sellerDisplayName ?? existingDispute.sellerDisplayName ?? null,
+      token: body?.token ?? existingDispute.token ?? null,
       evidence: Array.isArray(body?.evidence) ? body.evidence : existingDispute.evidence,
+      requestedResolution: body?.requestedResolution ?? existingDispute.requestedResolution ?? null,
+      onChainDisputeRoot: body?.onChainDisputeRoot ?? existingDispute.onChainDisputeRoot ?? null,
+      onChainTransactionId: body?.onChainTransactionId ?? existingDispute.onChainTransactionId ?? null,
       timeline: [
         ...(Array.isArray(existingDispute.timeline) ? existingDispute.timeline : []),
         ...appendedTimelineEntries.filter((entry) => entry && typeof entry === 'object'),
@@ -1374,7 +1569,7 @@ export function createOpsHttpHandler({
         }
       }
 
-      const result = await runOpsRoute({
+      const executeRoute = () => runOpsRoute({
         storage,
         serviceName,
         environment,
@@ -1384,6 +1579,9 @@ export function createOpsHttpHandler({
         searchParams: url.searchParams,
         body,
       });
+      const result = method === 'GET' || typeof storage.withExclusive !== 'function'
+        ? await executeRoute()
+        : await storage.withExclusive(executeRoute);
 
       sendJson(response, result.status, result.payload, corsHeaders);
     } catch (error) {
@@ -1428,7 +1626,7 @@ export function createOpsFetchHandler({
         }
       }
 
-      const result = await runOpsRoute({
+      const executeRoute = () => runOpsRoute({
         storage,
         serviceName,
         environment,
@@ -1438,6 +1636,9 @@ export function createOpsFetchHandler({
         searchParams: url.searchParams,
         body,
       });
+      const result = method === 'GET' || typeof storage.withExclusive !== 'function'
+        ? await executeRoute()
+        : await storage.withExclusive(executeRoute);
 
       return createJsonResponse(result.status, result.payload, corsHeaders);
     } catch (error) {

@@ -125,6 +125,7 @@ npm run build:contracts
 - [contracts/README.md](contracts/README.md) summarizes the active `v2.22` Leo program
 - [docs/README.md](docs/README.md) indexes the guides moved out of the app folder
 - [docs/frontend/ops-console.md](docs/frontend/ops-console.md) explains what `Ops Console` is, how it works, and how it is wired into the repo
+- [docs/frontend/wave-5-milestone.md](docs/frontend/wave-5-milestone.md) turns the Wave 5 trust, ops, and premium UX goal into a `must ship` backlog on top of `v2.22`
 - [docs/contracts/autonomous-lifecycle-design.md](docs/contracts/autonomous-lifecycle-design.md) proposes the next contract/protocol path for delegated reveal, encrypted reveal escrow, and non-reveal fallback
 - [docs/contracts/privacy-remediation-roadmap.md](docs/contracts/privacy-remediation-roadmap.md) captures the concrete follow-up needed to make bid amounts actually private on-chain
 - [docs/contracts/v2.23-private-escrow-proposal.md](docs/contracts/v2.23-private-escrow-proposal.md) preserves the paused `USDCx`-private-first design as a reference proposal for a possible future reopen

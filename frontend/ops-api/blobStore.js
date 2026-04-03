@@ -1,7 +1,7 @@
 /* global process */
 import crypto from 'node:crypto';
 import { del, get, list, put } from '@vercel/blob';
-import { createDefaultDb, deserializeDb, serializeDb } from './core.js';
+import { createDefaultDb, deserializeDb, prepareDbForSave, serializeDb } from './core.js';
 
 const configuredPrefix = process.env.OPS_BLOB_PREFIX?.trim() || 'shadowbid-ops/snapshots';
 const SNAPSHOT_PREFIX = configuredPrefix.replace(/^\/+/, '').replace(/\/?$/, '/');
@@ -124,25 +124,45 @@ async function pruneSnapshots(snapshots) {
 }
 
 export function createBlobStore() {
+  let operationQueue = Promise.resolve();
+
+  function withExclusive(callback) {
+    const run = operationQueue.then(callback, callback);
+    operationQueue = run.catch(() => {});
+    return run;
+  }
+
   const store = {
+    withExclusive,
+
     async loadDb() {
       const snapshots = await listSnapshots();
-      const latestSnapshot = snapshots.at(-1);
 
-      if (!latestSnapshot) {
+      if (snapshots.length === 0) {
         const defaultDb = createDefaultDb();
         await store.saveDb(defaultDb);
         return defaultDb;
       }
 
-      return readLatestSnapshot(latestSnapshot.pathname);
+      let lastError = null;
+
+      for (let index = snapshots.length - 1; index >= 0; index -= 1) {
+        try {
+          return await readLatestSnapshot(snapshots[index].pathname);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw new Error(lastError instanceof Error ? lastError.message : 'Unable to load any Blob snapshot');
     },
 
     async saveDb(db) {
       const access = await resolveAccessMode();
+      const persistedDb = prepareDbForSave(db);
 
       // Immutable snapshots avoid stale reads when Blob content is cached globally.
-      await put(createSnapshotPathname(), serializeDb(db), {
+      await put(createSnapshotPathname(), serializeDb(persistedDb), {
         access,
         addRandomSuffix: false,
         contentType: 'application/json',
@@ -152,6 +172,22 @@ export function createBlobStore() {
       if (snapshots.length > MAX_SNAPSHOTS) {
         await pruneSnapshots(snapshots);
       }
+
+      return persistedDb;
+    },
+
+    async getInfo() {
+      const snapshots = await listSnapshots();
+      const latestSnapshot = snapshots.at(-1) || null;
+
+      return {
+        mode: 'blob',
+        prefix: SNAPSHOT_PREFIX,
+        snapshots: snapshots.length,
+        latestSnapshot: latestSnapshot?.pathname || null,
+        maxSnapshots: MAX_SNAPSHOTS,
+        exclusiveWrites: true,
+      };
     },
   };
 

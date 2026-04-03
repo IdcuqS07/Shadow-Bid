@@ -308,6 +308,41 @@ export default function AdminDashboardV3() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-cyan-300" />
+                Ops Backend Health
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-slate-200">
+              <div className="flex items-center justify-between gap-3">
+                <span>Environment</span>
+                <span className="font-mono text-cyan-300">{health?.environment || 'unknown'}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Storage driver</span>
+                <span className="font-mono text-cyan-300">{health?.storageDriver || 'unknown'}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Storage mode</span>
+                <span className="font-mono text-cyan-300">{health?.storage?.mode || 'unknown'}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Schema version</span>
+                <span className="font-mono text-cyan-300">{health?.database?.schemaVersion ?? 'n/a'}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Revision</span>
+                <span className="font-mono text-cyan-300">{health?.database?.revision ?? 'n/a'}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Last persisted</span>
+                <span className="font-mono text-cyan-300">{health?.database?.updatedAt || 'Unknown'}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
                 <ChartColumn className="h-5 w-5 text-green-300" />
                 Revenue Snapshot
               </CardTitle>
@@ -388,9 +423,48 @@ export default function AdminDashboardV3() {
                       <span className="font-mono text-[11px] text-slate-400">{dispute.createdAt}</span>
                     </div>
                     <div className="mt-2 line-clamp-3 text-xs text-slate-300">{dispute.description}</div>
+                    {(dispute.auctionTitle || dispute.token || dispute.contractState) && (
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-mono uppercase tracking-[0.16em] text-slate-400">
+                        {dispute.auctionTitle && (
+                          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1">
+                            {dispute.auctionTitle}
+                          </span>
+                        )}
+                        {dispute.token && (
+                          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1">
+                            {dispute.token}
+                          </span>
+                        )}
+                        {dispute.contractState && (
+                          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1">
+                            {dispute.contractState}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {dispute.onChainDisputeRoot && (
                       <div className="mt-2 break-all font-mono text-[11px] text-cyan-300">
                         {dispute.onChainDisputeRoot}
+                      </div>
+                    )}
+                    {dispute.onChainTransactionId && (
+                      <div className="mt-1 break-all font-mono text-[11px] text-cyan-200">
+                        Tx: {dispute.onChainTransactionId}
+                      </div>
+                    )}
+                    {Array.isArray(dispute.timeline) && dispute.timeline.length > 0 && (
+                      <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
+                        {dispute.timeline.slice(-2).reverse().map((entry, index) => (
+                          <div key={`${dispute.id}-ops-timeline-${index}`} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-xs font-semibold text-white">{entry.label || 'Timeline update'}</span>
+                              <span className="font-mono text-[10px] text-slate-500">{entry.at || 'Unknown'}</span>
+                            </div>
+                            {entry.note && (
+                              <div className="mt-1 text-xs text-slate-300">{entry.note}</div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                     <div className="mt-3 flex flex-wrap gap-2">

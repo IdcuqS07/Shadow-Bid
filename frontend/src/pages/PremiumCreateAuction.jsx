@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { useMultiCurrencyBalance } from '@/hooks/useMultiCurrencyBalance';
@@ -12,6 +12,7 @@ import {
   upsertSellerProfileOnChain,
 } from '@/services/aleoServiceV2';
 import {
+  getSellerVerification,
   syncAuctionRole,
   syncAuctionSnapshot,
   upsertAuctionProofBundle,
@@ -163,6 +164,42 @@ export default function PremiumCreateAuction() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [itemPhotos, setItemPhotos] = useState([]); // NEW: Item photos for RWA
   const [supportingProofs, setSupportingProofs] = useState([]);
+
+  useEffect(() => {
+    if (!address) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const loadSellerVerification = async () => {
+      const existingVerification = await getSellerVerification(address);
+      if (isCancelled || !existingVerification) {
+        return;
+      }
+
+      setFormData((previous) => ({
+        ...previous,
+        sellerDisplayName: previous.sellerDisplayName || existingVerification.sellerDisplayName || '',
+        verificationStatus: previous.verificationStatus === EMPTY_FORM_DATA.verificationStatus
+          ? (existingVerification.status || previous.verificationStatus)
+          : previous.verificationStatus,
+        verificationTier: previous.verificationTier === EMPTY_FORM_DATA.verificationTier
+          ? (existingVerification.tier || previous.verificationTier)
+          : previous.verificationTier,
+        issuingAuthority: previous.issuingAuthority || existingVerification.issuingAuthority || '',
+        certificateId: previous.certificateId || existingVerification.certificateId || '',
+        provenanceNote: previous.provenanceNote || existingVerification.provenanceNote || '',
+        authenticityGuarantee: previous.authenticityGuarantee || existingVerification.authenticityGuarantee || '',
+      }));
+    };
+
+    loadSellerVerification();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [address]);
 
   const minimumBidAmount = parseDisplayAmount(formData.minBid);
   const reserveBasisAmount = formData.reservePrice
@@ -427,6 +464,13 @@ export default function PremiumCreateAuction() {
           totalEscrowedMicro: 0,
           assetType: parseInt(formData.assetType, 10),
           currencyType,
+          sellerVerification,
+          assetProof: {
+            summary: assetProof.summary,
+            provenanceNote: assetProof.provenanceNote,
+            authenticityGuarantee: assetProof.authenticityGuarantee,
+            certificateId: assetProof.certificateId,
+          },
           itemPhotosCount: itemPhotos.length,
           proofFilesCount: supportingProofs.length,
           verificationStatus: sellerVerification.status,

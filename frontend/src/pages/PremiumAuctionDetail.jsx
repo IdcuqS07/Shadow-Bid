@@ -517,6 +517,60 @@ function mergeAuctionMetadata(localMetadata, sharedMetadata) {
   };
 }
 
+function mergeSellerVerification(primary, fallback) {
+  if (!primary) {
+    return fallback || null;
+  }
+
+  if (!fallback) {
+    return primary;
+  }
+
+  return {
+    ...fallback,
+    ...primary,
+    sellerDisplayName: primary.sellerDisplayName || fallback.sellerDisplayName || null,
+    status: primary.status || fallback.status || 'pending',
+    tier: primary.tier || fallback.tier || 'standard',
+    issuingAuthority: primary.issuingAuthority || fallback.issuingAuthority || null,
+    certificateId: primary.certificateId || fallback.certificateId || null,
+    provenanceNote: primary.provenanceNote || fallback.provenanceNote || null,
+    authenticityGuarantee: primary.authenticityGuarantee || fallback.authenticityGuarantee || null,
+  };
+}
+
+function mergeAuctionProofBundle(primary, fallback) {
+  if (!primary) {
+    return fallback || null;
+  }
+
+  if (!fallback) {
+    return primary;
+  }
+
+  const primaryProofFiles = Array.isArray(primary.proofFiles) ? primary.proofFiles : [];
+  const fallbackProofFiles = Array.isArray(fallback.proofFiles) ? fallback.proofFiles : [];
+  const primaryItemPhotos = Array.isArray(primary.itemPhotos) ? primary.itemPhotos : [];
+  const fallbackItemPhotos = Array.isArray(fallback.itemPhotos) ? fallback.itemPhotos : [];
+
+  return {
+    ...fallback,
+    ...primary,
+    summary: primary.summary || fallback.summary || null,
+    provenanceNote: primary.provenanceNote || fallback.provenanceNote || null,
+    authenticityGuarantee: primary.authenticityGuarantee || fallback.authenticityGuarantee || null,
+    certificateId: primary.certificateId || fallback.certificateId || null,
+    proofFiles: primaryProofFiles.length > 0 ? primaryProofFiles : fallbackProofFiles,
+    itemPhotos: primaryItemPhotos.length > 0 ? primaryItemPhotos : fallbackItemPhotos,
+    proofFilesCount: primaryProofFiles.length > 0
+      ? primaryProofFiles.length
+      : Number(fallback.proofFilesCount || fallbackProofFiles.length || 0),
+    itemPhotosCount: primaryItemPhotos.length > 0
+      ? primaryItemPhotos.length
+      : Number(fallback.itemPhotosCount || fallbackItemPhotos.length || 0),
+  };
+}
+
 function hasSubmittedTransaction(commitmentData) {
   return Boolean(
     commitmentData &&
@@ -1095,8 +1149,8 @@ export default function PremiumAuctionDetail() {
         return;
       }
 
-      setSellerVerification(verification || auction.sellerVerification || null);
-      setAuctionProofBundle(proofBundle || auction.assetProof || null);
+      setSellerVerification(mergeSellerVerification(verification, auction.sellerVerification));
+      setAuctionProofBundle(mergeAuctionProofBundle(proofBundle, auction.assetProof));
       setOnChainSellerProfile(sellerProfile);
       setOnChainProofRoot(proofRoot);
       setOnChainDisputeRoot(disputeRoot);
@@ -1199,14 +1253,36 @@ export default function PremiumAuctionDetail() {
       await syncAuctionSnapshot({
         ...auction,
         creator: auction.creator || auction.seller,
-        sellerDisplayName: auction.sellerDisplayName || sellerVerification?.sellerDisplayName || null,
-        itemPhotosCount: Array.isArray(auction.itemPhotos) ? auction.itemPhotos.length : 0,
-        proofFilesCount: Array.isArray(auctionProofBundle?.proofFiles)
-          ? auctionProofBundle.proofFiles.length
+        sellerDisplayName: mergeSellerVerification(sellerVerification, auction.sellerVerification)?.sellerDisplayName
+          || auction.sellerDisplayName
+          || null,
+        sellerVerification: mergeSellerVerification(sellerVerification, auction.sellerVerification),
+        assetProof: (() => {
+          const resolvedProofBundle = mergeAuctionProofBundle(auctionProofBundle, auction.assetProof);
+          if (!resolvedProofBundle) {
+            return null;
+          }
+
+          return {
+            summary: resolvedProofBundle.summary,
+            provenanceNote: resolvedProofBundle.provenanceNote,
+            authenticityGuarantee: resolvedProofBundle.authenticityGuarantee,
+            certificateId: resolvedProofBundle.certificateId,
+          };
+        })(),
+        itemPhotosCount: Array.isArray(mergeAuctionProofBundle(auctionProofBundle, auction.assetProof)?.itemPhotos)
+          ? mergeAuctionProofBundle(auctionProofBundle, auction.assetProof).itemPhotos.length
+          : Array.isArray(auction.itemPhotos)
+            ? auction.itemPhotos.length
+            : 0,
+        proofFilesCount: Array.isArray(mergeAuctionProofBundle(auctionProofBundle, auction.assetProof)?.proofFiles)
+          ? mergeAuctionProofBundle(auctionProofBundle, auction.assetProof).proofFiles.length
           : Array.isArray(auction.proofFiles)
             ? auction.proofFiles.length
             : 0,
-        verificationStatus: sellerVerification?.status || auction.sellerVerification?.status || 'pending',
+        verificationStatus: mergeSellerVerification(sellerVerification, auction.sellerVerification)?.status
+          || auction.sellerVerification?.status
+          || 'pending',
       });
 
       if (address && roles.length > 0) {
@@ -1222,9 +1298,9 @@ export default function PremiumAuctionDetail() {
   }, [
     address,
     auction,
-    auctionProofBundle?.proofFiles,
+    auctionProofBundle,
     pendingCommitmentData,
-    sellerVerification?.status,
+    sellerVerification,
     storedCommitmentData,
     submittedCommitmentData,
   ]);
@@ -2665,9 +2741,14 @@ export default function PremiumAuctionDetail() {
 
     const createdDispute = await createDispute({
       auctionId,
+      auctionTitle: auction?.title || null,
+      auctionStatus: auction?.status || null,
+      contractState: auction?.contractState || null,
       wallet: address,
       seller: auction?.seller || null,
+      sellerDisplayName: sellerDisplayName || null,
       role: disputeRole,
+      token: auction?.token || null,
       title: disputeForm.title,
       description: disputeForm.description,
       evidence,
@@ -2815,14 +2896,18 @@ export default function PremiumAuctionDetail() {
         ? 'Thank you for participating. Another bidder has been confirmed as the winner of this auction.'
         : 'A winning bidder has been confirmed for this auction.'
     : null;
-  const resolvedSellerVerification = sellerVerification || auction?.sellerVerification || null;
-  const resolvedProofBundle = auctionProofBundle || auction?.assetProof || null;
+  const resolvedSellerVerification = mergeSellerVerification(sellerVerification, auction?.sellerVerification);
+  const resolvedProofBundle = mergeAuctionProofBundle(auctionProofBundle, auction?.assetProof);
   const proofFiles = Array.isArray(resolvedProofBundle?.proofFiles)
     ? resolvedProofBundle.proofFiles
     : Array.isArray(auction?.proofFiles)
       ? auction.proofFiles
       : [];
-  const itemPhotos = Array.isArray(auction?.itemPhotos) ? auction.itemPhotos : [];
+  const itemPhotos = Array.isArray(resolvedProofBundle?.itemPhotos)
+    ? resolvedProofBundle.itemPhotos
+    : Array.isArray(auction?.itemPhotos)
+      ? auction.itemPhotos
+      : [];
   const sellerDisplayName = auction?.sellerDisplayName || resolvedSellerVerification?.sellerDisplayName || null;
   const sellerAddressPreview = formatAddressPreview(auction?.seller);
   const verificationStatus = resolvedSellerVerification?.status || 'pending';
@@ -3660,9 +3745,55 @@ export default function PremiumAuctionDetail() {
                         <span className="text-[11px] font-mono text-white/45">{dispute.createdAt}</span>
                       </div>
                       <div className="mt-3 text-sm leading-relaxed text-white/70">{dispute.description}</div>
+                      {(dispute.auctionTitle || dispute.token || dispute.contractState) && (
+                        <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-mono uppercase tracking-[0.16em] text-white/45">
+                          {dispute.auctionTitle && (
+                            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1">
+                              {dispute.auctionTitle}
+                            </span>
+                          )}
+                          {dispute.token && (
+                            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1">
+                              {dispute.token}
+                            </span>
+                          )}
+                          {dispute.contractState && (
+                            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1">
+                              {dispute.contractState}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {Array.isArray(dispute.evidence) && dispute.evidence.length > 0 && (
                         <div className="mt-3 text-xs text-cyan-200">
                           Evidence: {dispute.evidence.join(' • ')}
+                        </div>
+                      )}
+                      {dispute.onChainDisputeRoot && (
+                        <div className="mt-3 break-all rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 font-mono text-[11px] text-cyan-100">
+                          Root: {dispute.onChainDisputeRoot}
+                        </div>
+                      )}
+                      {dispute.onChainTransactionId && (
+                        <div className="mt-2 break-all text-[11px] font-mono text-cyan-300">
+                          Tx: {dispute.onChainTransactionId}
+                        </div>
+                      )}
+                      {Array.isArray(dispute.timeline) && dispute.timeline.length > 0 && (
+                        <div className="mt-4 space-y-2 border-t border-white/5 pt-3">
+                          {dispute.timeline.slice(-3).reverse().map((entry, index) => (
+                            <div key={`${dispute.id}-timeline-${index}`} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-xs font-semibold text-white">{entry.label || 'Timeline update'}</span>
+                                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/35">
+                                  {entry.at || 'Unknown'}
+                                </span>
+                              </div>
+                              {entry.note && (
+                                <div className="mt-1 text-xs leading-relaxed text-white/55">{entry.note}</div>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
