@@ -307,6 +307,86 @@ function sanitizeAuctionProofBundle(value, options = {}) {
   };
 }
 
+function sanitizeWatchlist(value, options = {}) {
+  const watchlist = value && typeof value === 'object' ? value : {};
+  const wallet = normalizeAddress(options.wallet || watchlist.wallet);
+
+  return {
+    wallet,
+    auctionIds: dedupe(Array.isArray(watchlist.auctionIds) ? watchlist.auctionIds.map(String) : []),
+    sellers: dedupe(Array.isArray(watchlist.sellers) ? watchlist.sellers.map(normalizeAddress) : []),
+    categories: dedupe(Array.isArray(watchlist.categories) ? watchlist.categories.map((category) => String(category)) : []),
+    updatedAt: toOptionalTrimmedString(watchlist.updatedAt),
+  };
+}
+
+function sanitizeSavedSearchEntry(value, index = 0) {
+  const entry = value && typeof value === 'object' ? value : {};
+  const allowedFilters = new Set([
+    'all',
+    'active',
+    'open',
+    'awaiting-close',
+    'closed',
+    'challenge',
+    'disputed',
+    'settled',
+    'cancelled',
+    'ending-soon',
+  ]);
+  const categoryFilter = entry.categoryFilter === 'all' || entry.categoryFilter == null
+    ? 'all'
+    : String(entry.categoryFilter);
+  const fallbackLabel = entry.query
+    ? `Search: ${String(entry.query).trim()}`
+    : `Saved Filter ${index + 1}`;
+
+  return {
+    id: toOptionalTrimmedString(entry.id, `search_${index + 1}`),
+    label: toOptionalTrimmedString(entry.label, fallbackLabel),
+    query: toOptionalTrimmedString(entry.query, ''),
+    filter: allowedFilters.has(entry.filter) ? entry.filter : 'all',
+    categoryFilter,
+    savedAt: toOptionalTrimmedString(entry.savedAt, new Date().toISOString()),
+  };
+}
+
+function sanitizeSavedSearchCollection(value, options = {}) {
+  const collection = value && typeof value === 'object' ? value : {};
+  const wallet = normalizeAddress(options.wallet || collection.wallet);
+
+  return {
+    wallet,
+    searches: Array.isArray(collection.searches)
+      ? collection.searches.map((entry, index) => sanitizeSavedSearchEntry(entry, index)).slice(0, 12)
+      : [],
+    updatedAt: toOptionalTrimmedString(collection.updatedAt),
+  };
+}
+
+function getAssetCategoryLabel(assetType) {
+  switch (String(assetType)) {
+    case '0':
+      return 'Physical';
+    case '1':
+      return 'Collectibles';
+    case '2':
+      return 'Real Estate';
+    case '3':
+      return 'Digital';
+    case '4':
+      return 'Services';
+    case '5':
+      return 'Tickets';
+    case '6':
+      return 'Vehicles';
+    case '7':
+      return 'IP';
+    default:
+      return 'Category';
+  }
+}
+
 function generateId(prefix) {
   return `${prefix}_${crypto.randomUUID()}`;
 }
@@ -341,6 +421,11 @@ function sortNotifications(notifications) {
   };
 
   return notifications.sort((left, right) => {
+    const readDelta = Number(Boolean(left.read)) - Number(Boolean(right.read));
+    if (readDelta !== 0) {
+      return readDelta;
+    }
+
     const urgencyDelta = (priorityMap[left.urgency] ?? 99) - (priorityMap[right.urgency] ?? 99);
     if (urgencyDelta !== 0) {
       return urgencyDelta;
@@ -348,6 +433,110 @@ function sortNotifications(notifications) {
 
     return String(right.createdAt || '').localeCompare(String(left.createdAt || ''));
   });
+}
+
+function getAuctionWatchSignals(db, auction, wallet) {
+  const normalizedWallet = normalizeAddress(wallet);
+  if (!normalizedWallet) {
+    return {
+      hasMatch: false,
+      matchedAuction: false,
+      matchedSeller: false,
+      matchedCategory: false,
+      sourceLabel: null,
+      contextLabel: null,
+      matchedReasons: [],
+    };
+  }
+
+  const watchlist = sanitizeWatchlist(db.watchlists?.[normalizedWallet], { wallet: normalizedWallet });
+  const normalizedAuctionId = String(auction.id);
+  const normalizedSeller = normalizeAddress(auction.seller);
+  const normalizedCategory = String(toNumber(auction.assetType, 0));
+  const matchedAuction = watchlist.auctionIds.includes(normalizedAuctionId);
+  const matchedSeller = normalizedSeller ? watchlist.sellers.includes(normalizedSeller) : false;
+  const matchedCategory = watchlist.categories.includes(normalizedCategory);
+  const matchedReasons = [];
+
+  if (matchedAuction) {
+    matchedReasons.push('watched auction');
+  }
+  if (matchedSeller) {
+    matchedReasons.push('watched seller');
+  }
+  if (matchedCategory) {
+    matchedReasons.push(`${getAssetCategoryLabel(normalizedCategory)} category`);
+  }
+
+  const hasMatch = matchedReasons.length > 0;
+
+  return {
+    hasMatch,
+    matchedAuction,
+    matchedSeller,
+    matchedCategory,
+    sourceLabel: hasMatch ? 'Watchlist' : null,
+    contextLabel: hasMatch ? matchedReasons.join(' + ') : null,
+    matchedReasons,
+  };
+}
+
+function getNotificationAudience({ isSeller, isWinner, isBidder, isWatcher, isPlatform }) {
+  if (isSeller) {
+    return {
+      audience: 'seller',
+      audienceLabel: 'Seller',
+    };
+  }
+
+  if (isWinner) {
+    return {
+      audience: 'winner',
+      audienceLabel: 'Winner',
+    };
+  }
+
+  if (isBidder) {
+    return {
+      audience: 'bidder',
+      audienceLabel: 'Bidder',
+    };
+  }
+
+  if (isWatcher) {
+    return {
+      audience: 'watcher',
+      audienceLabel: 'Watcher',
+    };
+  }
+
+  if (isPlatform) {
+    return {
+      audience: 'platform',
+      audienceLabel: 'Platform',
+    };
+  }
+
+  return {
+    audience: 'participant',
+    audienceLabel: 'Participant',
+  };
+}
+
+function toIsoFromUnix(value) {
+  const parsedValue = toNumber(value, 0);
+  return parsedValue > 0
+    ? new Date(parsedValue * 1000).toISOString()
+    : null;
+}
+
+function getAuctionNotificationTimestamp(auction, fallbackUnix = null) {
+  return (
+    toOptionalTrimmedString(auction.updatedAt)
+    || toOptionalTrimmedString(auction.createdAt)
+    || toIsoFromUnix(fallbackUnix)
+    || new Date().toISOString()
+  );
 }
 
 function getAuctionRoles(db, auction, wallet) {
@@ -365,6 +554,10 @@ function getAuctionRoles(db, auction, wallet) {
 
   if (normalizeAddress(auction.winner) === normalizedWallet) {
     roles.add('winner');
+  }
+
+  if (getAuctionWatchSignals(db, auction, normalizedWallet).hasMatch) {
+    roles.add('watcher');
   }
 
   return roles;
@@ -590,12 +783,20 @@ function buildNotifications(db, wallet) {
 
   for (const auction of Object.values(db.auctions || {})) {
     const roles = getAuctionRoles(db, auction, normalizedWallet);
+    const watchSignals = getAuctionWatchSignals(db, auction, normalizedWallet);
     const endingIn = auction.endTimestamp ? auction.endTimestamp - now : null;
     const isBidder = roles.has('bidder');
     const isSeller = roles.has('seller');
     const isWinner = roles.has('winner');
     const isWatcher = roles.has('watcher');
     const isPlatform = normalizedWallet === normalizeAddress(PLATFORM_ADDRESS);
+    const audienceInfo = getNotificationAudience({
+      isSeller,
+      isWinner,
+      isBidder,
+      isWatcher,
+      isPlatform,
+    });
 
     const pushNotification = (type, payload) => {
       const notification = {
@@ -604,7 +805,12 @@ function buildNotifications(db, wallet) {
         auctionId: String(auction.id),
         auctionTitle: auction.title || `Auction #${auction.id}`,
         actionPath: `/premium-auction/${auction.id}`,
-        createdAt: new Date().toISOString(),
+        createdAt: payload.createdAt || getAuctionNotificationTimestamp(auction),
+        audience: payload.audience || audienceInfo.audience,
+        audienceLabel: payload.audienceLabel || audienceInfo.audienceLabel,
+        sourceKind: payload.sourceKind || (watchSignals.hasMatch ? 'watchlist' : 'lifecycle'),
+        sourceLabel: payload.sourceLabel || (watchSignals.hasMatch ? watchSignals.sourceLabel : 'Auction lifecycle'),
+        contextLabel: payload.contextLabel || (watchSignals.hasMatch ? watchSignals.contextLabel : null),
         ...payload,
       };
 
@@ -616,6 +822,22 @@ function buildNotifications(db, wallet) {
       }
     };
 
+    if (isWatcher && auction.status === 'open' && watchSignals.hasMatch) {
+      pushNotification('watchlist_match', {
+        urgency: endingIn !== null && endingIn > 0 && endingIn <= 7200 ? 'medium' : 'low',
+        title: watchSignals.matchedAuction ? 'Watched auction is live' : 'Watchlist match is live',
+        description: watchSignals.matchedAuction
+          ? `${auction.title} is active in your premium watchlist.`
+          : `${auction.title} matches ${watchSignals.contextLabel || 'your watchlist'}.`,
+        sourceKind: 'watchlist',
+        sourceLabel: watchSignals.sourceLabel,
+        contextLabel: watchSignals.contextLabel,
+        audience: 'watcher',
+        audienceLabel: 'Watcher',
+        createdAt: getAuctionNotificationTimestamp(auction, auction.endTimestamp),
+      });
+    }
+
     if (
       endingIn !== null &&
       endingIn > 0 &&
@@ -626,6 +848,7 @@ function buildNotifications(db, wallet) {
         urgency: endingIn <= 900 ? 'high' : 'medium',
         title: 'Auction ending soon',
         description: `${auction.title} closes in ${formatTimeDistance(endingIn)}.`,
+        createdAt: toIsoFromUnix(Math.max(auction.endTimestamp - 7200, 0)),
       });
     }
 
@@ -634,6 +857,7 @@ function buildNotifications(db, wallet) {
         urgency: 'high',
         title: 'Close auction now',
         description: 'Auction end time passed and seller action is required to close it.',
+        createdAt: toIsoFromUnix(auction.endTimestamp),
       });
     }
 
@@ -642,6 +866,7 @@ function buildNotifications(db, wallet) {
         urgency: 'medium',
         title: 'You are the current winner',
         description: 'You appear as the winner in the current on-chain auction state.',
+        createdAt: getAuctionNotificationTimestamp(auction, auction.settledAt || auction.disputeDeadline),
       });
     }
 
@@ -650,6 +875,7 @@ function buildNotifications(db, wallet) {
         urgency: 'medium',
         title: 'Reserve was not met',
         description: 'Seller can cancel the auction and let bidders claim refunds.',
+        createdAt: getAuctionNotificationTimestamp(auction, auction.disputeDeadline || auction.endTimestamp),
       });
     }
 
@@ -666,6 +892,7 @@ function buildNotifications(db, wallet) {
         urgency: 'high',
         title: 'Seller claim is available',
         description: 'The seller can now claim the net settlement amount.',
+        createdAt: getAuctionNotificationTimestamp(auction, auction.claimableAt || auction.itemReceivedAt || auction.settledAt),
       });
     }
 
@@ -680,6 +907,7 @@ function buildNotifications(db, wallet) {
         urgency: 'medium',
         title: 'Refund is available',
         description: 'A bidder refund path is now available for this auction.',
+        createdAt: getAuctionNotificationTimestamp(auction, auction.settledAt || auction.disputeDeadline || auction.endTimestamp),
       });
     }
 
@@ -695,6 +923,24 @@ function buildNotifications(db, wallet) {
         title: 'Platform fee can be claimed',
         description: 'The settled platform fee is available to claim.',
         actionPath: '/ops',
+        createdAt: getAuctionNotificationTimestamp(auction, auction.paymentClaimedAt || auction.settledAt),
+      });
+    }
+
+    if (
+      (isWatcher || isBidder || isSeller) &&
+      (toNumber(auction.proofFilesCount, 0) > 0 || auction.verificationStatus === 'verified')
+    ) {
+      pushNotification('proof_bundle_ready', {
+        urgency: 'low',
+        title: 'Proof bundle is attached',
+        description: 'Seller verification metadata and supporting proof files are available for review.',
+        sourceKind: 'trust',
+        sourceLabel: 'Proof bundle',
+        contextLabel: toNumber(auction.proofFilesCount, 0) > 0
+          ? `${toNumber(auction.proofFilesCount, 0)} files`
+          : 'Verification ready',
+        createdAt: getAuctionNotificationTimestamp(auction),
       });
     }
   }
@@ -1041,11 +1287,15 @@ async function runOpsRoute({
     const action = notificationMatch[2];
 
     if (method === 'GET' && !action) {
+      const nextNotificationState = getWalletNotificationState(db, wallet);
+      const notificationResponse = buildNotifications(db, wallet);
+
       return {
         status: 200,
         payload: {
           ok: true,
-          ...buildNotifications(db, wallet),
+          ...notificationResponse,
+          state: nextNotificationState,
         },
       };
     }
@@ -1153,25 +1403,18 @@ async function runOpsRoute({
         status: 200,
         payload: {
           ok: true,
-          watchlist: db.watchlists[wallet] || {
-            wallet,
-            auctionIds: [],
-            sellers: [],
-            categories: [],
-            updatedAt: null,
-          },
+          watchlist: sanitizeWatchlist(db.watchlists[wallet], { wallet }),
         },
       };
     }
 
     if (method === 'PUT') {
-      db.watchlists[wallet] = {
+      db.watchlists[wallet] = sanitizeWatchlist({
+        ...(db.watchlists[wallet] || {}),
+        ...(body || {}),
         wallet,
-        auctionIds: dedupe(Array.isArray(body?.auctionIds) ? body.auctionIds.map(String) : []),
-        sellers: dedupe(Array.isArray(body?.sellers) ? body.sellers : []),
-        categories: dedupe(Array.isArray(body?.categories) ? body.categories.map(String) : []),
         updatedAt: new Date().toISOString(),
-      };
+      }, { wallet });
       await storage.saveDb(db);
 
       return {
@@ -1193,21 +1436,18 @@ async function runOpsRoute({
         status: 200,
         payload: {
           ok: true,
-          savedSearches: db.savedSearches[wallet] || {
-            wallet,
-            searches: [],
-            updatedAt: null,
-          },
+          savedSearches: sanitizeSavedSearchCollection(db.savedSearches[wallet], { wallet }),
         },
       };
     }
 
     if (method === 'PUT') {
-      db.savedSearches[wallet] = {
+      db.savedSearches[wallet] = sanitizeSavedSearchCollection({
+        ...(db.savedSearches[wallet] || {}),
+        ...(body || {}),
         wallet,
-        searches: Array.isArray(body?.searches) ? body.searches : [],
         updatedAt: new Date().toISOString(),
-      };
+      }, { wallet });
       await storage.saveDb(db);
 
       return {

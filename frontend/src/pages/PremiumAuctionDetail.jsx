@@ -672,6 +672,10 @@ function formatAddressPreview(value, start = 10, end = 6) {
   return `${value.slice(0, start)}...${value.slice(-end)}`;
 }
 
+function normalizeWalletAddress(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
 export default function PremiumAuctionDetail() {
   const { auctionId } = useParams();
   const navigate = useNavigate();
@@ -2641,6 +2645,15 @@ export default function PremiumAuctionDetail() {
     );
   };
 
+  const persistWatchlist = async (nextWatchlist) => {
+    setWatchlist(nextWatchlist);
+    const persistedWatchlist = await saveWatchlist(address, nextWatchlist);
+
+    if (persistedWatchlist) {
+      setWatchlist(persistedWatchlist);
+    }
+  };
+
   const handleToggleWatchlist = async () => {
     if (!address) {
       alert('Connect your wallet first to save this auction.');
@@ -2656,8 +2669,49 @@ export default function PremiumAuctionDetail() {
       auctionIds: nextAuctionIds,
     };
 
-    setWatchlist(nextWatchlist);
-    await saveWatchlist(address, nextWatchlist);
+    await persistWatchlist(nextWatchlist);
+  };
+
+  const handleToggleSellerWatch = async () => {
+    if (!address) {
+      alert('Connect your wallet first to follow this seller.');
+      return;
+    }
+
+    const normalizedSeller = normalizeWalletAddress(auction?.seller);
+    if (!normalizedSeller) {
+      return;
+    }
+
+    const nextSellers = watchlist.sellers.includes(normalizedSeller)
+      ? watchlist.sellers.filter((value) => value !== normalizedSeller)
+      : [...watchlist.sellers, normalizedSeller];
+
+    await persistWatchlist({
+      ...watchlist,
+      sellers: nextSellers,
+    });
+  };
+
+  const handleToggleCategoryWatch = async () => {
+    if (!address) {
+      alert('Connect your wallet first to follow this category.');
+      return;
+    }
+
+    const normalizedCategory = String(auction?.assetType ?? '');
+    if (!normalizedCategory) {
+      return;
+    }
+
+    const nextCategories = watchlist.categories.includes(normalizedCategory)
+      ? watchlist.categories.filter((value) => value !== normalizedCategory)
+      : [...watchlist.categories, normalizedCategory];
+
+    await persistWatchlist({
+      ...watchlist,
+      categories: nextCategories,
+    });
   };
 
   const handleShareAuction = async () => {
@@ -2917,6 +2971,8 @@ export default function PremiumAuctionDetail() {
       ? 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10'
       : 'text-amber-200 border-amber-500/30 bg-amber-500/10';
   const isWatched = watchlist.auctionIds.includes(String(auctionId));
+  const isSellerWatched = Boolean(auction?.seller) && watchlist.sellers.includes(normalizeWalletAddress(auction?.seller));
+  const isCategoryWatched = watchlist.categories.includes(String(auction?.assetType ?? ''));
   const onChainProfileValue = formatOnChainValue(onChainSellerProfile);
   const onChainProofValue = formatOnChainValue(onChainProofRoot);
   const onChainDisputeValue = formatOnChainValue(onChainDisputeRoot);
@@ -3216,6 +3272,20 @@ export default function PremiumAuctionDetail() {
                       {sellerDisplayName || 'Masked seller ID'}
                     </div>
                     <div className="mt-1 font-mono text-cyan-400">{sellerAddressPreview}</div>
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleToggleSellerWatch}
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.18em] transition-colors ${
+                          isSellerWatched
+                            ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
+                            : 'border-white/10 bg-white/5 text-white/60 hover:border-cyan-500/25 hover:bg-cyan-500/10 hover:text-cyan-200'
+                        }`}
+                      >
+                        <UserRoundCheck className="h-3.5 w-3.5" />
+                        {isSellerWatched ? 'Following Seller' : 'Follow Seller'}
+                      </button>
+                    </div>
                     <div className="mt-1 text-[11px] leading-relaxed text-white/40">
                       Marketplace view masks the full seller wallet by default. Settlement still resolves against the on-chain seller account.
                     </div>
@@ -3227,12 +3297,24 @@ export default function PremiumAuctionDetail() {
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-white/5">
                   <span className="text-white/60 font-mono text-sm">Asset Category</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <span className="text-lg">{getAssetTypeIcon(auction.assetType)}</span>
                     <span className="font-mono text-gold-500">{getAssetTypeName(auction.assetType)}</span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
                       V2.22
                     </span>
+                    <button
+                      type="button"
+                      onClick={handleToggleCategoryWatch}
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.18em] transition-colors ${
+                        isCategoryWatched
+                          ? 'border-gold-500/35 bg-gold-500/10 text-gold-300'
+                          : 'border-white/10 bg-white/5 text-white/60 hover:border-gold-500/25 hover:bg-gold-500/10 hover:text-gold-300'
+                      }`}
+                    >
+                      <BookmarkCheck className="h-3.5 w-3.5" />
+                      {isCategoryWatched ? 'Watching Category' : 'Watch Category'}
+                    </button>
                   </div>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-white/5">

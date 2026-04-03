@@ -25,7 +25,7 @@ import PremiumButton from '@/components/premium/PremiumButton';
 import PremiumNav from '@/components/premium/PremiumNav';
 import PremiumSelect from '@/components/premium/PremiumSelect';
 import StatusBadge from '@/components/premium/StatusBadge';
-import { Clock, TrendingUp, Shield, Search, Filter, Info, CheckCircle, Bookmark, BookmarkCheck } from 'lucide-react';
+import { Clock, TrendingUp, Shield, Search, Filter, Info, CheckCircle, Bookmark, BookmarkCheck, UserRoundCheck } from 'lucide-react';
 
 function parseAleoInteger(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -86,6 +86,10 @@ function formatCompactAmount(value) {
     minimumFractionDigits: parsedValue > 0 && parsedValue < 10 ? 1 : 0,
     maximumFractionDigits: parsedValue > 0 && parsedValue < 1 ? 2 : 2,
   }).format(parsedValue);
+}
+
+function normalizeWalletAddress(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
 function formatDurationLabel(totalSeconds) {
@@ -787,8 +791,17 @@ export default function PremiumAuctionList() {
     }
   };
 
+  const persistWatchlist = async (nextWatchlist) => {
+    setWatchlist(nextWatchlist);
+    const persistedWatchlist = await saveWatchlist(address, nextWatchlist);
+
+    if (persistedWatchlist) {
+      setWatchlist(persistedWatchlist);
+    }
+  };
+
   const handleToggleWatchlist = async (auctionId, event) => {
-    event.stopPropagation();
+    event?.stopPropagation();
 
     if (!address) {
       alert('Connect your wallet first to save a watchlist.');
@@ -805,8 +818,52 @@ export default function PremiumAuctionList() {
       auctionIds: nextAuctionIds,
     };
 
-    setWatchlist(nextWatchlist);
-    await saveWatchlist(address, nextWatchlist);
+    await persistWatchlist(nextWatchlist);
+  };
+
+  const handleToggleSellerWatch = async (seller, event) => {
+    event?.stopPropagation();
+
+    if (!address) {
+      alert('Connect your wallet first to follow sellers.');
+      return;
+    }
+
+    const normalizedSeller = normalizeWalletAddress(seller);
+    if (!normalizedSeller) {
+      return;
+    }
+
+    const nextSellers = watchlist.sellers.includes(normalizedSeller)
+      ? watchlist.sellers.filter((value) => value !== normalizedSeller)
+      : [...watchlist.sellers, normalizedSeller];
+
+    await persistWatchlist({
+      ...watchlist,
+      sellers: nextSellers,
+    });
+  };
+
+  const handleToggleCategoryWatch = async () => {
+    if (!address) {
+      alert('Connect your wallet first to follow categories.');
+      return;
+    }
+
+    if (categoryFilter === 'all') {
+      alert('Pick a category filter first, then save it to your watchlist.');
+      return;
+    }
+
+    const normalizedCategory = String(categoryFilter);
+    const nextCategories = watchlist.categories.includes(normalizedCategory)
+      ? watchlist.categories.filter((value) => value !== normalizedCategory)
+      : [...watchlist.categories, normalizedCategory];
+
+    await persistWatchlist({
+      ...watchlist,
+      categories: nextCategories,
+    });
   };
 
   const handleSaveCurrentSearch = async () => {
@@ -911,6 +968,12 @@ export default function PremiumAuctionList() {
         ? 'grid grid-cols-1 gap-4 md:grid-cols-2'
         : 'mx-auto grid max-w-[720px] grid-cols-1 gap-4';
   const isWatched = (auctionId) => watchlist.auctionIds.includes(String(auctionId));
+  const isSellerWatched = (seller) => {
+    const normalizedSeller = normalizeWalletAddress(seller);
+    return Boolean(normalizedSeller) && watchlist.sellers.includes(normalizedSeller);
+  };
+  const isCategoryWatched = (assetType) => watchlist.categories.includes(String(assetType));
+  const activeWatchCount = watchlist.auctionIds.length + watchlist.sellers.length + watchlist.categories.length;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-void-900 text-white">
@@ -1058,6 +1121,21 @@ export default function PremiumAuctionList() {
               </div>
 
               <div className="flex items-center gap-2 sm:gap-3 xl:pt-7">
+                {categoryFilter !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={handleToggleCategoryWatch}
+                    className={`inline-flex h-11 items-center justify-center gap-2 rounded-2xl border px-4 text-[11px] font-mono uppercase tracking-[0.18em] transition-colors ${
+                      isCategoryWatched(categoryFilter)
+                        ? 'border-gold-500/35 bg-gold-500/10 text-gold-300'
+                        : 'border-white/10 bg-white/[0.03] text-white/70 hover:border-gold-500/25 hover:bg-gold-500/10 hover:text-gold-300'
+                    }`}
+                  >
+                    <BookmarkCheck className="h-4 w-4" />
+                    {isCategoryWatched(categoryFilter) ? 'Watching Category' : 'Watch Category'}
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={handleSaveCurrentSearch}
@@ -1098,6 +1176,23 @@ export default function PremiumAuctionList() {
                     <span className="max-w-[220px] truncate">{savedSearch.label}</span>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {activeWatchCount > 0 && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/5 pt-4">
+                <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-white/32">
+                  Watchlist
+                </span>
+                <span className="inline-flex items-center rounded-full border border-gold-500/25 bg-gold-500/10 px-3 py-1.5 text-[11px] font-mono text-gold-300">
+                  {watchlist.auctionIds.length} auctions
+                </span>
+                <span className="inline-flex items-center rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-mono text-cyan-300">
+                  {watchlist.sellers.length} sellers
+                </span>
+                <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-mono text-white/68">
+                  {watchlist.categories.length} categories
+                </span>
               </div>
             )}
           </section>
@@ -1219,7 +1314,36 @@ export default function PremiumAuctionList() {
                         {auction.sellerDisplayName && (
                           <span className="max-w-full truncate">by {auction.sellerDisplayName}</span>
                         )}
+                        {isSellerWatched(auction.seller) && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/24 bg-cyan-500/10 px-2 py-1 text-cyan-300">
+                            <UserRoundCheck className="h-3 w-3" />
+                            Watched Seller
+                          </span>
+                        )}
+                        {isCategoryWatched(auction.assetType) && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-gold-500/24 bg-gold-500/10 px-2 py-1 text-gold-300">
+                            <BookmarkCheck className="h-3 w-3" />
+                            Watched Category
+                          </span>
+                        )}
                       </div>
+
+                      {auction.seller && (
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={(event) => handleToggleSellerWatch(auction.seller, event)}
+                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.18em] transition-colors ${
+                              isSellerWatched(auction.seller)
+                                ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
+                                : 'border-white/10 bg-white/[0.04] text-white/58 hover:border-cyan-500/25 hover:bg-cyan-500/10 hover:text-cyan-200'
+                            }`}
+                          >
+                            <UserRoundCheck className="h-3.5 w-3.5" />
+                            {isSellerWatched(auction.seller) ? 'Following Seller' : 'Follow Seller'}
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="relative mt-5 rounded-[22px] border border-white/10 bg-void-800/58 p-4">
