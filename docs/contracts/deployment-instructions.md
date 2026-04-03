@@ -1,15 +1,15 @@
 # Historical V2.20 Manual Deployment Instructions
 
-This file is retained for archived `v2.20` deployment reference. The active repo target is now `v2.21`.
+This file is retained for archived `v2.20` deployment reference. The active repo target is now `v2.22`.
 
-Active `v2.21` testnet program:
+Active remediated testnet program:
 
-- <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_21.aleo>
-- Program ID: `shadowbid_marketplace_v2_21.aleo`
+- <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_22.aleo>
+- Program ID: `shadowbid_marketplace_v2_22.aleo`
 
 ## Prerequisites
 
-- Leo CLI `3.5.0`
+- Leo CLI `4.0.0`
 - Private key or wallet access for deployment
 - Enough Aleo credits to pay deployment fees
 
@@ -55,14 +55,15 @@ leo deploy --network "${NETWORK}"
 Expected program:
 
 ```text
-shadowbid_marketplace_v2_20.aleo
+shadowbid_marketplace_v2_22.aleo
 ```
 
 ### Verify on an explorer
 
 - Testnet: <https://explorer.provable.com/testnet>
 - Mainnet: <https://explorer.provable.com/>
-- Active `v2.21` program: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_21.aleo>
+- Active remediated program: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_22.aleo>
+- Confirmed deployment transaction: `at1puerrl94esarswkfgc0f97glpy6h03ke2zf2yzn5qtdme5rcqgysf85m38`
 
 ### Run a local smoke test
 

@@ -67,6 +67,28 @@ export async function getLocalApiHealth() {
   }
 }
 
+export async function getAuctionSnapshots() {
+  try {
+    const response = await request('/api/auctions');
+    return Array.isArray(response.auctions) ? response.auctions : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getAuctionSnapshot(auctionId) {
+  if (!auctionId) {
+    return null;
+  }
+
+  try {
+    const response = await request(`/api/auctions/${encodeURIComponent(auctionId)}`);
+    return response.auction || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function syncAuctionSnapshot(snapshot) {
   try {
     const response = await request('/api/auctions/sync', {

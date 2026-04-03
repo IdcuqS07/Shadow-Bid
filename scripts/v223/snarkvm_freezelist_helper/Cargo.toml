@@ -1,0 +1,11 @@
+[package]
+name = "snarkvm_freezelist_helper"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+snarkvm-console-account = { path = "/Users/idcuq/.cargo/git/checkouts/snarkvm-cca64a3992502984/44ede42/console/account" }
+snarkvm-console-network = { path = "/Users/idcuq/.cargo/git/checkouts/snarkvm-cca64a3992502984/44ede42/console/network" }
+snarkvm-console-types = { path = "/Users/idcuq/.cargo/git/checkouts/snarkvm-cca64a3992502984/44ede42/console/types" }

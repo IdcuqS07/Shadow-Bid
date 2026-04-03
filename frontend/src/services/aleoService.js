@@ -1,4 +1,4 @@
-const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
+const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_22.aleo';
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.explorer.provable.com/v1/testnet';
 const AUCTIONEER = import.meta.env.VITE_AUCTIONEER_ADDRESS || 'aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8';
 

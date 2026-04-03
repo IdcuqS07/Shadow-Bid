@@ -1,0 +1,9 @@
+{
+  "program": "shadowbid_usdcx_freezelist_utils_v1.aleo",
+  "version": "0.1.0",
+  "description": "ShadowBid V2.23 helper utilities for deriving and checking USDCx freezelist proofs",
+  "license": "MIT",
+  "leo": "4.0.0",
+  "dependencies": [],
+  "dev_dependencies": null
+}

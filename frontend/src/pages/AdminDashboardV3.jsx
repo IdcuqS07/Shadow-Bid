@@ -143,7 +143,7 @@ export default function AdminDashboardV3() {
           <h1 className="mt-2 text-3xl font-bold text-white">Analytics, Executor, and Verification Ops</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-300">
             This console reads from the app data layer to surface business analytics, lifecycle automation,
-            and seller-proof readiness alongside the live V2.21 flow.
+            and seller-proof readiness alongside the live V2.22 flow.
           </p>
         </div>
 
@@ -207,7 +207,7 @@ export default function AdminDashboardV3() {
             <CardDescription>Fee Potential</CardDescription>
             <CardTitle>{formatAmount(analytics?.financials.feePotential)} credits</CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-slate-300">Platform fee estimate derived from V2.21 settlement data.</CardContent>
+          <CardContent className="text-xs text-slate-300">Platform fee estimate derived from V2.22 settlement data.</CardContent>
         </Card>
 
         <Card>
@@ -359,7 +359,7 @@ export default function AdminDashboardV3() {
             <CardHeader>
               <CardTitle>Dispute Resolution</CardTitle>
               <CardDescription>
-                Owner-only controls wired to the V2.21 dispute resolution transitions.
+                Owner-only controls wired to the V2.22 dispute resolution transitions.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

@@ -27,7 +27,7 @@ Solutions:
 
 Solutions:
 
-1. verify `VITE_PROGRAM_ID=shadowbid_marketplace_v2_21.aleo`
+1. verify `VITE_PROGRAM_ID=shadowbid_marketplace_v2_22.aleo`
 2. verify `VITE_API_BASE` points to the intended network explorer
 3. make sure the wallet and app are both targeting testnet
 

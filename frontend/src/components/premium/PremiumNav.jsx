@@ -4,7 +4,7 @@ import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { Shield, Loader2, Bot, ExternalLink } from 'lucide-react';
 import PremiumNotificationCenter from '@/components/notifications/PremiumNotificationCenter';
 
-const CONTRACT_EXPLORER_URL = 'https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_21.aleo';
+const CONTRACT_EXPLORER_URL = 'https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_22.aleo';
 
 export default function PremiumNav() {
   const navigate = useNavigate();
@@ -44,9 +44,9 @@ export default function PremiumNav() {
               target="_blank"
               rel="noreferrer"
               className="hidden md:inline-flex items-center gap-2 rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 text-[11px] font-mono uppercase tracking-[0.16em] text-green-400 transition-colors hover:border-green-400/40 hover:bg-green-500/15 hover:text-green-300"
-              title="View ShadowBid v2.21 on Provable Explorer"
+              title="View ShadowBid v2.22 on Provable Explorer"
             >
-              Contract V2.21
+              Contract V2.22
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
 

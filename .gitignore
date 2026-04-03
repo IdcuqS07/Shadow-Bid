@@ -31,3 +31,5 @@ yarn-error.log*
 .cache/
 *.bak
 *.tmp
+target/
+shadowbid-marketplace/

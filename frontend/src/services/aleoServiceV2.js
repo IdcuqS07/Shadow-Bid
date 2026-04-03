@@ -1,8 +1,10 @@
-// Aleo Service V2 - For shadowbid_marketplace_v2_21.aleo
+// Aleo Service V2 - For shadowbid_marketplace_v2_22.aleo
 // V2.21: Split deadlines, reveal-timeout settlement, dispute resolution, proof anchors
 // V2.19: Platform fee (2.5%), reserve price, settlement timing fix
 
-const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
+// NOTE: write-path helpers below target the remediated contract ABI in `contracts/src/main.leo`.
+// Point `VITE_PROGRAM_ID` at the redeployed program before using commit/refund transactions.
+const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_22.aleo';
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.explorer.provable.com/v1/testnet';
 
 // V2.19 NEW: Platform fee configuration
@@ -290,14 +292,10 @@ export function generateNonce() {
   return `${timestampPart | randomPart}field`;
 }
 
-// Helper: Generate commitment hash (simplified)
-// Production should use proper Poseidon hash
-export function generateCommitment(amountUsdx, nonce) {
-  // Simplified: nonce + amount
-  // Production: Use proper cryptographic hash
-  const nonceValue = BigInt(nonce.replace('field', ''));
-  const commitment = nonceValue + BigInt(amountUsdx);
-  return `${commitment}field`;
+// The remediated contract source now derives commitments on-chain.
+// Keep this export only to fail loudly if an older UI path still tries to precompute one.
+export function generateCommitment() {
+  throw new Error('generateCommitment is deprecated. Persist the nonce and let the contract derive the commitment.');
 }
 
 // 1. Create Auction (V2.21 - Split reveal/dispute periods)
@@ -335,13 +333,13 @@ export async function cancelAuction(executeTransaction, auctionId) {
   ]);
 }
 
-// 2. Commit Bid (V2.10 - Field-based IDs)
-// Params: auction_id, commitment (hash), amount_usdx
+// 2. Commit Bid (V2.21)
+// Params: auction_id, nonce (private), amount_usdx
 // NOTE: This will transfer USDX from bidder to contract
-export async function commitBid(executeTransaction, auctionId, commitment, amountUsdx) {
+export async function commitBid(executeTransaction, auctionId, nonce, amountUsdx) {
   const inputs = [
-    `${auctionId}field`,      // V2.10: Changed to field
-    commitment,
+    `${auctionId}field`,
+    formatFieldInput(nonce),
     `${amountUsdx}u128`
   ];
   
@@ -411,12 +409,13 @@ export async function paySeller(executeTransaction, auctionId, sellerAddress, wi
   return requestTx(executeTransaction, 'pay_seller', inputs);
 }
 
-// 7. Claim Refund (V2.13) - For losers with automatic USDCx transfer
-// User must provide refund_amount (from their commitment data)
-export async function claimRefund(executeTransaction, auctionId, refundAmount) {
+// 7. Claim Refund (V2.21)
+// User must provide the original nonce so the contract can recompute the commitment.
+export async function claimRefund(executeTransaction, auctionId, nonce, refundAmount) {
   return requestTx(executeTransaction, 'claim_refund', [
-    `${auctionId}field`,     // V2.10: Changed to field
-    `${refundAmount}u128`    // V2.13: Added refund_amount parameter
+    `${auctionId}field`,
+    formatFieldInput(nonce),
+    `${refundAmount}u128`
   ]);
 }
 
@@ -706,22 +705,23 @@ export { PROGRAM_ID, API_BASE };
 // V2.14: Aleo Credits Functions
 // -------------------------
 
-// 2b. Commit Bid with Aleo Credits (NEW)
-export async function commitBidAleo(executeTransaction, auctionId, commitment, amountCredits) {
+// 2b. Commit Bid with Aleo Credits
+export async function commitBidAleo(executeTransaction, auctionId, nonce, amountCredits) {
   const inputs = [
     `${auctionId}field`,
-    commitment,
-    `${amountCredits}u64`     // Aleo uses u64 for credits
+    formatFieldInput(nonce),
+    `${amountCredits}u64`
   ];
   
   return requestTx(executeTransaction, 'commit_bid_aleo', inputs);
 }
 
-// 7b. Claim Refund with Aleo Credits (NEW)
-export async function claimRefundAleo(executeTransaction, auctionId, refundAmount) {
+// 7b. Claim Refund with Aleo Credits
+export async function claimRefundAleo(executeTransaction, auctionId, nonce, refundAmount) {
   return requestTx(executeTransaction, 'claim_refund_aleo', [
     `${auctionId}field`,
-    `${refundAmount}u64`      // Aleo uses u64 for credits
+    formatFieldInput(nonce),
+    `${refundAmount}u64`
   ]);
 }
 
@@ -1178,31 +1178,30 @@ function normalizePrivateRecordInput(privateRecord) {
   return privateRecord;
 }
 
-// Commit bid with private ALEO (V2.18 only)
-// V2.18: Commit Bid with Private ALEO Input
-// Contract V2.18 signature (from source code):
+// Commit bid with private ALEO funding.
+// Contract signature:
 // async transition commit_bid_aleo_private(
 //     public auction_id: field,
-//     public commitment: field,
+//     nonce: field,
 //     private_credits: credits.aleo/credits,
 //     public amount_credits: u64
 // )
-export async function commitBidAleoPrivate(executeTransaction, auctionId, commitment, privateRecord, amountCredits) {
+export async function commitBidAleoPrivate(executeTransaction, auctionId, nonce, privateRecord, amountCredits) {
   const normalizedRecord = normalizePrivateRecordInput(privateRecord);
 
   if (typeof normalizedRecord !== 'string') {
     throw new Error('Private credits record is missing plaintext data');
   }
   
-  // V2.18 contract expects:
+  // Contract expects:
   // 1. auction_id: field
-  // 2. commitment: field
+  // 2. nonce: field
   // 3. private_credits: credits.aleo/credits (record)
   // 4. amount_credits: u64
   
   const inputs = [
     `${auctionId}field`,
-    commitment,
+    formatFieldInput(nonce),
     normalizedRecord,
     `${amountCredits}u64`
   ];
@@ -1216,10 +1215,11 @@ export async function commitBidAleoPrivate(executeTransaction, auctionId, commit
   );
 }
 
-// Claim refund with private ALEO output (V2.18 only)
-export async function claimRefundAleoPrivate(executeTransaction, auctionId, refundAmount) {
+// Claim refund with private ALEO output.
+export async function claimRefundAleoPrivate(executeTransaction, auctionId, nonce, refundAmount) {
   const inputs = [
     `${auctionId}field`,
+    formatFieldInput(nonce),
     `${refundAmount}u64`
   ];
   
@@ -1230,11 +1230,11 @@ export async function claimRefundAleoPrivate(executeTransaction, auctionId, refu
   );
 }
 
-// Commit bid with USAD (V2.18 only)
-export async function commitBidUSAD(executeTransaction, auctionId, commitment, amountUsad) {
+// Commit bid with USAD.
+export async function commitBidUSAD(executeTransaction, auctionId, nonce, amountUsad) {
   const inputs = [
     `${auctionId}field`,
-    `${commitment}field`,
+    formatFieldInput(nonce),
     `${amountUsad}u128`
   ];
   
@@ -1245,10 +1245,11 @@ export async function commitBidUSAD(executeTransaction, auctionId, commitment, a
   );
 }
 
-// Claim refund USAD (V2.18 only)
-export async function claimRefundUSAD(executeTransaction, auctionId, refundAmount) {
+// Claim refund USAD.
+export async function claimRefundUSAD(executeTransaction, auctionId, nonce, refundAmount) {
   const inputs = [
     `${auctionId}field`,
+    formatFieldInput(nonce),
     `${refundAmount}u128`
   ];
   

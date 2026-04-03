@@ -43,7 +43,7 @@ export default function TestDataSeederPage() {
       setResult(response);
       setFixtureMeta(getShadowBidFixtureMeta());
 
-      toast.success('V2.21 fixture auctions seeded locally.');
+      toast.success('V2.22 fixture auctions seeded locally.');
     } catch (error) {
       console.error('[TestDataSeederPage] Failed to seed fixtures:', error);
       toast.error(`Failed to seed fixtures: ${error.message || error}`);
@@ -77,9 +77,9 @@ export default function TestDataSeederPage() {
           </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="text-4xl font-bold tracking-tight">ShadowBid V2.21 Test Auctions</h1>
+              <h1 className="text-4xl font-bold tracking-tight">ShadowBid V2.22 Test Auctions</h1>
               <p className="mt-3 max-w-3xl text-sm text-slate-300">
-                Seed a realistic local bundle of auctions that exercises the full V2.21 lifecycle:
+                Seed a realistic local bundle of auctions that exercises the full V2.22 lifecycle:
                 seller verification, proof bundles, reveal timeout, dispute flow, settlement, refunds,
                 and ops analytics.
               </p>
@@ -147,7 +147,7 @@ export default function TestDataSeederPage() {
           <CardHeader>
             <CardTitle>Included Scenarios</CardTitle>
             <CardDescription>
-              Each seeded auction is designed to light up a different part of the V2.21 UI and lifecycle.
+              Each seeded auction is designed to light up a different part of the V2.22 UI and lifecycle.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">

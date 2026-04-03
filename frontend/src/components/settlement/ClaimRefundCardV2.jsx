@@ -12,7 +12,6 @@ export default function ClaimRefundCardV2() {
   const [auctionId, setAuctionId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refundInfo, setRefundInfo] = useState(null);
-  const [auctionInfo, setAuctionInfo] = useState(null);
   const [currency, setCurrency] = useState(null);  // NEW
   const [isWinner, setIsWinner] = useState(false);
 
@@ -56,8 +55,6 @@ export default function ClaimRefundCardV2() {
             console.log('[ClaimRefund] Auction data (object):', auctionData);
           }
           
-          setAuctionInfo(auctionData);
-          
           // NEW: Detect currency
           const detectedCurrency = AleoServiceV2.getAuctionCurrency(auctionData);
           setCurrency(detectedCurrency);
@@ -94,7 +91,6 @@ export default function ClaimRefundCardV2() {
           }
         } else {
           console.log('[ClaimRefund] No auction data found');
-          setAuctionInfo(null);
           setIsWinner(false);
         }
 
@@ -115,7 +111,6 @@ export default function ClaimRefundCardV2() {
       } else {
         // Reset state when inputs are cleared
         setRefundInfo(null);
-        setAuctionInfo(null);
         setIsWinner(false);
       }
     };
@@ -149,6 +144,11 @@ export default function ClaimRefundCardV2() {
       const auctionIdNum = parseInt(auctionId);
       const refundAmountMicro = Math.floor(refundInfo.amount * 1_000_000);
       const currencyLabel = AleoServiceV2.getCurrencyLabel(currency);
+      const nonce = AleoServiceV2.getNonce(auctionIdNum, address);
+
+      if (!nonce) {
+        throw new Error('Saved nonce not found for this wallet. Refunds now require the original nonce.');
+      }
       
       toast.info(`Claiming ${currencyLabel} refund with automatic transfer...`);
       
@@ -158,12 +158,14 @@ export default function ClaimRefundCardV2() {
         result = await AleoServiceV2.claimRefundAleo(
           executeTransaction,
           auctionIdNum,
+          nonce,
           refundAmountMicro
         );
       } else {
         result = await AleoServiceV2.claimRefund(
           executeTransaction,
           auctionIdNum,
+          nonce,
           refundAmountMicro
         );
       }

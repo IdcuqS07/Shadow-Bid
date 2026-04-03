@@ -18,7 +18,7 @@ Compatibility routes still exist under `/standard/*`.
 3. Approve the connection request.
 4. If you plan to use private ALEO credits, be ready to approve private-record access when the bid flow asks for it.
 
-## 2. Create A V2.21 Auction
+## 2. Create A V2.22 Auction
 
 1. Open `/premium-create`.
 2. Fill in the auction details:
@@ -42,6 +42,7 @@ Compatibility routes still exist under `/standard/*`.
    - Shield may request access to private records
    - approve the request
    - the app will save bidder-local nonce and commitment data for reveal later
+5. In the live `v2.22` contract, the bid commitment is stored publicly but the per-bid escrow mapping no longer stores the committed amount.
 
 ## 4. Close The Auction
 

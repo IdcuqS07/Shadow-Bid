@@ -1,0 +1,95 @@
+{
+  "artifact_type": "usdcx-spike-runbook",
+  "generated_at": "2026-04-03T16:52:45.330Z",
+  "sender_wallet": "aleo1ecrqqyvaszpehqc967g5aau4uqt2dg3y5ardm0y5wf4hxjajzsyqm5cxke",
+  "recipient_wallet": "aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+  "target_amount": "20000u128",
+  "bootstrap_tx_id": "at1yez8a5zetyfzjf0pfh43zef0zjndk4hjwa9z32mza8t4q6qj8s8sz86uj6",
+  "bootstrap_tx_url": "https://testnet.explorer.provable.com/transaction/at1yez8a5zetyfzjf0pfh43zef0zjndk4hjwa9z32mza8t4q6qj8s8sz86uj6",
+  "probe_id": "36045056131843534541774283033field",
+  "route": "preseeded-private-record",
+  "assumptions": [
+    "The sender wallet still shows an unspent private USDCx record sourced from the bootstrap transaction.",
+    "The bootstrap transaction created a private record via transfer_public_to_private, so it is valid as a rail bootstrap but not as proof of full hidden-amount funding for normal users.",
+    "The recipient wallet is a temporary rail-validation sink only, not the final custody model."
+  ],
+  "steps": [
+    {
+      "step": "confirm-private-record",
+      "description": "Open the wallet UI and confirm the sender still shows 4.5 USDCx Private as spendable.",
+      "blocker_if_false": "Stop here and do not attempt get_creds or xfer_with_creds."
+    },
+    {
+      "step": "register-probe",
+      "description": "Register a probe target for the private transfer-with-credentials path.",
+      "command": {
+        "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+        "transition": "register_probe_target",
+        "inputs": [
+          "36045056131843534541774283033field",
+          "1u8",
+          "true",
+          "true",
+          "false",
+          "20000u128",
+          "1775235165i64"
+        ],
+        "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run register_probe_target 36045056131843534541774283033field 1u8 true true false 20000u128 1775235165i64"
+      }
+    },
+    {
+      "step": "prepare-proofs",
+      "description": "Collect the private Token.record plus the Merkle proof array required by get_creds.",
+      "command": {
+        "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+        "transition": "get_creds",
+        "inputs": [
+          "<proof_array_private>"
+        ],
+        "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run get_creds <proof_array_private>"
+      }
+    },
+    {
+      "step": "private-transfer",
+      "description": "Send 0.02 USDCx privately to the recipient wallet using the private record and credentials record.",
+      "command": {
+        "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+        "transition": "xfer_with_creds",
+        "inputs": [
+          "aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+          "20000u128",
+          "<private_token_record>",
+          "<credentials_record>"
+        ],
+        "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run xfer_with_creds aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8 20000u128 <private_token_record> <credentials_record>"
+      }
+    },
+    {
+      "step": "leak-check",
+      "description": "Inspect the resulting transaction and confirm the transfer amount does not appear as a public input or public mapping delta.",
+      "checks": [
+        "No public 20000u128 input should appear in the transfer_private_with_creds transition.",
+        "Public balances mapping for sender and recipient should remain unrelated to the private transfer amount.",
+        "Record the tx id and compare explorer-visible fields with the bootstrap transfer_public_to_private transaction."
+      ]
+    },
+    {
+      "step": "close-probe",
+      "description": "Close the probe metadata after the experiment is recorded.",
+      "command": {
+        "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+        "transition": "close_probe_target",
+        "inputs": [
+          "36045056131843534541774283033field",
+          "1775238765i64"
+        ],
+        "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run close_probe_target 36045056131843534541774283033field 1775238765i64"
+      }
+    }
+  ],
+  "references": [
+    "docs/contracts/v2.23-usdcx-preconditions-candidate.md",
+    "docs/contracts/v2.23-usdcx-funding-paths.md",
+    "docs/contracts/v2.23-benchmark-findings.md"
+  ]
+}

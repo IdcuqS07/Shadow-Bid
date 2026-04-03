@@ -93,16 +93,22 @@ struct AuctionInfo {
 // Bid commitment for commit-reveal pattern
 struct BidCommitment {
     bidder: address,
-    commitment: field,           // hash(amount || nonce || bidder)
+    commitment: field,           // BHP256(auction_id || bidder || amount || nonce)
     is_revealed: bool,
     revealed_amount: u128,       // Generic (works for both currencies)
     revealed_at: i64
 }
 
+struct BidCommitmentPreimage {
+    auction_id: field,
+    bidder: address,
+    amount: u128,
+    nonce: field
+}
+
 // Generic escrow tracking (works for both Aleo and USDCx)
 struct Escrow {
     bidder: address,
-    amount: u128,                // Generic (u64 Aleo fits in u128)
     is_refunded: bool,
     is_winner: bool
 }
@@ -244,7 +250,6 @@ final fn finalize_commit_bid(
     
     Mapping::set(escrow, bid_key, Escrow {
         bidder,
-        amount: amount_usdx,
         is_refunded: false,
         is_winner: false
     });
@@ -307,7 +312,6 @@ final fn finalize_commit_bid_usad(
     
     Mapping::set(escrow, bid_key, Escrow {
         bidder,
-        amount: amount_usad,
         is_refunded: false,
         is_winner: false
     });
@@ -370,7 +374,6 @@ final fn finalize_commit_bid_aleo(
     
     Mapping::set(escrow, bid_key, Escrow {
         bidder,
-        amount: amount_u128,
         is_refunded: false,
         is_winner: false
     });
@@ -466,7 +469,7 @@ final fn finalize_reveal_bid(
     assert(amount >= auction.min_bid_amount);
     
     let escrow_data: Escrow = Mapping::get(escrow, bid_key);
-    assert_eq(amount, escrow_data.amount);
+    assert(!escrow_data.is_refunded);
     
     let updated_commitment: BidCommitment = BidCommitment {
         bidder: commitment.bidder,
@@ -562,7 +565,6 @@ final fn finalize_finalize_winner(
         let winner_escrow: Escrow = Mapping::get(escrow, winner_key);
         let updated_escrow: Escrow = Escrow {
             bidder: winner_escrow.bidder,
-            amount: winner_escrow.amount,
             is_refunded: winner_escrow.is_refunded,
             is_winner: true
         };
@@ -608,6 +610,7 @@ final fn finalize_finalize_winner(
 final fn finalize_claim_refund(
     auction_id: field,
     bidder: address,
+    computed_commitment: field,
     refund_amount: u128,
     transfer_future: Final
 ) {
@@ -622,16 +625,16 @@ final fn finalize_claim_refund(
     
     assert(Mapping::contains(escrow, bid_key));
     let escrow_data: Escrow = Mapping::get(escrow, bid_key);
+    let commitment: BidCommitment = Mapping::get(commitments, bid_key);
     
     assert(!escrow_data.is_winner);
     assert(!escrow_data.is_refunded);
-    assert_eq(refund_amount, escrow_data.amount);
+    assert_eq(commitment.commitment, computed_commitment);
     
     transfer_future.run();
     
     let updated_escrow: Escrow = Escrow {
         bidder: escrow_data.bidder,
-        amount: escrow_data.amount,
         is_refunded: true,
         is_winner: escrow_data.is_winner
     };
@@ -641,6 +644,7 @@ final fn finalize_claim_refund(
 final fn finalize_claim_refund_usad(
     auction_id: field,
     bidder: address,
+    computed_commitment: field,
     refund_amount: u128,
     transfer_future: Final
 ) {
@@ -655,16 +659,16 @@ final fn finalize_claim_refund_usad(
     
     assert(Mapping::contains(escrow, bid_key));
     let escrow_data: Escrow = Mapping::get(escrow, bid_key);
+    let commitment: BidCommitment = Mapping::get(commitments, bid_key);
     
     assert(!escrow_data.is_winner);
     assert(!escrow_data.is_refunded);
-    assert_eq(refund_amount, escrow_data.amount);
+    assert_eq(commitment.commitment, computed_commitment);
     
     transfer_future.run();
     
     let updated_escrow: Escrow = Escrow {
         bidder: escrow_data.bidder,
-        amount: escrow_data.amount,
         is_refunded: true,
         is_winner: escrow_data.is_winner
     };
@@ -674,6 +678,7 @@ final fn finalize_claim_refund_usad(
 final fn finalize_claim_refund_aleo(
     auction_id: field,
     bidder: address,
+    computed_commitment: field,
     refund_amount: u64,
     transfer_future: Final
 ) {
@@ -688,17 +693,17 @@ final fn finalize_claim_refund_aleo(
     
     assert(Mapping::contains(escrow, bid_key));
     let escrow_data: Escrow = Mapping::get(escrow, bid_key);
+    let commitment: BidCommitment = Mapping::get(commitments, bid_key);
     
     assert(!escrow_data.is_winner);
     assert(!escrow_data.is_refunded);
-    assert_eq(refund_amount as u128, escrow_data.amount);
+    assert_eq(commitment.commitment, computed_commitment);
     
     // Wait for transfer to complete
     transfer_future.run();
     
     let updated_escrow: Escrow = Escrow {
         bidder: escrow_data.bidder,
-        amount: escrow_data.amount,
         is_refunded: true,
         is_winner: escrow_data.is_winner
     };
@@ -735,7 +740,6 @@ final fn finalize_commit_aleo_priv(
     
     Mapping::set(escrow, bid_key, Escrow {
         bidder,
-        amount: amount_u128,
         is_refunded: false,
         is_winner: false
     });
@@ -1349,7 +1353,6 @@ final fn finalize_dispute_release(
         let winner_escrow: Escrow = Mapping::get(escrow, winner_key);
         let updated_winner_escrow: Escrow = Escrow {
             bidder: winner_escrow.bidder,
-            amount: winner_escrow.amount,
             is_refunded: winner_escrow.is_refunded,
             is_winner: true
         };
@@ -1404,7 +1407,6 @@ final fn finalize_dispute_refund(
         let winner_escrow: Escrow = Mapping::get(escrow, winner_key);
         let updated_winner_escrow: Escrow = Escrow {
             bidder: winner_escrow.bidder,
-            amount: winner_escrow.amount,
             is_refunded: winner_escrow.is_refunded,
             is_winner: false
         };
@@ -1445,7 +1447,8 @@ final fn finalize_dispute_refund(
     Mapping::set(auctions, auction_id, updated_auction);
 }
 
-program shadowbid_marketplace_v2_21.aleo {
+program shadowbid_marketplace_v2_22.aleo {
+
     // Records
     // -------------------------
 
@@ -1530,7 +1533,8 @@ program shadowbid_marketplace_v2_21.aleo {
             dispute_period
         };
 
-        return (receipt, final { finalize_create_auction(
+        return (receipt, final {
+            finalize_create_auction(
             auction_id,
             signer,
             min_bid_amount,
@@ -1540,7 +1544,8 @@ program shadowbid_marketplace_v2_21.aleo {
             end_time,
             reveal_period,
             dispute_period
-        ); });
+            );
+        });
     }
 
     fn cancel_auction(
@@ -1549,58 +1554,85 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        return final { finalize_cancel_auction(auction_id, signer); };
+        return final {
+            finalize_cancel_auction(auction_id, signer);
+        };
     }
 
     fn commit_bid(
         public auction_id: field,
-        public commitment: field,
+        nonce: field,
         public amount_usdx: u128
     ) -> Final {
 
         let signer = self.signer;
+        let commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
+            auction_id,
+            bidder: signer,
+            amount: amount_usdx,
+            nonce
+        });
 
         let transfer_future: Final = test_usdcx_stablecoin.aleo::transfer_public_as_signer(
-            shadowbid_marketplace_v2_21.aleo,
+            shadowbid_marketplace_v2_22.aleo,
             amount_usdx
         );
         
-        return final { finalize_commit_bid(auction_id, commitment, signer, amount_usdx, transfer_future); };
+        return final {
+            finalize_commit_bid(auction_id, commitment, signer, amount_usdx, transfer_future);
+        };
     }
 
     fn commit_bid_usad(
         public auction_id: field,
-        public commitment: field,
+        nonce: field,
         public amount_usad: u128
     ) -> Final {
 
         let signer = self.signer;
+        let commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
+            auction_id,
+            bidder: signer,
+            amount: amount_usad,
+            nonce
+        });
 
         let transfer_future: Final = test_usad_stablecoin.aleo::transfer_public_as_signer(
-            shadowbid_marketplace_v2_21.aleo,
+            shadowbid_marketplace_v2_22.aleo,
             amount_usad
         );
         
-        return final { finalize_commit_bid_usad(auction_id, commitment, signer, amount_usad, transfer_future); };
+        return final {
+            finalize_commit_bid_usad(auction_id, commitment, signer, amount_usad, transfer_future);
+        };
     }
 
     fn commit_bid_aleo(
         public auction_id: field,
-        public commitment: field,
+        nonce: field,
         public amount_credits: u64
     ) -> Final {
 
         let signer = self.signer;
+        let amount_u128: u128 = amount_credits as u128;
+        let commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
+            auction_id,
+            bidder: signer,
+            amount: amount_u128,
+            nonce
+        });
 
         // NO TRANSFER HERE - user already transferred in Step 1
         // Just record the commitment and escrow
         
-        return final { finalize_commit_bid_aleo(
+        return final {
+            finalize_commit_bid_aleo(
             auction_id,
             commitment,
             signer,
             amount_credits
-        ); };
+            );
+        };
     }
 
     fn close_auction(
@@ -1610,7 +1642,9 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        return final { finalize_close_auction(auction_id, signer, closed_at); };
+        return final {
+            finalize_close_auction(auction_id, signer, closed_at);
+        };
     }
 
     fn reveal_bid(
@@ -1622,29 +1656,40 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        let computed_commitment: field = nonce + amount as field;
+        let computed_commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
+            auction_id,
+            bidder: signer,
+            amount,
+            nonce
+        });
         
-        return final { finalize_reveal_bid(
+        return final {
+            finalize_reveal_bid(
             auction_id,
             computed_commitment,
             signer,
             amount,
             revealed_at
-        ); };
+            );
+        };
     }
 
     fn settle_after_reveal_timeout(
         public auction_id: field,
         public settled_at: i64
     ) -> Final {
-        return final { finalize_reveal_timeout(auction_id, settled_at); };
+        return final {
+            finalize_reveal_timeout(auction_id, settled_at);
+        };
     }
 
     fn determine_winner(
         public auction_id: field,
         public determined_at: i64
     ) -> Final {
-        return final { finalize_reveal_timeout(auction_id, determined_at); };
+        return final {
+            finalize_reveal_timeout(auction_id, determined_at);
+        };
     }
 
     fn finalize_winner(
@@ -1663,45 +1708,73 @@ program shadowbid_marketplace_v2_21.aleo {
             finalized_at: 0i64
         };
         
-        return (placeholder_record, final { finalize_finalize_winner(auction_id, signer, finalized_at); });
+        return (placeholder_record, final {
+            finalize_finalize_winner(auction_id, signer, finalized_at);
+        });
     }
 
     fn claim_refund(
         public auction_id: field,
+        nonce: field,
         public refund_amount: u128
     ) -> Final {
 
         let signer = self.signer;
+        let computed_commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
+            auction_id,
+            bidder: signer,
+            amount: refund_amount,
+            nonce
+        });
 
         let transfer_future: Final = test_usdcx_stablecoin.aleo::transfer_public(
             signer,
             refund_amount
         );
         
-        return final { finalize_claim_refund(auction_id, signer, refund_amount, transfer_future); };
+        return final {
+            finalize_claim_refund(auction_id, signer, computed_commitment, refund_amount, transfer_future);
+        };
     }
 
     fn claim_refund_usad(
         public auction_id: field,
+        nonce: field,
         public refund_amount: u128
     ) -> Final {
 
         let signer = self.signer;
+        let computed_commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
+            auction_id,
+            bidder: signer,
+            amount: refund_amount,
+            nonce
+        });
 
         let transfer_future: Final = test_usad_stablecoin.aleo::transfer_public(
             signer,
             refund_amount
         );
         
-        return final { finalize_claim_refund_usad(auction_id, signer, refund_amount, transfer_future); };
+        return final {
+            finalize_claim_refund_usad(auction_id, signer, computed_commitment, refund_amount, transfer_future);
+        };
     }
 
     fn claim_refund_aleo(
         public auction_id: field,
+        nonce: field,
         public refund_amount: u64
     ) -> Final {
 
         let caller = self.caller;
+        let refund_amount_u128: u128 = refund_amount as u128;
+        let computed_commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
+            auction_id,
+            bidder: caller,
+            amount: refund_amount_u128,
+            nonce
+        });
 
         // Transfer Aleo credits FROM contract TO bidder (caller)
         // caller = bidder address
@@ -1710,47 +1783,67 @@ program shadowbid_marketplace_v2_21.aleo {
             refund_amount
         );
         
-        return final { finalize_claim_refund_aleo(
+        return final {
+            finalize_claim_refund_aleo(
             auction_id,
             caller,
+            computed_commitment,
             refund_amount,
             transfer_future
-        ); };
+            );
+        };
     }
 
     fn commit_bid_aleo_private(
         public auction_id: field,
-        public commitment: field,
+        nonce: field,
         private_credits: credits.aleo::credits,  // Private input record
         public amount_credits: u64
     ) -> (credits.aleo::credits, Final) {
 
         let signer = self.signer;
+        let amount_u128: u128 = amount_credits as u128;
+        let commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
+            auction_id,
+            bidder: signer,
+            amount: amount_u128,
+            nonce
+        });
 
         
         // Transfer private → public (returns change record)
         let (change_record, transfer_future): (credits.aleo::credits, Final) = 
             credits.aleo::transfer_private_to_public(
                 private_credits,
-                shadowbid_marketplace_v2_21.aleo,
+                shadowbid_marketplace_v2_22.aleo,
                 amount_credits
             );
         
-        return (change_record, final { finalize_commit_aleo_priv(
+        return (change_record, final {
+            finalize_commit_aleo_priv(
             auction_id,
             commitment,
             signer,
             amount_credits,
             transfer_future
-        ); });
+            );
+        });
     }
 
     fn claim_refund_aleo_private(
         public auction_id: field,
+        nonce: field,
         public refund_amount: u64
     ) -> (credits.aleo::credits, Final) {
 
         let caller = self.caller;
+        let refund_amount_u128: u128 = refund_amount as u128;
+        let computed_commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
+            auction_id,
+            bidder: caller,
+            amount: refund_amount_u128,
+            nonce
+        });
 
         
         // Transfer public → private (returns private record to caller)
@@ -1760,12 +1853,15 @@ program shadowbid_marketplace_v2_21.aleo {
                 refund_amount
             );
         
-        return (refund_record, final { finalize_claim_refund_aleo(
+        return (refund_record, final {
+            finalize_claim_refund_aleo(
             auction_id,
             caller,
+            computed_commitment,
             refund_amount,
             transfer_future
-        ); });
+            );
+        });
     }
 
     fn confirm_receipt(
@@ -1775,7 +1871,9 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        return final { finalize_confirm_receipt(auction_id, signer, received_at); };
+        return final {
+            finalize_confirm_receipt(auction_id, signer, received_at);
+        };
     }
 
     fn claim_winning_aleo(
@@ -1792,14 +1890,16 @@ program shadowbid_marketplace_v2_21.aleo {
             seller_net_amount_u64
         );
         
-        return final { finalize_claim_winning_aleo(
+        return final {
+            finalize_claim_winning_aleo(
             auction_id,
             signer,
             seller_net_amount_u64,
             seller_address,
             claim_at,
             transfer_future
-        ); };
+            );
+        };
     }
 
     fn claim_winning_usdcx(
@@ -1816,14 +1916,16 @@ program shadowbid_marketplace_v2_21.aleo {
             seller_net_amount
         );
         
-        return final { finalize_claim_winning_usdcx(
+        return final {
+            finalize_claim_winning_usdcx(
             auction_id,
             signer,
             seller_net_amount,
             seller_address,
             claim_at,
             transfer_future
-        ); };
+            );
+        };
     }
 
     fn claim_winning_usad(
@@ -1840,14 +1942,16 @@ program shadowbid_marketplace_v2_21.aleo {
             seller_net_amount
         );
         
-        return final { finalize_claim_winning_usad(
+        return final {
+            finalize_claim_winning_usad(
             auction_id,
             signer,
             seller_net_amount,
             seller_address,
             claim_at,
             transfer_future
-        ); };
+            );
+        };
     }
 
     fn claim_platform_fee_aleo(
@@ -1863,7 +1967,9 @@ program shadowbid_marketplace_v2_21.aleo {
             fee_amount_u64
         );
         
-        return final { finalize_claim_fee_aleo(auction_id, signer, fee_amount_u64, claimed_at, transfer_future); };
+        return final {
+            finalize_claim_fee_aleo(auction_id, signer, fee_amount_u64, claimed_at, transfer_future);
+        };
     }
 
     fn claim_platform_fee_usdcx(
@@ -1879,7 +1985,9 @@ program shadowbid_marketplace_v2_21.aleo {
             fee_amount
         );
         
-        return final { finalize_claim_fee_usdcx(auction_id, signer, fee_amount, claimed_at, transfer_future); };
+        return final {
+            finalize_claim_fee_usdcx(auction_id, signer, fee_amount, claimed_at, transfer_future);
+        };
     }
 
     fn claim_platform_fee_usad(
@@ -1895,7 +2003,9 @@ program shadowbid_marketplace_v2_21.aleo {
             fee_amount
         );
         
-        return final { finalize_claim_fee_usad(auction_id, signer, fee_amount, claimed_at, transfer_future); };
+        return final {
+            finalize_claim_fee_usad(auction_id, signer, fee_amount, claimed_at, transfer_future);
+        };
     }
 
     fn cancel_auction_reserve_not_met(
@@ -1904,7 +2014,9 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        return final { finalize_cancel_reserve_not_met(auction_id, signer); };
+        return final {
+            finalize_cancel_reserve_not_met(auction_id, signer);
+        };
     }
 
     fn upsert_seller_profile(
@@ -1917,14 +2029,16 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        return final { finalize_upsert_seller_profile(
+        return final {
+            finalize_upsert_seller_profile(
             signer,
             verification_status,
             verification_tier,
             profile_root,
             attestation_expiry,
             updated_at
-        ); };
+            );
+        };
     }
 
     fn set_auction_proof_root(
@@ -1935,7 +2049,9 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        return final { finalize_set_auction_proof_root(auction_id, signer, proof_root, disclosure_root); };
+        return final {
+            finalize_set_auction_proof_root(auction_id, signer, proof_root, disclosure_root);
+        };
     }
 
     fn open_dispute(
@@ -1946,7 +2062,9 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        return final { finalize_open_dispute(auction_id, signer, dispute_root, opened_at); };
+        return final {
+            finalize_open_dispute(auction_id, signer, dispute_root, opened_at);
+        };
     }
 
     fn resolve_dispute_release_seller(
@@ -1956,7 +2074,9 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        return final { finalize_dispute_release(auction_id, signer, resolved_at); };
+        return final {
+            finalize_dispute_release(auction_id, signer, resolved_at);
+        };
     }
 
     fn resolve_dispute_refund_winner(
@@ -1966,9 +2086,11 @@ program shadowbid_marketplace_v2_21.aleo {
 
         let signer = self.signer;
 
-        return final { finalize_dispute_refund(auction_id, signer, resolved_at); };
+        return final {
+            finalize_dispute_refund(auction_id, signer, resolved_at);
+        };
     }
 
-    @noupgrade
+    @admin(address = "aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8")
     constructor() {}
 }

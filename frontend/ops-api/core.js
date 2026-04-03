@@ -559,13 +559,27 @@ function buildNotifications(db, wallet) {
   };
 }
 
+function listAuctionSnapshots(db) {
+  return Object.values(db.auctions || {}).sort((left, right) => {
+    const updatedDiff = String(right.updatedAt || '').localeCompare(String(left.updatedAt || ''));
+    if (updatedDiff !== 0) {
+      return updatedDiff;
+    }
+
+    return toNumber(right.id, 0) - toNumber(left.id, 0);
+  });
+}
+
 function sanitizeSnapshot(snapshot) {
   return {
     id: String(snapshot.id),
     title: snapshot.title || `Auction #${snapshot.id}`,
+    description: snapshot.description || '',
     status: snapshot.status || 'open',
     contractState: snapshot.contractState || String(snapshot.status || 'open').toUpperCase(),
     seller: snapshot.seller || null,
+    creator: snapshot.creator || snapshot.seller || null,
+    sellerDisplayName: snapshot.sellerDisplayName || null,
     winner: snapshot.winner || null,
     token: snapshot.token || 'ALEO',
     endTimestamp: toNumber(snapshot.endTimestamp, 0),
@@ -678,6 +692,40 @@ async function runOpsRoute({
   }
 
   let db = await storage.loadDb();
+
+  if (method === 'GET' && pathname === '/api/auctions') {
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        auctions: listAuctionSnapshots(db),
+      },
+    };
+  }
+
+  const auctionMatch = pathname.match(/^\/api\/auctions\/([^/]+)$/);
+  if (method === 'GET' && auctionMatch) {
+    const auctionId = String(decodeURIComponent(auctionMatch[1]));
+    const auction = db.auctions[auctionId] || null;
+
+    if (!auction) {
+      return {
+        status: 404,
+        payload: {
+          ok: false,
+          error: 'auction not found',
+        },
+      };
+    }
+
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        auction,
+      },
+    };
+  }
 
   if (method === 'POST' && pathname === '/api/auctions/sync') {
     const snapshot = sanitizeSnapshot(body || {});

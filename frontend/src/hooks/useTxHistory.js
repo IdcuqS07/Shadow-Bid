@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 
-const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
+const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_22.aleo';
 
 export function useTxHistory({ autoRefresh = false } = {}) {
   const { connected, requestTransactionHistory } = useWallet();

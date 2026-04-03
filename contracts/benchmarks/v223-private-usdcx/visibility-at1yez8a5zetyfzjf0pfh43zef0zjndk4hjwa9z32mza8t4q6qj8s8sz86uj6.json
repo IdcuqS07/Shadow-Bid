@@ -1,0 +1,66 @@
+{
+  "artifact_type": "usdcx-visibility",
+  "generated_at": "2026-04-03T16:56:41.053Z",
+  "endpoint": "https://api.explorer.provable.com/v1",
+  "network": "testnet",
+  "expected_amount_literal": "4500000u128",
+  "primary": {
+    "tx_id": "at1yez8a5zetyfzjf0pfh43zef0zjndk4hjwa9z32mza8t4q6qj8s8sz86uj6",
+    "type": "execute",
+    "stablecoin_transition_count": 1,
+    "transition_summaries": [
+      {
+        "id": "au1fdx90nps7zeeavnphfs3jrjg2jdnz6ap3wltz6520nk3rcwpnszs3aegth",
+        "program": "test_usdcx_stablecoin.aleo",
+        "function": "transfer_public_to_private",
+        "public_inputs": [
+          {
+            "type": "public",
+            "value": "4500000u128"
+          }
+        ],
+        "public_u128_inputs": [
+          "4500000u128"
+        ],
+        "output_types": [
+          "record",
+          "record",
+          "future"
+        ],
+        "exposes_public_amount": true,
+        "hidden_amount_candidate": false,
+        "exact_expected_amount_exposed": true
+      }
+    ],
+    "stablecoin_transitions": [
+      {
+        "id": "au1fdx90nps7zeeavnphfs3jrjg2jdnz6ap3wltz6520nk3rcwpnszs3aegth",
+        "program": "test_usdcx_stablecoin.aleo",
+        "function": "transfer_public_to_private",
+        "public_inputs": [
+          {
+            "type": "public",
+            "value": "4500000u128"
+          }
+        ],
+        "public_u128_inputs": [
+          "4500000u128"
+        ],
+        "output_types": [
+          "record",
+          "record",
+          "future"
+        ],
+        "exposes_public_amount": true,
+        "hidden_amount_candidate": false,
+        "exact_expected_amount_exposed": true
+      }
+    ],
+    "leak_detected": true,
+    "hidden_amount_candidate": false,
+    "exact_expected_amount_exposed": true,
+    "verdict": "public-amount-visible"
+  },
+  "comparison": null,
+  "comparison_notes": []
+}

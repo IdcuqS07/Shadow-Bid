@@ -5,7 +5,7 @@ This file records the archived `v2.20` rollout that preceded the current `v2.21`
 ## Contract Information
 
 - Program: `shadowbid_marketplace_v2_20.aleo`
-- Leo version: `3.5.0`
+- Leo version: `4.0.0`
 - Platform address: `aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8`
 - Status: deployed to testnet and ready for continued validation
 

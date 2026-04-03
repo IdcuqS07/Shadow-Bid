@@ -12,6 +12,8 @@ import SettlementPage from "@/pages/SettlementPage";
 import CommitBidPageV2 from "@/pages/CommitBidPageV2";
 import RevealBidPageV2 from "@/pages/RevealBidPageV2";
 import TestUSDCxTransferPage from "@/pages/TestUSDCxTransferPage";
+import TestUSDCxPrivateRecordsPage from "@/pages/TestUSDCxPrivateRecordsPage";
+import TestUSDCxWalletCapabilitiesPage from "@/pages/TestUSDCxWalletCapabilitiesPage";
 import PremiumLanding from "@/pages/PremiumLanding";
 import PremiumAuctionList from "@/pages/PremiumAuctionList";
 import PremiumAuctionDetail from "@/pages/PremiumAuctionDetail";
@@ -19,6 +21,7 @@ import PremiumCreateAuction from "@/pages/PremiumCreateAuction";
 import PremiumHowItWorks from "@/pages/PremiumHowItWorks";
 import TestDataSeederPage from "@/pages/TestDataSeederPage";
 import WalletDebugPage from "@/pages/WalletDebugPage";
+import PremiumOpsShell from "@/components/premium/PremiumOpsShell";
 import AdminOnlyRoute from "@/components/auth/AdminOnlyRoute";
 import WalletDiagnostics from "@/components/common/WalletDiagnostics";
 import { AleoWalletProvider } from '@provablehq/aleo-wallet-adaptor-react';
@@ -30,10 +33,11 @@ import { SoterWalletAdapter } from '@provablehq/aleo-wallet-adaptor-soter';
 import { Network } from '@provablehq/aleo-types';
 import { DecryptPermission } from '@provablehq/aleo-wallet-adaptor-core';
 import SingleApproveShieldWalletAdapter from '@/wallets/SingleApproveShieldWalletAdapter';
+import { getStoredWalletDecryptPermission } from '@/wallets/walletPermissionMode';
 import '@provablehq/aleo-wallet-adaptor-react-ui/dist/styles.css';
 
 const INITIAL_WALLET_PROGRAMS = undefined;
-const DEFAULT_WALLET_DECRYPT_PERMISSION = DecryptPermission.UponRequest;
+const DEFAULT_WALLET_DECRYPT_PERMISSION = getStoredWalletDecryptPermission() || DecryptPermission.UponRequest;
 const WALLET_ADAPTERS = [
   new SingleApproveShieldWalletAdapter(),
   new PuzzleWalletAdapter(),
@@ -46,7 +50,7 @@ function App() {
   return (
     <AleoWalletProvider
       wallets={WALLET_ADAPTERS}
-      autoConnect={false}
+      autoConnect={true}
       localNet={false}
       network={Network.TESTNET}
       // Ask wallets to grant decrypt access only when a private-record flow
@@ -75,7 +79,7 @@ function App() {
               <Route path="/wallet-debug" element={<WalletDebugPage />} />
               <Route
                 path="/ops"
-                element={<AppShell />}
+                element={<PremiumOpsShell />}
               >
                 <Route
                   index
@@ -98,6 +102,8 @@ function App() {
                 <Route path="settlement" element={<SettlementPage />} />
                 <Route path="how-it-works" element={<Navigate to="/how-it-works" replace />} />
                 <Route path="test-usdcx-transfer" element={<TestUSDCxTransferPage />} />
+                <Route path="test-usdcx-private-records" element={<TestUSDCxPrivateRecordsPage />} />
+                <Route path="test-usdcx-wallet-capabilities" element={<TestUSDCxWalletCapabilitiesPage />} />
               </Route>
 
               {/* Legacy standard route redirects */}
@@ -107,6 +113,8 @@ function App() {
               <Route path="/reveal-bid" element={<Navigate to="/standard/reveal-bid" replace />} />
               <Route path="/settlement" element={<Navigate to="/standard/settlement" replace />} />
               <Route path="/test-usdcx-transfer" element={<Navigate to="/standard/test-usdcx-transfer" replace />} />
+              <Route path="/test-usdcx-private-records" element={<Navigate to="/standard/test-usdcx-private-records" replace />} />
+              <Route path="/test-usdcx-wallet-capabilities" element={<Navigate to="/standard/test-usdcx-wallet-capabilities" replace />} />
               
               {/* Redirect old routes to standard */}
               <Route path="*" element={<Navigate to="/" replace />} />

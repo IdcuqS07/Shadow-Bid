@@ -21,13 +21,13 @@ import PremiumNav from '@/components/premium/PremiumNav';
 const contractPillars = [
   {
     icon: Lock,
-    title: 'Sealed Commit-Reveal',
-    description: 'Bid amounts stay hidden during bidding and only become comparable after a valid reveal.',
+    title: 'Commit-Reveal Flow',
+    description: 'Commitments are posted during bidding and validated later during reveal, while full bid-amount secrecy remains a follow-up upgrade.',
   },
   {
     icon: Wallet,
     title: 'Three Settlement Currencies',
-    description: 'V2.21 auctions run with ALEO, USDCx, or USAD while keeping one consistent lifecycle.',
+    description: 'V2.22 auctions run with ALEO, USDCx, or USAD while keeping one consistent lifecycle.',
   },
   {
     icon: Scale,
@@ -45,7 +45,7 @@ const upgradeHighlights = [
   {
     title: 'Split reveal and dispute windows',
     description:
-      'V2.21 stores separate reveal and dispute deadlines, so the contract can distinguish bidder reveal time from the later admin review window.',
+      'V2.22 stores separate reveal and dispute deadlines, so the contract can distinguish bidder reveal time from the later admin review window.',
   },
   {
     title: 'Timeout settlement replaces the old winner-pick step',
@@ -55,7 +55,7 @@ const upgradeHighlights = [
   {
     title: 'Reserve misses are handled inside settlement',
     description:
-      'If no valid reveal clears the reserve, V2.21 cancels the auction during timeout settlement instead of relying on a separate seller cancel branch.',
+      'If no valid reveal clears the reserve, V2.22 cancels the auction during timeout settlement instead of relying on a separate seller cancel branch.',
   },
   {
     title: 'Claims follow a strict payout order',
@@ -74,18 +74,18 @@ const lifecycleSteps = [
     bullets: [
       'Supports ALEO, USDCx, and USAD',
       'Reserve logic is enforced during settlement',
-      'Seller profile and proof roots can be anchored for V2.21 verification workflows',
+      'Seller profile and proof roots can be anchored for V2.22 verification workflows',
     ],
   },
   {
     icon: Lock,
     role: 'Bidder',
-    title: 'Submit a sealed bid',
+    title: 'Submit a bid commitment',
     description:
-      'Each bidder commits privately to a value and locks funds through the active V2.21 commit path.',
+      'Each bidder locks funds and posts a commitment through the active V2.22 commit path.',
     bullets: [
-      'The bid amount remains private during the commit phase',
-      'Escrow is locked on-chain with the commitment',
+      'V2.22 no longer stores per-bid escrow amounts in mapping state',
+      'Private ALEO hides wallet record details, while public funding paths still expose transfer amounts until a fully private escrow design ships',
       'Reveal material is retained locally for the bidder to use later',
     ],
   },
@@ -143,7 +143,7 @@ const stateCards = [
   {
     name: 'OPEN',
     tone: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200',
-    description: 'Auction accepts private commitments and can still be cancelled only while escrow is zero.',
+    description: 'Auction accepts bid commitments while aggregate escrow accumulates on-chain and can still be cancelled only while escrow is zero.',
   },
   {
     name: 'CLOSED',
@@ -247,13 +247,13 @@ export default function PremiumHowItWorks() {
           <div className="mx-auto max-w-4xl text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-xs font-mono uppercase tracking-[0.2em] text-cyan-300">
               <Shield className="h-4 w-4" />
-              Contract V2.21 Lifecycle
+              Contract V2.22 Lifecycle
             </div>
             <h1 className="mt-6 text-5xl font-display font-bold leading-tight md:text-7xl">
               How ShadowBid Works
             </h1>
             <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/65">
-              This premium flow follows the live V2.21 contract: separate reveal and dispute deadlines,
+              This premium flow follows the live V2.22 contract: separate reveal and dispute deadlines,
               timeout settlement, reserve-aware outcomes, and post-settlement claims for sellers,
               bidders, and the platform owner.
             </p>
@@ -286,7 +286,7 @@ export default function PremiumHowItWorks() {
       <section className="relative z-10 px-8 py-12">
         <div className="mx-auto max-w-7xl">
           <div className="max-w-3xl">
-            <p className="text-sm font-mono uppercase tracking-[0.25em] text-cyan-300">V2.21 Upgrade</p>
+            <p className="text-sm font-mono uppercase tracking-[0.25em] text-cyan-300">V2.22 Upgrade</p>
             <h2 className="mt-3 text-4xl font-display font-bold text-white md:text-5xl">
               What changed in the live contract flow
             </h2>
@@ -313,7 +313,7 @@ export default function PremiumHowItWorks() {
           <div className="max-w-3xl">
             <p className="text-sm font-mono uppercase tracking-[0.25em] text-cyan-300">Lifecycle</p>
             <h2 className="mt-3 text-4xl font-display font-bold text-white md:text-5xl">
-              The V2.21 auction flow from creation to settlement
+              The V2.22 auction flow from creation to settlement
             </h2>
             <p className="mt-4 text-white/60">
               Each step below reflects the current product behavior in premium pages, settlement actions,
@@ -378,11 +378,12 @@ export default function PremiumHowItWorks() {
 
             <GlassCard className="p-8">
               <p className="text-sm font-mono uppercase tracking-[0.25em] text-cyan-300">Settlement Notes</p>
-              <h2 className="mt-3 text-3xl font-display font-bold text-white">Important V2.21 rules</h2>
+              <h2 className="mt-3 text-3xl font-display font-bold text-white">Important V2.22 rules</h2>
               <div className="mt-8 space-y-4">
                 {[
-                  'Reserve visibility is not hidden on-chain. Privacy in V2.21 comes from sealed bids and the reveal window.',
-                  'Reveal and dispute deadlines are separate in V2.21, so timeout settlement and finalization do not share the same clock anymore.',
+                  'The live V2.22 program no longer stores per-bid escrow amounts in the public escrow mapping.',
+                  'Public funding transactions can still expose amounts for ALEO, USDCx, and USAD until a private escrow rollout ships.',
+                  'Reveal and dispute deadlines are separate in V2.22, so timeout settlement and finalization do not share the same clock anymore.',
                   'The winner path must clear the challenge phase before final completion.',
                   'Seller payout and platform fee claim are separate steps; fee claim only unlocks after seller payout.',
                   'Ops Console reads shared lifecycle data, but the premium pages remain the main place where auctions are synced and acted upon.',
@@ -433,7 +434,7 @@ export default function PremiumHowItWorks() {
               <div className="max-w-2xl">
                 <p className="text-sm font-mono uppercase tracking-[0.25em] text-cyan-300">Ready to test the flow</p>
                 <h2 className="mt-3 text-4xl font-display font-bold text-white">
-                  Move from the explainer into the live V2.21 experience
+                  Move from the explainer into the live V2.22 experience
                 </h2>
                 <p className="mt-4 text-white/65">
                   Browse the current premium auctions, create a new listing, or open Ops Console if you are reviewing admin-side lifecycle behavior.

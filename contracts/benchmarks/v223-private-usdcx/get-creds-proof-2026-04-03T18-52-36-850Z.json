@@ -1,0 +1,242 @@
+{
+  "artifact_type": "usdcx-get-creds-proof-analysis",
+  "generated_at": "2026-04-03T18:52:42.741Z",
+  "network": "testnet",
+  "endpoint": "https://api.explorer.provable.com/v1",
+  "address": "aleo1ecrqqyvaszpehqc967g5aau4uqt2dg3y5ardm0y5wf4hxjajzsyqm5cxke",
+  "helper_manifest_path": "scripts/v223/snarkvm_freezelist_helper/Cargo.toml",
+  "cargo_target_dir": "/tmp/shadowbid-v223-snarkvm-target",
+  "queries": {
+    "primary_root": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "freeze_list_root",
+      "key": "1u8",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value freeze_list_root 1u8",
+      "value": "3642222252059314292809609689035560016959342421640560347114299934615987159853field",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/freeze_list_root/1u8'.\n\n3642222252059314292809609689035560016959342421640560347114299934615987159853field"
+    },
+    "fallback_root": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "freeze_list_root",
+      "key": "2u8",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value freeze_list_root 2u8",
+      "value": "null",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/freeze_list_root/2u8'.\n\nnull"
+    },
+    "block_height_window": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "block_height_window",
+      "key": "true",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value block_height_window true",
+      "value": "300u32",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/block_height_window/true'.\n\n300u32"
+    },
+    "root_updated_height": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "root_updated_height",
+      "key": "true",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value root_updated_height true",
+      "value": "null",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/root_updated_height/true'.\n\nnull"
+    },
+    "freeze_list_last_index": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "freeze_list_last_index",
+      "key": "true",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value freeze_list_last_index true",
+      "value": "0u32",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/freeze_list_last_index/true'.\n\n0u32"
+    },
+    "freeze_status": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "freeze_list",
+      "key": "aleo1ecrqqyvaszpehqc967g5aau4uqt2dg3y5ardm0y5wf4hxjajzsyqm5cxke",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value freeze_list aleo1ecrqqyvaszpehqc967g5aau4uqt2dg3y5ardm0y5wf4hxjajzsyqm5cxke",
+      "value": "null",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/freeze_list/aleo1ecrqqyvaszpehqc967g5aau4uqt2dg3y5ardm0y5wf4hxjajzsyqm5cxke'.\n\nnull"
+    }
+  },
+  "parsed_values": {
+    "primary_root": {
+      "kind": "field",
+      "literal": "3642222252059314292809609689035560016959342421640560347114299934615987159853field",
+      "numeric": "3642222252059314292809609689035560016959342421640560347114299934615987159853"
+    },
+    "fallback_root": {
+      "kind": "null",
+      "literal": "null",
+      "numeric": null
+    },
+    "block_height_window": {
+      "kind": "integer",
+      "literal": "300u32",
+      "numeric": "300"
+    },
+    "root_updated_height": {
+      "kind": "null",
+      "literal": "null",
+      "numeric": null
+    },
+    "freeze_list_last_index": {
+      "kind": "integer",
+      "literal": "0u32",
+      "numeric": "0"
+    },
+    "freeze_status": {
+      "kind": "null",
+      "literal": "null",
+      "numeric": null
+    }
+  },
+  "indexed_leaf_snapshot": [
+    {
+      "index": 0,
+      "key": "0u32",
+      "value": "aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value freeze_list_index 0u32"
+    }
+  ],
+  "helper_result": {
+    "target_address": "aleo1ecrqqyvaszpehqc967g5aau4uqt2dg3y5ardm0y5wf4hxjajzsyqm5cxke",
+    "target_field": "3655070274962542463601868928086424805100030632453170699998503342310743344846field",
+    "expected_root": "3642222252059314292809609689035560016959342421640560347114299934615987159853field",
+    "computed_root": "4812190250121114689006856537807044243413004285400590086599129513779231617247field",
+    "root_matches": false,
+    "leaf_count": 1,
+    "target_is_leaf": false,
+    "insertion_case": "after-last",
+    "left_bound": {
+      "index": 0,
+      "address": "aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc",
+      "field": "0field"
+    },
+    "right_bound": null,
+    "proofs": [
+      {
+        "leaf_index": 0,
+        "siblings": [
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field"
+        ]
+      },
+      {
+        "leaf_index": 0,
+        "siblings": [
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field"
+        ]
+      }
+    ],
+    "verify_non_inclusion_local": false
+  },
+  "sentinel_helper_result": {
+    "target_address": "aleo1ecrqqyvaszpehqc967g5aau4uqt2dg3y5ardm0y5wf4hxjajzsyqm5cxke",
+    "target_field": "3655070274962542463601868928086424805100030632453170699998503342310743344846field",
+    "expected_root": "3642222252059314292809609689035560016959342421640560347114299934615987159853field",
+    "computed_root": "4812190250121114689006856537807044243413004285400590086599129513779231617247field",
+    "root_matches": false,
+    "leaf_count": 1,
+    "target_is_leaf": false,
+    "insertion_case": "after-last",
+    "left_bound": {
+      "index": 0,
+      "address": "aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc",
+      "field": "0field"
+    },
+    "right_bound": null,
+    "proofs": [
+      {
+        "leaf_index": 0,
+        "siblings": [
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field"
+        ]
+      },
+      {
+        "leaf_index": 0,
+        "siblings": [
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field",
+          "0field"
+        ]
+      }
+    ],
+    "verify_non_inclusion_local": false
+  },
+  "helper_command": "cargo run --offline --manifest-path /Users/idcuq/Documents/Bid Market/scripts/v223/snarkvm_freezelist_helper/Cargo.toml -- --target aleo1ecrqqyvaszpehqc967g5aau4uqt2dg3y5ardm0y5wf4hxjajzsyqm5cxke --root 3642222252059314292809609689035560016959342421640560347114299934615987159853field --leaf aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc",
+  "sentinel_helper_command": "cargo run --offline --manifest-path /Users/idcuq/Documents/Bid Market/scripts/v223/snarkvm_freezelist_helper/Cargo.toml -- --target aleo1ecrqqyvaszpehqc967g5aau4uqt2dg3y5ardm0y5wf4hxjajzsyqm5cxke --root 3642222252059314292809609689035560016959342421640560347114299934615987159853field --leaf aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc",
+  "assessment": {
+    "address_frozen": false,
+    "mapping_leaf_count": 1,
+    "public_index_contains_only_sentinel": true,
+    "mapping_root_matches_live_root": false,
+    "sentinel_only_root_matches_live_root": false,
+    "mapping_only_proof_verifies_locally": false,
+    "can_generate_get_creds_proof_from_public_mappings_only": false,
+    "helper_insertion_case": "after-last",
+    "next_blocker": "The public freeze_list_index snapshot currently exposes only the sentinel leaf, but hashing that snapshot still does not reproduce the live root. The active get_creds proof therefore depends on off-chain root construction or unpublished sibling fields."
+  },
+  "leo_inputs": null,
+  "notes": [
+    "The helper mirrors the proof verifier inside the imported stablecoin get_credentials transition, including the 1field leaf prefix and 0field internal prefix.",
+    "freeze_list_index only stores public addresses, while the proof payload itself consists of raw field siblings.",
+    "The current public address index contains only the sentinel leaf, so there is no hidden second public address slot to explain the live root mismatch.",
+    "The freezelist contract rotates freeze_list_root by accepting both the current root and the next root as public update_freeze_list inputs, which is consistent with an externally constructed tree root.",
+    "The root mismatch means the live proof shape still depends on data that is not recoverable from the public address index snapshot alone."
+  ]
+}

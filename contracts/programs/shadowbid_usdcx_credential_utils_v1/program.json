@@ -1,0 +1,9 @@
+{
+    "program": "shadowbid_usdcx_cred_utils_v1.aleo",
+    "version": "0.0.0",
+    "description": "ShadowBid V2.23 scaffold for private USDCx credential batch planning and benchmark readiness",
+    "license": "MIT",
+    "leo": "4.0.0",
+    "dependencies": [],
+    "dev_dependencies": null
+}

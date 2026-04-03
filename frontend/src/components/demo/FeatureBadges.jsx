@@ -4,8 +4,8 @@ export function FeatureBadges() {
   const features = [
     {
       icon: Shield,
-      label: 'Private Bids',
-      description: 'Cryptographically sealed'
+      label: 'Commit-Reveal',
+      description: 'Commitment first, reveal later'
     },
     {
       icon: Zap,
@@ -14,8 +14,8 @@ export function FeatureBadges() {
     },
     {
       icon: Eye,
-      label: 'ZK Proofs',
-      description: 'Zero-knowledge verified'
+      label: 'ZK-Backed',
+      description: 'Aleo execution proofs'
     }
   ];
 

@@ -1,9 +1,9 @@
 {
-    "program": "shadowbid_marketplace_v2_21.aleo",
+    "program": "shadowbid_marketplace_v2_22.aleo",
     "version": "0.0.0",
-    "description": "ShadowBid Marketplace V2.21 - Split deadlines, deterministic reveal timeout, and dispute-aware settlement",
+    "description": "ShadowBid Marketplace V2.22 - Privacy-remediated sealed-bid auctions with deterministic reveal timeout and dispute-aware settlement",
     "license": "MIT",
-    "leo": "3.5.0",
+    "leo": "4.0.0",
     "dependencies": [
         {
             "name": "test_usdcx_stablecoin.aleo",

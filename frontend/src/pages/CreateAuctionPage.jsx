@@ -34,7 +34,7 @@ export default function CreateAuctionPage() {
 
   const handlePublishAuction = async () => {
     console.log('[CreateAuction] Starting publish auction');
-    console.log('[CreateAuction] Contract Version: V2.21');
+    console.log('[CreateAuction] Contract Version: V2.22');
     console.log('[CreateAuction] Connected:', connected);
     console.log('[CreateAuction] Form:', form);
     
@@ -74,7 +74,7 @@ export default function CreateAuctionPage() {
         endTimeDate: new Date(endTime * 1000).toISOString(),
         revealPeriod,
         disputePeriod,
-        version: 'v2.21'
+        version: 'v2.22'
       });
 
       toast.info(`Submitting ${form.currency === 'aleo' ? 'Aleo' : 'USDCx'} auction to blockchain...`);
@@ -106,7 +106,7 @@ export default function CreateAuctionPage() {
         closingDate: form.closingDate.toLocaleDateString(),
         seller: address,
         txId: result?.transactionId,
-        version: 'v2.21'
+        version: 'v2.22'
       };
       
       console.log('[CreateAuction] Saving auction locally:', auctionData);
@@ -131,7 +131,7 @@ export default function CreateAuctionPage() {
           Create Auction
         </h1>
         <p className="mt-1 text-sm text-slate-400" data-testid="create-auction-subtitle">
-          Set up a sealed-bid auction on-chain
+          Set up a commit-reveal auction on-chain
         </p>
       </div>
 

@@ -1,0 +1,564 @@
+{
+  "artifact_type": "benchmark-suite",
+  "artifact_version": 2,
+  "generated_at": "2026-04-03T15:56:20.505Z",
+  "suite": "shadowbid-v223-phase-1",
+  "status": "scaffolded",
+  "references": [
+    "docs/contracts/v2.23-phase-1-feasibility-spike.md",
+    "docs/contracts/v2.23-custody-decision.md",
+    "docs/contracts/v2.23-benchmark-findings.md"
+  ],
+  "program_bindings": {
+    "record_utils": {
+      "program_id": "shadowbid_usdcx_record_utils_v1.aleo",
+      "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+      "register_transition": "register_split_plan",
+      "ready_transition": "mark_split_plan_ready",
+      "close_transition": "close_split_plan"
+    },
+    "credential_utils": {
+      "program_id": "shadowbid_usdcx_cred_utils_v1.aleo",
+      "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+      "register_transition": "register_credential_batch",
+      "ready_transition": "mark_credential_batch_ready",
+      "close_transition": "close_credential_batch"
+    }
+  },
+  "required_metrics": [
+    "proving_time_ms",
+    "wall_clock_ms",
+    "fee_total",
+    "records_used",
+    "credentials_used",
+    "user_actions_required",
+    "public_leak_check"
+  ],
+  "scenarios": [
+    {
+      "id": "private-commit-1-bidder",
+      "description": "Basic private USDCx commit path with one bidder.",
+      "bidder_count": 1,
+      "auction_count": 1,
+      "target_value": 20000,
+      "expected_outputs": 2,
+      "expected_credentials": 1,
+      "recommended_custody_model": "contract-verifiable-private-custody",
+      "status": "pending",
+      "sidecar_plans": {
+        "record_plan": {
+          "plan_id": "78783272794461998422349654659field",
+          "denomination_root": "31678690394304252911958917901field",
+          "purpose_root": "61357293441688933487537953462field",
+          "expected_outputs": 2,
+          "target_value": "20000u128",
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "register_split_plan",
+              "inputs": [
+                "78783272794461998422349654659field",
+                "31678690394304252911958917901field",
+                "61357293441688933487537953462field",
+                "2u8",
+                "20000u128",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run register_split_plan 78783272794461998422349654659field 31678690394304252911958917901field 61357293441688933487537953462field 2u8 20000u128 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "mark_split_plan_ready",
+              "inputs": [
+                "78783272794461998422349654659field",
+                "2u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run mark_split_plan_ready 78783272794461998422349654659field 2u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "close_split_plan",
+              "inputs": [
+                "78783272794461998422349654659field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run close_split_plan 78783272794461998422349654659field 1775231900i64"
+            }
+          }
+        },
+        "credential_batch": {
+          "batch_id": "31278643661445040265542195425field",
+          "policy_root": "51024541965800885318027521352field",
+          "benchmark_root": "43294804824962401403159460440field",
+          "expected_credentials": 1,
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "register_credential_batch",
+              "inputs": [
+                "31278643661445040265542195425field",
+                "51024541965800885318027521352field",
+                "43294804824962401403159460440field",
+                "1u8",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run register_credential_batch 31278643661445040265542195425field 51024541965800885318027521352field 43294804824962401403159460440field 1u8 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "mark_credential_batch_ready",
+              "inputs": [
+                "31278643661445040265542195425field",
+                "1u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run mark_credential_batch_ready 31278643661445040265542195425field 1u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "close_credential_batch",
+              "inputs": [
+                "31278643661445040265542195425field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run close_credential_batch 31278643661445040265542195425field 1775231900i64"
+            }
+          }
+        }
+      },
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "contract-verifiable-private-custody",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "private-commit-reveal-1-bidder",
+      "description": "Private commit followed by reveal compatibility check.",
+      "bidder_count": 1,
+      "auction_count": 1,
+      "target_value": 20000,
+      "expected_outputs": 2,
+      "expected_credentials": 1,
+      "recommended_custody_model": "contract-verifiable-private-custody",
+      "status": "pending",
+      "sidecar_plans": {
+        "record_plan": {
+          "plan_id": "47206786470312058402671262004field",
+          "denomination_root": "7822514622839099553488762315field",
+          "purpose_root": "35392743883017786962095325027field",
+          "expected_outputs": 2,
+          "target_value": "20000u128",
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "register_split_plan",
+              "inputs": [
+                "47206786470312058402671262004field",
+                "7822514622839099553488762315field",
+                "35392743883017786962095325027field",
+                "2u8",
+                "20000u128",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run register_split_plan 47206786470312058402671262004field 7822514622839099553488762315field 35392743883017786962095325027field 2u8 20000u128 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "mark_split_plan_ready",
+              "inputs": [
+                "47206786470312058402671262004field",
+                "2u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run mark_split_plan_ready 47206786470312058402671262004field 2u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "close_split_plan",
+              "inputs": [
+                "47206786470312058402671262004field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run close_split_plan 47206786470312058402671262004field 1775231900i64"
+            }
+          }
+        },
+        "credential_batch": {
+          "batch_id": "38905760643366883502714571276field",
+          "policy_root": "36536746602055522047338162571field",
+          "benchmark_root": "66659395038045981524065423290field",
+          "expected_credentials": 1,
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "register_credential_batch",
+              "inputs": [
+                "38905760643366883502714571276field",
+                "36536746602055522047338162571field",
+                "66659395038045981524065423290field",
+                "1u8",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run register_credential_batch 38905760643366883502714571276field 36536746602055522047338162571field 66659395038045981524065423290field 1u8 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "mark_credential_batch_ready",
+              "inputs": [
+                "38905760643366883502714571276field",
+                "1u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run mark_credential_batch_ready 38905760643366883502714571276field 1u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "close_credential_batch",
+              "inputs": [
+                "38905760643366883502714571276field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run close_credential_batch 38905760643366883502714571276field 1775231900i64"
+            }
+          }
+        }
+      },
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "contract-verifiable-private-custody",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "private-commit-cancelled-refund",
+      "description": "Cancelled auction path with refund semantics.",
+      "bidder_count": 2,
+      "auction_count": 1,
+      "target_value": 20000,
+      "expected_outputs": 3,
+      "expected_credentials": 2,
+      "recommended_custody_model": "contract-verifiable-private-custody",
+      "status": "pending",
+      "sidecar_plans": {
+        "record_plan": {
+          "plan_id": "57450810193788097423805025522field",
+          "denomination_root": "57740375368226104350909373257field",
+          "purpose_root": "12804664177781860526152270526field",
+          "expected_outputs": 3,
+          "target_value": "20000u128",
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "register_split_plan",
+              "inputs": [
+                "57450810193788097423805025522field",
+                "57740375368226104350909373257field",
+                "12804664177781860526152270526field",
+                "3u8",
+                "20000u128",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run register_split_plan 57450810193788097423805025522field 57740375368226104350909373257field 12804664177781860526152270526field 3u8 20000u128 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "mark_split_plan_ready",
+              "inputs": [
+                "57450810193788097423805025522field",
+                "3u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run mark_split_plan_ready 57450810193788097423805025522field 3u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "close_split_plan",
+              "inputs": [
+                "57450810193788097423805025522field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run close_split_plan 57450810193788097423805025522field 1775231900i64"
+            }
+          }
+        },
+        "credential_batch": {
+          "batch_id": "40793952541960427738101223397field",
+          "policy_root": "25645818021828451343140955848field",
+          "benchmark_root": "36851568726468569866984063903field",
+          "expected_credentials": 2,
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "register_credential_batch",
+              "inputs": [
+                "40793952541960427738101223397field",
+                "25645818021828451343140955848field",
+                "36851568726468569866984063903field",
+                "2u8",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run register_credential_batch 40793952541960427738101223397field 25645818021828451343140955848field 36851568726468569866984063903field 2u8 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "mark_credential_batch_ready",
+              "inputs": [
+                "40793952541960427738101223397field",
+                "2u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run mark_credential_batch_ready 40793952541960427738101223397field 2u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "close_credential_batch",
+              "inputs": [
+                "40793952541960427738101223397field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run close_credential_batch 40793952541960427738101223397field 1775231900i64"
+            }
+          }
+        }
+      },
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "contract-verifiable-private-custody",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "private-commit-winner-settlement",
+      "description": "Winner settlement path with seller and fee implications.",
+      "bidder_count": 2,
+      "auction_count": 1,
+      "target_value": 25000,
+      "expected_outputs": 4,
+      "expected_credentials": 2,
+      "recommended_custody_model": "contract-verifiable-private-custody",
+      "status": "pending",
+      "sidecar_plans": {
+        "record_plan": {
+          "plan_id": "78052066221690131936313588447field",
+          "denomination_root": "51684876985629034512922425626field",
+          "purpose_root": "56461082916147257461780965350field",
+          "expected_outputs": 4,
+          "target_value": "25000u128",
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "register_split_plan",
+              "inputs": [
+                "78052066221690131936313588447field",
+                "51684876985629034512922425626field",
+                "56461082916147257461780965350field",
+                "4u8",
+                "25000u128",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run register_split_plan 78052066221690131936313588447field 51684876985629034512922425626field 56461082916147257461780965350field 4u8 25000u128 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "mark_split_plan_ready",
+              "inputs": [
+                "78052066221690131936313588447field",
+                "4u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run mark_split_plan_ready 78052066221690131936313588447field 4u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "close_split_plan",
+              "inputs": [
+                "78052066221690131936313588447field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run close_split_plan 78052066221690131936313588447field 1775231900i64"
+            }
+          }
+        },
+        "credential_batch": {
+          "batch_id": "7641826950176647368335638406field",
+          "policy_root": "77954138043343304666428538434field",
+          "benchmark_root": "53886789875830942938557548577field",
+          "expected_credentials": 2,
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "register_credential_batch",
+              "inputs": [
+                "7641826950176647368335638406field",
+                "77954138043343304666428538434field",
+                "53886789875830942938557548577field",
+                "2u8",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run register_credential_batch 7641826950176647368335638406field 77954138043343304666428538434field 53886789875830942938557548577field 2u8 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "mark_credential_batch_ready",
+              "inputs": [
+                "7641826950176647368335638406field",
+                "2u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run mark_credential_batch_ready 7641826950176647368335638406field 2u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "close_credential_batch",
+              "inputs": [
+                "7641826950176647368335638406field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run close_credential_batch 7641826950176647368335638406field 1775231900i64"
+            }
+          }
+        }
+      },
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "contract-verifiable-private-custody",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "parallel-2-auctions",
+      "description": "Two auctions settling in parallel to expose bottlenecks.",
+      "bidder_count": 4,
+      "auction_count": 2,
+      "target_value": 50000,
+      "expected_outputs": 6,
+      "expected_credentials": 4,
+      "recommended_custody_model": "contract-verifiable-private-custody",
+      "status": "pending",
+      "sidecar_plans": {
+        "record_plan": {
+          "plan_id": "50087334062046898250540167428field",
+          "denomination_root": "68872793483425643144013433094field",
+          "purpose_root": "78247240563668846914640432221field",
+          "expected_outputs": 6,
+          "target_value": "50000u128",
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "register_split_plan",
+              "inputs": [
+                "50087334062046898250540167428field",
+                "68872793483425643144013433094field",
+                "78247240563668846914640432221field",
+                "6u8",
+                "50000u128",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run register_split_plan 50087334062046898250540167428field 68872793483425643144013433094field 78247240563668846914640432221field 6u8 50000u128 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "mark_split_plan_ready",
+              "inputs": [
+                "50087334062046898250540167428field",
+                "6u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run mark_split_plan_ready 50087334062046898250540167428field 6u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+              "transition": "close_split_plan",
+              "inputs": [
+                "50087334062046898250540167428field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run close_split_plan 50087334062046898250540167428field 1775231900i64"
+            }
+          }
+        },
+        "credential_batch": {
+          "batch_id": "36178280973658854367875590592field",
+          "policy_root": "35388708624846133278039633866field",
+          "benchmark_root": "45417881233495376996418155017field",
+          "expected_credentials": 4,
+          "command_templates": {
+            "register": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "register_credential_batch",
+              "inputs": [
+                "36178280973658854367875590592field",
+                "35388708624846133278039633866field",
+                "45417881233495376996418155017field",
+                "4u8",
+                "1775231780i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run register_credential_batch 36178280973658854367875590592field 35388708624846133278039633866field 45417881233495376996418155017field 4u8 1775231780i64"
+            },
+            "mark_ready": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "mark_credential_batch_ready",
+              "inputs": [
+                "36178280973658854367875590592field",
+                "4u8",
+                "1775231840i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run mark_credential_batch_ready 36178280973658854367875590592field 4u8 1775231840i64"
+            },
+            "close": {
+              "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+              "transition": "close_credential_batch",
+              "inputs": [
+                "36178280973658854367875590592field",
+                "1775231900i64"
+              ],
+              "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run close_credential_batch 36178280973658854367875590592field 1775231900i64"
+            }
+          }
+        }
+      },
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "contract-verifiable-private-custody",
+      "evidence": [],
+      "notes": ""
+    }
+  ]
+}

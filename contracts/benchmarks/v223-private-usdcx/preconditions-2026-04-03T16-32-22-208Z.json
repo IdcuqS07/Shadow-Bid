@@ -1,0 +1,139 @@
+{
+  "artifact_type": "usdcx-preconditions",
+  "generated_at": "2026-04-03T16:32:26.183Z",
+  "network": "testnet",
+  "endpoint": "https://api.explorer.provable.com/v1",
+  "address": "aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+  "queries": {
+    "pause": {
+      "program": "test_usdcx_stablecoin.aleo",
+      "mapping": "pause",
+      "key": "true",
+      "command": "leo query program test_usdcx_stablecoin.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value pause true",
+      "value": "false",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_stablecoin.aleo/mapping/pause/true'.\n\nfalse"
+    },
+    "primary_root": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "freeze_list_root",
+      "key": "1u8",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value freeze_list_root 1u8",
+      "value": "3642222252059314292809609689035560016959342421640560347114299934615987159853field",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/freeze_list_root/1u8'.\n\n3642222252059314292809609689035560016959342421640560347114299934615987159853field"
+    },
+    "fallback_root": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "freeze_list_root",
+      "key": "2u8",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value freeze_list_root 2u8",
+      "value": "null",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/freeze_list_root/2u8'.\n\nnull"
+    },
+    "block_height_window": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "block_height_window",
+      "key": "true",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value block_height_window true",
+      "value": "300u32",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/block_height_window/true'.\n\n300u32"
+    },
+    "root_updated_height": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "root_updated_height",
+      "key": "true",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value root_updated_height true",
+      "value": "null",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/root_updated_height/true'.\n\nnull"
+    },
+    "address_role": {
+      "program": "test_usdcx_stablecoin.aleo",
+      "mapping": "address_to_role",
+      "key": "aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+      "command": "leo query program test_usdcx_stablecoin.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value address_to_role aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+      "value": "null",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_stablecoin.aleo/mapping/address_to_role/aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8'.\n\nnull"
+    },
+    "freeze_status": {
+      "program": "test_usdcx_freezelist.aleo",
+      "mapping": "freeze_list",
+      "key": "aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+      "command": "leo query program test_usdcx_freezelist.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value freeze_list aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+      "value": "null",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_freezelist.aleo/mapping/freeze_list/aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8'.\n\nnull"
+    },
+    "public_balance": {
+      "program": "test_usdcx_stablecoin.aleo",
+      "mapping": "balances",
+      "key": "aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+      "command": "leo query program test_usdcx_stablecoin.aleo --network testnet --endpoint https://api.explorer.provable.com/v1 --mapping-value balances aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+      "value": "20993000u128",
+      "raw_stdout": "Leo ✅ Successfully retrieved data from 'https://api.explorer.provable.com/v1/testnet/program/test_usdcx_stablecoin.aleo/mapping/balances/aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8'.\n\n20993000u128"
+    }
+  },
+  "parsed_values": {
+    "pause": {
+      "kind": "boolean",
+      "literal": "false",
+      "numeric": 0
+    },
+    "primary_root": {
+      "kind": "field",
+      "literal": "3642222252059314292809609689035560016959342421640560347114299934615987159853field",
+      "numeric": "3642222252059314292809609689035560016959342421640560347114299934615987159853"
+    },
+    "fallback_root": {
+      "kind": "null",
+      "literal": "null",
+      "numeric": null
+    },
+    "block_height_window": {
+      "kind": "integer",
+      "literal": "300u32",
+      "numeric": "300"
+    },
+    "root_updated_height": {
+      "kind": "null",
+      "literal": "null",
+      "numeric": null
+    },
+    "address_role": {
+      "kind": "null",
+      "literal": "null",
+      "numeric": null
+    },
+    "freeze_status": {
+      "kind": "null",
+      "literal": "null",
+      "numeric": null
+    },
+    "public_balance": {
+      "kind": "integer",
+      "literal": "20993000u128",
+      "numeric": "20993000"
+    }
+  },
+  "assessment": {
+    "can_attempt_get_credentials": true,
+    "can_attempt_transfer_private_with_creds": true,
+    "pause_allows_private_transfers": true,
+    "primary_root_present": true,
+    "fallback_root_present": false,
+    "address_not_frozen": true,
+    "public_balance_present": true,
+    "public_balance_literal": "20993000u128",
+    "role_literal": "null",
+    "hidden_amount_funding_source_status": "public-balance-only",
+    "next_blocker": "A genuine private Token record source is still missing for this address; the visible balance today is public only.",
+    "has_minter_role": false,
+    "has_burner_role": false,
+    "has_pause_role": false,
+    "has_admin_role": false,
+    "has_freezelist_role": false
+  },
+  "notes": [
+    "This snapshot only checks public contract state and public balances.",
+    "It cannot prove that a usable private Token record already exists for the address.",
+    "A public balance is visible for this address.",
+    "The obvious public-to-private conversion path would leak the amount, so it does not satisfy the `v2.23` hidden-amount goal."
+  ]
+}

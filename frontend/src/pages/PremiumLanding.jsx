@@ -21,26 +21,26 @@ export default function PremiumLanding() {
     {
       icon: Shield,
       title: 'Zero-Knowledge Proofs',
-      description: 'Bid commitments stay hidden until reveal phase through the V2.21 sealed commit-reveal flow.',
-      version: 'V2.21',
+      description: 'Aleo proofs back contract execution, while bidder-local reveal secrets stay off-chain until reveal.',
+      version: 'V2.22',
     },
     {
       icon: Lock,
-      title: 'Sealed-Bid Auctions',
-      description: 'No one can see your bid. Fair competition without information asymmetry.',
-      version: 'V2.21',
+      title: 'Commit-Reveal Auctions',
+      description: 'V2.22 derives commitments in-contract and no longer stores per-bid amounts in the escrow mapping.',
+      version: 'V2.22',
     },
     {
       icon: DollarSign,
       title: '3 Payment Currencies',
-      description: 'Create auctions in ALEO, USDCx, or USAD with the active V2.21 contract flow.',
-      version: 'V2.21',
+      description: 'Create auctions in ALEO, USDCx, or USAD with the active V2.22 contract flow.',
+      version: 'V2.22',
     },
     {
       icon: Package,
       title: 'Reserve + Fee Controls',
-      description: 'V2.21 adds split deadlines, dispute resolution, and keeper-ready lifecycle controls for real-world items.',
-      version: 'V2.21',
+      description: 'V2.22 keeps split deadlines, dispute resolution, and keeper-ready lifecycle controls for real-world items.',
+      version: 'V2.22',
     },
   ];
 
@@ -93,7 +93,7 @@ export default function PremiumLanding() {
 
             {/* Main Headline */}
             <h1 className="text-7xl md:text-8xl font-display font-bold leading-none">
-              <span className="block text-white">Private Sealed-Bid</span>
+              <span className="block text-white">Commit-Reveal</span>
               <span className="block bg-gradient-to-r from-gold-400 via-gold-500 to-cyan-500 bg-clip-text text-transparent">
                 Auctions on Aleo
               </span>
@@ -101,14 +101,15 @@ export default function PremiumLanding() {
 
             {/* Subheadline */}
             <p className="text-xl text-white/60 max-w-2xl mx-auto leading-relaxed">
-              Sealed bids stay hidden until reveal, while settlement remains contract-verifiable.
-              Privacy by default, with on-chain accountability where the auction flow requires it.
+              V2.22 uses commit-reveal bidding with contract-verifiable settlement. Bidder-local reveal secrets stay off-chain,
+              while public funding transactions can still expose amounts until fully private escrow ships.
             </p>
 
             {/* CTA Buttons */}
-            <div className="flex items-center justify-center gap-4 pt-8">
+            <div className="flex flex-col items-stretch justify-center gap-3 pt-8 sm:flex-row sm:items-center">
               <PremiumButton 
                 size="xl"
+                className="w-full sm:w-auto sm:min-w-[220px]"
                 onClick={() => navigate('/premium-auctions')}
               >
                 Launch App
@@ -116,6 +117,7 @@ export default function PremiumLanding() {
               <PremiumButton
                 variant="secondary"
                 size="xl"
+                className="w-full sm:w-auto sm:min-w-[220px]"
                 onClick={() => navigate('/how-it-works')}
               >
                 How It Works
@@ -127,7 +129,7 @@ export default function PremiumLanding() {
               {[
                 { value: '40%', label: 'Lower Gas Costs' },
                 { value: '3', label: 'Currencies' },
-                { value: 'Sealed', label: 'Bid Privacy' },
+                { value: '2', label: 'Lifecycle Windows' },
               ].map((stat, i) => (
                 <div key={i} className="text-center">
                   <div className="text-4xl font-display font-bold text-gold-500 mb-2">
@@ -197,10 +199,10 @@ export default function PremiumLanding() {
             
             <div className="relative z-10 space-y-6">
               <h2 className="text-4xl font-display font-bold">
-                Ready to Experience Private Auctions?
+                Ready to Explore Commit-Reveal Auctions?
               </h2>
               <p className="text-white/60 text-lg">
-                Join the future of fair, private, and verifiable auctions on Aleo.
+                Join the next generation of verifiable auctions on Aleo.
               </p>
               <div className="pt-4">
                 <PremiumButton 

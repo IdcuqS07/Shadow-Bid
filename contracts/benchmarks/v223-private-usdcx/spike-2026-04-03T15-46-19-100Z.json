@@ -1,0 +1,37 @@
+{
+  "artifact_type": "private-usdcx-spike",
+  "generated_at": "2026-04-03T15:46:19.105Z",
+  "scenario": "private-usdcx-funding",
+  "status": "scaffolded",
+  "goal": "Prove a private USDCx funding path that does not leak bid amount through the public transfer path.",
+  "references": [
+    "docs/contracts/v2.23-phase-1-feasibility-spike.md",
+    "docs/contracts/v2.23-custody-decision.md",
+    "docs/contracts/v2.23-benchmark-findings.md"
+  ],
+  "manual_steps": [
+    "Prepare private USDCx records and required credentials.",
+    "Bind the funding attempt to one concrete auction and bidder identity.",
+    "Capture the transaction IDs or local proving artifacts.",
+    "Inspect public explorer-visible state for amount leakage.",
+    "Record any trust assumptions used by the custody model."
+  ],
+  "evidence_required": [
+    "Public leak check result",
+    "Record count and credential count",
+    "User actions required",
+    "Notes on custody and settlement implications"
+  ],
+  "result_template": {
+    "network": "pending",
+    "auction_id": "pending",
+    "bidder": "pending",
+    "tx_ids": [],
+    "public_leak_check": "pending",
+    "records_used": "pending",
+    "credentials_used": "pending",
+    "user_actions_required": "pending",
+    "trust_assumptions": "pending",
+    "notes": ""
+  }
+}

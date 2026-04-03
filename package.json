@@ -9,6 +9,18 @@
     "build": "npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview",
     "lint": "npm --prefix frontend run lint",
-    "build:contracts": "cd contracts && leo build"
+    "build:contracts": "cd contracts && leo build",
+    "v223:spike": "node scripts/v223/run-private-usdcx-spike.mjs",
+    "v223:bench": "node scripts/v223/run-shadowbid-benchmarks.mjs",
+    "v223:report": "node scripts/v223/report-shadowbid-benchmarks.mjs",
+    "v223:commands": "node scripts/v223/print-sidecar-commands.mjs",
+    "v223:sidecar": "node scripts/v223/execute-sidecar-plans.mjs",
+    "v223:findings": "node scripts/v223/generate-benchmark-findings.mjs",
+    "v223:primitives": "node scripts/v223/generate-usdcx-private-primitives.mjs",
+    "v223:preconditions": "node scripts/v223/query-usdcx-private-preconditions.mjs",
+    "v223:funding": "node scripts/v223/generate-usdcx-funding-paths.mjs",
+    "v223:runbook": "node scripts/v223/generate-usdcx-spike-runbook.mjs",
+    "v223:get-creds-proof": "node scripts/v223/analyze-usdcx-get-creds-proof.mjs",
+    "v223:visibility": "node scripts/v223/analyze-usdcx-tx-visibility.mjs"
   }
 }

@@ -52,6 +52,26 @@ const DURATION_UNIT_OPTIONS = [
   { value: 'days', label: 'Days' },
 ];
 
+const EMPTY_FORM_DATA = {
+  title: '',
+  description: '',
+  format: 'sealed',
+  minBid: '',
+  reservePrice: '',
+  durationValue: '24',
+  durationUnit: 'hours',
+  currency: 'ALEO',
+  assetType: '0',
+  sellerDisplayName: '',
+  verificationStatus: 'pending',
+  verificationTier: 'standard',
+  issuingAuthority: '',
+  certificateId: '',
+  provenanceNote: '',
+  proofSummary: '',
+  authenticityGuarantee: '',
+};
+
 function getDurationSeconds(value, unit) {
   const parsedValue = parseInt(value, 10);
   if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
@@ -138,25 +158,7 @@ export default function PremiumCreateAuction() {
   
   // V2.18 is now default - no need to set version
   
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    format: 'sealed',
-    minBid: '',
-    reservePrice: '',
-    durationValue: '24',
-    durationUnit: 'hours',
-    currency: 'ALEO',
-    assetType: '0', // NEW: Asset category (0-7)
-    sellerDisplayName: '',
-    verificationStatus: 'pending',
-    verificationTier: 'standard',
-    issuingAuthority: '',
-    certificateId: '',
-    provenanceNote: '',
-    proofSummary: '',
-    authenticityGuarantee: '',
-  });
+  const [formData, setFormData] = useState(EMPTY_FORM_DATA);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [itemPhotos, setItemPhotos] = useState([]); // NEW: Item photos for RWA
@@ -185,11 +187,11 @@ export default function PremiumCreateAuction() {
     {
       id: 'sealed',
       name: 'Sealed-Bid',
-      description: 'All bids hidden until reveal. Most private.',
+      description: 'Commitments stay sealed until reveal, and V2.22 no longer stores per-bid amounts in the escrow mapping.',
       icon: Shield,
       color: 'gold',
       available: true,
-      version: 'V2.21',
+      version: 'V2.22',
     },
   ];
 
@@ -383,7 +385,7 @@ export default function PremiumCreateAuction() {
           disclosureRoot
         );
       } catch (anchorError) {
-        console.error('⚠️ Failed to anchor V2.21 proof metadata on-chain:', anchorError);
+        console.error('⚠️ Failed to anchor V2.22 proof metadata on-chain:', anchorError);
         anchorWarnings.push(anchorError.message || String(anchorError));
       }
 
@@ -399,9 +401,12 @@ export default function PremiumCreateAuction() {
         syncAuctionSnapshot({
           id: auctionId,
           title: formData.title,
+          description: formData.description,
           status: 'open',
           contractState: 'OPEN',
           seller: address,
+          creator: address,
+          sellerDisplayName: formData.sellerDisplayName,
           winner: null,
           token: formData.currency,
           endTimestamp: endTime,
@@ -438,8 +443,8 @@ export default function PremiumCreateAuction() {
       alert(
         `✅ Auction Created Successfully!\n\nAuction ID: ${auctionId}\nTransaction submitted to blockchain.` +
         (anchorWarnings.length > 0
-          ? `\n\n⚠️ V2.21 proof anchoring was skipped:\n${anchorWarnings.join('\n')}`
-          : `\n\nV2.21 seller profile and proof roots were also anchored on-chain.`)
+          ? `\n\n⚠️ V2.22 proof anchoring was skipped:\n${anchorWarnings.join('\n')}`
+          : `\n\nV2.22 seller profile and proof roots were also anchored on-chain.`)
       );
       
       // Navigate to auction list
@@ -564,12 +569,12 @@ export default function PremiumCreateAuction() {
             {/* Version Badge */}
             <div className="px-3 py-1 bg-gold-500/10 border border-gold-500/30 rounded-lg">
               <span className="text-xs font-mono text-gold-400">
-                V2.21 • Split Deadlines • Dispute • RWA
+                V2.22 • Split Deadlines • Dispute • RWA
               </span>
             </div>
           </div>
           <p className="text-white/60 text-lg">
-            Launch a private sealed-bid auction with zero-knowledge proofs
+            Launch a commit-reveal auction with Aleo-backed verification
           </p>
         </div>
 
@@ -615,7 +620,7 @@ export default function PremiumCreateAuction() {
                       Asset Category
                       <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
                         <CheckCircle className="w-3 h-3" />
-                        V2.21
+                        V2.22
                       </span>
                     </label>
                     <select
@@ -663,7 +668,7 @@ export default function PremiumCreateAuction() {
                         <span className="ml-2 text-red-400">*</span>
                         <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
                           <CheckCircle className="w-3 h-3" />
-                          V2.21
+                          V2.22
                         </span>
                       </label>
                       
@@ -924,7 +929,7 @@ export default function PremiumCreateAuction() {
                     <div className="flex items-start gap-3">
                       <Info className="mt-0.5 h-5 w-5 text-cyan-400" />
                       <div className="text-xs leading-relaxed text-white/65">
-                        Seller profile roots and proof roots are anchored to V2.21. Full documents, supporting files,
+                        Seller profile roots and proof roots are anchored to V2.22. Full documents, supporting files,
                         and evidence references are kept in the app data layer for richer UI panels and ops workflows.
                       </div>
                     </div>
@@ -939,7 +944,7 @@ export default function PremiumCreateAuction() {
                 <div className="grid grid-cols-2 gap-4">
                   {auctionFormats.length === 1 && (
                     <div className="col-span-2 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-xs text-white/60">
-                      Contract V2.21 currently supports sealed-bid auctions only.
+                      Contract V2.22 currently supports one live commit-reveal auction format.
                     </div>
                   )}
                   {auctionFormats.map((format) => (
@@ -1004,7 +1009,7 @@ export default function PremiumCreateAuction() {
                   <div className="flex items-start gap-3">
                     <Info className="w-5 h-5 text-cyan-400 mt-0.5" />
                     <div className="text-xs text-white/60">
-                      <span className="text-cyan-400 font-mono">Privacy-First:</span> The active V2.21 contract exposes sealed-bid auction creation only, so this UI is locked to the same format.
+                      <span className="text-cyan-400 font-mono">Current Model:</span> The active V2.22 contract exposes commit-reveal auction creation only, so this UI is locked to the same format.
                     </div>
                   </div>
                 </div>
@@ -1054,7 +1059,7 @@ export default function PremiumCreateAuction() {
                   <div className="flex items-start gap-3">
                     <Info className="w-5 h-5 text-cyan-400 mt-0.5" />
                     <div className="text-xs text-white/60">
-                      <span className="text-cyan-400 font-mono">V2.21</span> supports 3 currencies: Aleo Credits, USDCx, and USAD.
+                      <span className="text-cyan-400 font-mono">V2.22</span> supports 3 currencies: Aleo Credits, USDCx, and USAD.
                       <span className="text-cyan-400 font-mono"> Reserve Price</span> is enforced during settlement, and platform fees are calculated automatically on the winning bid.
                     </div>
                   </div>
@@ -1218,11 +1223,11 @@ export default function PremiumCreateAuction() {
                           <span className="font-mono text-sm">Sealed Commit-Reveal</span>
                           <span className="inline-flex items-center gap-1 rounded border border-green-500/40 bg-green-500/20 px-2 py-0.5 text-xs font-mono text-green-400">
                             <CheckCircle className="h-3 w-3" />
-                            V2.21 Live
+                            V2.22 Live
                           </span>
                         </div>
                         <div className="text-xs text-white/60">
-                          Bid commitments stay hidden until reveal. This is the real privacy model enforced by the contract.
+                          Commitments are recorded before reveal, and V2.22 keeps per-bid amounts out of mapping state. Public funding transactions can still expose amounts.
                         </div>
                       </div>
                       <span className="font-mono text-sm text-cyan-300">Enabled</span>
@@ -1240,7 +1245,7 @@ export default function PremiumCreateAuction() {
                           </span>
                         </div>
                         <div className="text-xs text-white/60">
-                          Reserve protection is active in V2.21, but the reserve itself is not hidden by the contract.
+                          Reserve protection is active in V2.22, but the reserve itself is not hidden by the contract.
                         </div>
                       </div>
                       <span className="font-mono text-right text-sm text-gold-400">{reserveVisibilityLabel}</span>
@@ -1254,10 +1259,10 @@ export default function PremiumCreateAuction() {
                     <Shield className="w-5 h-5 text-cyan-400 mt-0.5" />
                     <div>
                       <div className="font-mono text-sm text-cyan-400 mb-1">
-                        Contract Reality
+                        Current Contract Reality
                       </div>
                       <div className="text-xs text-white/60">
-                        V2.21 privacy comes from sealed bid commitments and the reveal window. Reserve hiding is not configurable on-chain in the current contract.
+                        The live V2.22 testnet deployment now hashes commitments in-contract and removes per-bid escrow amounts from mapping state. Public funding flows still expose transfer amounts until a fully private escrow design ships.
                       </div>
                     </div>
                   </div>

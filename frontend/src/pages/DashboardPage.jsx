@@ -126,19 +126,18 @@ export default function DashboardPage() {
           {/* Main Heading */}
           <div className="mb-6">
             <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-tight">
-              Sealed Bids.
+              Commit-Reveal.
               <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-                Zero Knowledge.
+                Verifiable Settlement.
               </span>
             </h1>
           </div>
 
           {/* Description */}
           <p className="text-xl text-slate-300 max-w-2xl mb-8">
-            The first sealed-bid auction where your bids are{' '}
-            <span className="text-purple-400 font-semibold">cryptographically invisible</span>.
-            Built on Aleo with zero-knowledge proofs.
+            Commitments and local reveal secrets drive the live V2.22 flow.
+            Per-bid escrow amounts are no longer stored in mapping state, although public funding transactions can still reveal amounts.
           </p>
 
           {/* CTAs */}

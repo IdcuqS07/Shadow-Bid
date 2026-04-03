@@ -1,0 +1,16 @@
+{
+    "program": "shadowbid_usdcx_probe_v1.aleo",
+    "version": "0.0.0",
+    "description": "ShadowBid V2.23 probe wrapper for local private USDCx primitive experiments",
+    "license": "MIT",
+    "leo": "4.0.0",
+    "dependencies": [
+        {
+            "name": "test_usdcx_stablecoin.aleo",
+            "location": "network",
+            "path": null,
+            "edition": null
+        }
+    ],
+    "dev_dependencies": null
+}

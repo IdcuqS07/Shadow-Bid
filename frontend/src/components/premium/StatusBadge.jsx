@@ -56,28 +56,65 @@ const statusStyles = {
     text: 'text-warning',
     dot: 'bg-warning',
   },
+  'awaiting-close': {
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/30',
+    text: 'text-amber-300',
+    dot: 'bg-amber-300',
+  },
+  'reveal-phase': {
+    bg: 'bg-blue-500/10',
+    border: 'border-blue-500/30',
+    text: 'text-blue-300',
+    dot: 'bg-blue-300',
+  },
+  'awaiting-settlement': {
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/30',
+    text: 'text-amber-300',
+    dot: 'bg-amber-300',
+  },
+  'dispute-window': {
+    bg: 'bg-warning/10',
+    border: 'border-warning/30',
+    text: 'text-warning',
+    dot: 'bg-warning',
+  },
 };
 
-export default function StatusBadge({ status = 'open', className }) {
-  const styles = statusStyles[status.toLowerCase()] || statusStyles.active;
-  const label = status.replace(/-/g, ' ');
+const sizeStyles = {
+  md: {
+    container: 'gap-2 px-3 py-1.5 text-xs tracking-wider',
+    dot: 'h-1.5 w-1.5',
+  },
+  sm: {
+    container: 'gap-1.5 px-2.5 py-1 text-[10px] tracking-[0.2em]',
+    dot: 'h-1.5 w-1.5',
+  },
+};
+
+export default function StatusBadge({ status = 'open', size = 'md', className, ...props }) {
+  const normalizedStatus = typeof status === 'string' ? status.toLowerCase() : 'open';
+  const styles = statusStyles[normalizedStatus] || statusStyles.active;
+  const label = typeof status === 'string' ? status.replace(/-/g, ' ') : 'open';
+  const sizing = sizeStyles[size] || sizeStyles.md;
   
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2",
-        "px-3 py-1.5",
+        "inline-flex items-center",
         styles.bg,
         "border",
         styles.border,
         "rounded-full",
         styles.text,
-        "text-xs font-mono",
-        "uppercase tracking-wider",
+        "font-mono uppercase",
+        sizing.container,
         className
       )}
+      {...props}
     >
-      <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", styles.dot)} />
+      <span className={cn("rounded-full animate-pulse", sizing.dot, styles.dot)} />
       {label}
     </span>
   );

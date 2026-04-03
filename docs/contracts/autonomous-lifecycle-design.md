@@ -4,9 +4,11 @@ This document captures follow-up contract and protocol options for making the Sh
 
 Historical note: this blueprint was originally written while `v2.20` was the live reference, so many comparisons still point back to `v2.20`. Treat it as design context, not as the current implementation record.
 
+Privacy note: neither `v2.20` nor `v2.21` provide full bid-amount secrecy, because escrowed amounts remain public in the live mappings. The remediation path for that gap is tracked in `privacy-remediation-roadmap.md`.
+
 ## Why `v2.20` Is Not Enough For Full Autonomy
 
-`v2.20` already supports the full sealed-bid lifecycle:
+`v2.20` already supports the full commit-reveal lifecycle:
 
 - `close_auction`
 - `reveal_bid`

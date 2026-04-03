@@ -91,20 +91,13 @@ export default function CommitBidPageV2() {
       const bidAmount = Math.round(parseFloat(form.bidAmount) * 1_000_000);
       const currencyLabel = AleoServiceV2.getCurrencyLabel(currency);
 
-      // Generate nonce and commitment
+      // Generate nonce; the contract derives the commitment on-chain.
       const nonce = AleoServiceV2.generateNonce();
-      const commitment = AleoServiceV2.generateCommitment(
-        bidAmount,
-        nonce,
-        address,
-        auctionId
-      );
 
       console.log('[CommitBid] Commit params:', {
         auctionId,
         bidAmount,
         currency,
-        commitment,
         nonce: nonce.substring(0, 20) + '...'
       });
 
@@ -118,7 +111,7 @@ export default function CommitBidPageV2() {
         toast.info('Step 1/2: Transferring Aleo credits...');
         toast.info('⚠️ Please approve the first transaction');
         
-        const contractAddress = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
+        const contractAddress = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_22.aleo';
         
         console.log('[CommitBid] Step 1: Transfer params:', {
           to: contractAddress,
@@ -147,14 +140,14 @@ export default function CommitBidPageV2() {
         
         console.log('[CommitBid] Step 2: Commit params:', {
           auctionId,
-          commitment,
+          nonce: `${nonce.substring(0, 20)}...`,
           bidAmount
         });
         
         result = await AleoServiceV2.commitBidAleo(
           executeTransaction,
           auctionId,
-          commitment,
+          nonce,
           bidAmount
         );
         
@@ -169,7 +162,7 @@ export default function CommitBidPageV2() {
         result = await AleoServiceV2.commitBid(
           executeTransaction,
           auctionId,
-          commitment,
+          nonce,
           bidAmount
         );
       }
@@ -178,18 +171,19 @@ export default function CommitBidPageV2() {
 
       // Save nonce and commitment locally with currency
       AleoServiceV2.saveNonce(auctionId, nonce, address);
-      AleoServiceV2.saveCommitment(auctionId, commitment, bidAmount, address, currency, {
+      AleoServiceV2.saveCommitment(auctionId, null, bidAmount, address, currency, {
         transactionId: result?.transactionId,
+        commitmentMode: 'contract-derived',
       });
       
       // Save currency to localStorage for this bid
       const bidData = {
         auctionId,
-        commitment,
         bidAmount: form.bidAmount,
         currency,  // NEW
         txId: result?.transactionId,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        commitmentMode: 'contract-derived',
       };
       localStorage.setItem(`bid_${auctionId}_${address}`, JSON.stringify(bidData));
 
@@ -217,7 +211,7 @@ export default function CommitBidPageV2() {
           Commit Bid
         </h1>
         <p className="mt-1 text-sm text-slate-400">
-          Submit sealed bid (single transaction)
+          Submit commit-reveal bid
         </p>
       </div>
 

@@ -1,0 +1,112 @@
+{
+  "artifact_type": "private-usdcx-spike",
+  "artifact_version": 2,
+  "generated_at": "2026-04-03T15:56:20.507Z",
+  "scenario": "private-usdcx-funding",
+  "status": "scaffolded",
+  "goal": "Prove a private USDCx funding path that does not leak bid amount through the public transfer path.",
+  "references": [
+    "docs/contracts/v2.23-phase-1-feasibility-spike.md",
+    "docs/contracts/v2.23-custody-decision.md",
+    "docs/contracts/v2.23-benchmark-findings.md"
+  ],
+  "program_bindings": {
+    "record_utils": {
+      "program_id": "shadowbid_usdcx_record_utils_v1.aleo",
+      "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1"
+    },
+    "credential_utils": {
+      "program_id": "shadowbid_usdcx_cred_utils_v1.aleo",
+      "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1"
+    }
+  },
+  "manual_steps": [
+    "Prepare private USDCx records and required credentials.",
+    "Bind the funding attempt to one concrete auction and bidder identity.",
+    "Capture the transaction IDs or local proving artifacts.",
+    "Inspect public explorer-visible state for amount leakage.",
+    "Record any trust assumptions used by the custody model."
+  ],
+  "evidence_required": [
+    "Public leak check result",
+    "Record count and credential count",
+    "User actions required",
+    "Notes on custody and settlement implications"
+  ],
+  "sidecar_plans": {
+    "record_plan": {
+      "plan_id": "8955100212030137681173399758field",
+      "denomination_root": "23028686058398564204336581833field",
+      "purpose_root": "14793771871966220104235150181field",
+      "expected_outputs": 2,
+      "target_value": "20000u128",
+      "command_templates": {
+        "register": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+          "transition": "register_split_plan",
+          "inputs": [
+            "8955100212030137681173399758field",
+            "23028686058398564204336581833field",
+            "14793771871966220104235150181field",
+            "2u8",
+            "20000u128",
+            "1775231780i64"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run register_split_plan 8955100212030137681173399758field 23028686058398564204336581833field 14793771871966220104235150181field 2u8 20000u128 1775231780i64"
+        },
+        "mark_ready": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+          "transition": "mark_split_plan_ready",
+          "inputs": [
+            "8955100212030137681173399758field",
+            "2u8",
+            "1775231840i64"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run mark_split_plan_ready 8955100212030137681173399758field 2u8 1775231840i64"
+        }
+      }
+    },
+    "credential_batch": {
+      "batch_id": "50981791722634883846899683380field",
+      "policy_root": "52546430623732152500454194471field",
+      "benchmark_root": "41660109915814149640467594field",
+      "expected_credentials": 1,
+      "command_templates": {
+        "register": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+          "transition": "register_credential_batch",
+          "inputs": [
+            "50981791722634883846899683380field",
+            "52546430623732152500454194471field",
+            "41660109915814149640467594field",
+            "1u8",
+            "1775231780i64"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run register_credential_batch 50981791722634883846899683380field 52546430623732152500454194471field 41660109915814149640467594field 1u8 1775231780i64"
+        },
+        "mark_ready": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+          "transition": "mark_credential_batch_ready",
+          "inputs": [
+            "50981791722634883846899683380field",
+            "1u8",
+            "1775231840i64"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run mark_credential_batch_ready 50981791722634883846899683380field 1u8 1775231840i64"
+        }
+      }
+    }
+  },
+  "result_template": {
+    "network": "pending",
+    "auction_id": "pending",
+    "bidder": "pending",
+    "tx_ids": [],
+    "public_leak_check": "pending",
+    "records_used": "pending",
+    "credentials_used": "pending",
+    "user_actions_required": "pending",
+    "trust_assumptions": "pending",
+    "notes": ""
+  }
+}

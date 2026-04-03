@@ -1,0 +1,160 @@
+{
+  "generated_at": "2026-04-03T16:32:07.396Z",
+  "source_file": "contracts/build/imports/test_usdcx_stablecoin.aleo",
+  "records": [
+    "record Token:\n    owner as address.private;\n    amount as u128.private;",
+    "record ComplianceRecord:\n    owner as address.private;\n    amount as u128.private;\n    sender as address.private;\n    recipient as address.private;",
+    "record Credentials:\n    owner as address.private;\n    freeze_list_root as field.private;",
+    "struct MerkleProof:\n    siblings as [field; 16u32];\n    leaf_index as u32;"
+  ],
+  "functions": [
+    {
+      "function_name": "get_credentials",
+      "classification": "private-credentials",
+      "hidden_amount_path": true,
+      "leaks_public_amount": false,
+      "notes": [
+        "Produces a Credentials record tied to the current freeze-list root.",
+        "Requires private Merkle proofs as input.",
+        "Needed before using transfer_private_with_creds."
+      ],
+      "signature": {
+        "function_name": "get_credentials",
+        "inputs": [
+          "r0 as [MerkleProof; 2u32].private"
+        ],
+        "outputs": [
+          "r410 as Credentials.record",
+          "r411 as test_usdcx_stablecoin.aleo/get_credentials.future"
+        ]
+      }
+    },
+    {
+      "function_name": "mint_private",
+      "classification": "private-seeding",
+      "hidden_amount_path": true,
+      "leaks_public_amount": false,
+      "notes": [
+        "Useful for controlled local/test seeding only.",
+        "Requires a minter role in the stablecoin program.",
+        "Not a user-facing auction funding primitive."
+      ],
+      "signature": {
+        "function_name": "mint_private",
+        "inputs": [
+          "r0 as address.private",
+          "r1 as u128.public"
+        ],
+        "outputs": [
+          "r3 as ComplianceRecord.record",
+          "r2 as Token.record",
+          "r4 as test_usdcx_stablecoin.aleo/mint_private.future"
+        ]
+      }
+    },
+    {
+      "function_name": "transfer_public_to_private",
+      "classification": "public-to-private",
+      "hidden_amount_path": false,
+      "leaks_public_amount": true,
+      "notes": [
+        "Creates a private Token record from a public transfer.",
+        "Amount is public at transition time, so it does not satisfy hidden-amount bidding."
+      ],
+      "signature": {
+        "function_name": "transfer_public_to_private",
+        "inputs": [
+          "r0 as address.private",
+          "r1 as u128.public"
+        ],
+        "outputs": [
+          "r3 as ComplianceRecord.record",
+          "r2 as Token.record",
+          "r4 as test_usdcx_stablecoin.aleo/transfer_public_to_private.future"
+        ]
+      }
+    },
+    {
+      "function_name": "transfer_private",
+      "classification": "private-transfer",
+      "hidden_amount_path": true,
+      "leaks_public_amount": false,
+      "notes": [
+        "Moves a private Token record using Merkle proofs.",
+        "Candidate primitive when credentials are not required or not refreshed."
+      ],
+      "signature": {
+        "function_name": "transfer_private",
+        "inputs": [
+          "r0 as address.private",
+          "r1 as u128.private",
+          "r2 as Token.record",
+          "r3 as [MerkleProof; 2u32].private"
+        ],
+        "outputs": [
+          "r416 as ComplianceRecord.record",
+          "r414 as Token.record",
+          "r415 as Token.record",
+          "r417 as test_usdcx_stablecoin.aleo/transfer_private.future"
+        ]
+      }
+    },
+    {
+      "function_name": "transfer_private_to_public",
+      "classification": "private-to-public",
+      "hidden_amount_path": false,
+      "leaks_public_amount": true,
+      "notes": [
+        "Useful as an exit rail or fallback, not as the hidden-amount commit path.",
+        "Public recipient and public amount leak the transfer amount by design."
+      ],
+      "signature": {
+        "function_name": "transfer_private_to_public",
+        "inputs": [
+          "r0 as address.public",
+          "r1 as u128.public",
+          "r2 as Token.record",
+          "r3 as [MerkleProof; 2u32].private"
+        ],
+        "outputs": [
+          "r415 as ComplianceRecord.record",
+          "r414 as Token.record",
+          "r416 as test_usdcx_stablecoin.aleo/transfer_private_to_public.future"
+        ]
+      }
+    },
+    {
+      "function_name": "transfer_private_with_creds",
+      "classification": "private-transfer-with-creds",
+      "hidden_amount_path": true,
+      "leaks_public_amount": false,
+      "notes": [
+        "Strongest candidate primitive for a private USDCx bid funding rail.",
+        "Consumes a private Token record and a Credentials record.",
+        "Returns change, recipient Token, refreshed Credentials, and a ComplianceRecord."
+      ],
+      "signature": {
+        "function_name": "transfer_private_with_creds",
+        "inputs": [
+          "r0 as address.private",
+          "r1 as u128.private",
+          "r2 as Token.record",
+          "r3 as Credentials.record"
+        ],
+        "outputs": [
+          "r7 as ComplianceRecord.record",
+          "r5 as Token.record",
+          "r6 as Token.record",
+          "r8 as Credentials.record",
+          "r9 as test_usdcx_stablecoin.aleo/transfer_private_with_creds.future"
+        ]
+      }
+    }
+  ],
+  "discovery_notes": [
+    "The imported stablecoin program exposes a real private USDCx rail.",
+    "The recommended hidden-amount path is get_credentials -> transfer_private_with_creds.",
+    "Public/private conversion helpers exist, but public amount paths are not suitable for sealed-bid privacy.",
+    "The local probe wrapper now compiles as shadowbid_usdcx_probe_v1.aleo, but real execution still needs genuine proofs, credentials, and private Token records."
+  ]
+}

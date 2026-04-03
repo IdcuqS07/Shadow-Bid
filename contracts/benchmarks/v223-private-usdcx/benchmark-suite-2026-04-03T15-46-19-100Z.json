@@ -1,0 +1,107 @@
+{
+  "artifact_type": "benchmark-suite",
+  "generated_at": "2026-04-03T15:46:19.105Z",
+  "suite": "shadowbid-v223-phase-1",
+  "status": "scaffolded",
+  "references": [
+    "docs/contracts/v2.23-phase-1-feasibility-spike.md",
+    "docs/contracts/v2.23-custody-decision.md",
+    "docs/contracts/v2.23-benchmark-findings.md"
+  ],
+  "required_metrics": [
+    "proving_time_ms",
+    "wall_clock_ms",
+    "fee_total",
+    "records_used",
+    "credentials_used",
+    "user_actions_required",
+    "public_leak_check"
+  ],
+  "scenarios": [
+    {
+      "id": "private-commit-1-bidder",
+      "description": "Basic private USDCx commit path with one bidder.",
+      "status": "pending",
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "pending",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "private-commit-reveal-1-bidder",
+      "description": "Private commit followed by reveal compatibility check.",
+      "status": "pending",
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "pending",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "private-commit-cancelled-refund",
+      "description": "Cancelled auction path with refund semantics.",
+      "status": "pending",
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "pending",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "private-commit-winner-settlement",
+      "description": "Winner settlement path with seller and fee implications.",
+      "status": "pending",
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "pending",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "parallel-2-auctions",
+      "description": "Two auctions settling in parallel to expose bottlenecks.",
+      "status": "pending",
+      "metrics": {
+        "proving_time_ms": null,
+        "wall_clock_ms": null,
+        "fee_total": null,
+        "records_used": null,
+        "credentials_used": null,
+        "user_actions_required": null,
+        "public_leak_check": "pending"
+      },
+      "custody_model": "pending",
+      "evidence": [],
+      "notes": ""
+    }
+  ]
+}

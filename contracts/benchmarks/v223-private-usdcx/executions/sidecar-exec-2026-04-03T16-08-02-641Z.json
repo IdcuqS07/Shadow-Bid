@@ -1,0 +1,148 @@
+{
+  "artifact_path": "contracts/benchmarks/v223-private-usdcx/benchmark-suite-2026-04-03T15-56-20-498Z.json",
+  "artifact_type": "benchmark-suite",
+  "scenario_filter": "private-commit-reveal-1-bidder",
+  "mode": "execute",
+  "include_close": true,
+  "generated_at": "2026-04-03T16:08:02.641Z",
+  "total_actions": 6,
+  "successful_actions": 6,
+  "failed_actions": 0,
+  "actions": [
+    {
+      "scenario_id": "private-commit-reveal-1-bidder",
+      "plan_type": "record_plan",
+      "step": "register",
+      "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+      "transition": "register_split_plan",
+      "inputs": [
+        "47206786470312058402671262004field",
+        "7822514622839099553488762315field",
+        "35392743883017786962095325027field",
+        "2u8",
+        "20000u128",
+        "1775231780i64"
+      ],
+      "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run register_split_plan 47206786470312058402671262004field 7822514622839099553488762315field 35392743883017786962095325027field 2u8 20000u128 1775231780i64",
+      "mode": "execute",
+      "started_at": "2026-04-03T16:07:58.165Z",
+      "finished_at": "2026-04-03T16:07:59.140Z",
+      "duration_ms": 974,
+      "exit_code": 0,
+      "signal": null,
+      "success": true,
+      "stdout": "📢 Loading environment variables from a `.env` file in the directory tree.\n  - NETWORK=testnet\n  - PRIVATE_KEY=APrivateKey1zkp9v3HZB8TV7u6zbXYDMHtnt9E6qWhaWMUfv8V68UeHoRs\n  - ENDPOINT=https://api.explorer.provable.com/v1\n\n       Leo 🔨 Compiling 'shadowbid_usdcx_record_utils_v1.aleo'\n       Leo     56 statements before dead code elimination.\n       Leo     56 statements after dead code elimination.\n       Leo     The program checksum is: '[216u8, 217u8, 230u8, 5u8, 236u8, 39u8, 4u8, 5u8, 166u8, 211u8, 12u8, 66u8, 177u8, 97u8, 131u8, 110u8, 246u8, 115u8, 173u8, 219u8, 2u8, 191u8, 201u8, 84u8, 35u8, 76u8, 174u8, 9u8, 255u8, 221u8, 213u8, 215u8]'.\n       Leo     Program size: 2.93 KB / 500.00 KB\n       Leo ✅ Compiled 'shadowbid_usdcx_record_utils_v1.aleo' into Aleo instructions.\n       Leo ✅ Generated ABI at 'build/abi.json'.\n\n➕Adding programs to the VM in the following order:\n  - shadowbid_usdcx_record_utils_v1.aleo (local)\n\n➡️  Outputs\n\n • {\n  owner: aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8.private,\n  plan_id: 47206786470312058402671262004field.private,\n  expected_outputs: 2u8.private,\n  target_value: 20000u128.private,\n  created_at: 1775231780i64.private,\n  _nonce: 746306283433560007816899167019422300921193888748340357802695132261570881538group.public,\n  _version: 1u8.public\n}\n • {\n  program_id: shadowbid_usdcx_record_utils_v1.aleo,\n  function_name: register_split_plan,\n  arguments: [\n    47206786470312058402671262004field,\n    aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8,\n    7822514622839099553488762315field,\n    35392743883017786962095325027field,\n    2u8,\n    20000u128,\n    1775231780i64\n  ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "scenario_id": "private-commit-reveal-1-bidder",
+      "plan_type": "record_plan",
+      "step": "mark_ready",
+      "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+      "transition": "mark_split_plan_ready",
+      "inputs": [
+        "47206786470312058402671262004field",
+        "2u8",
+        "1775231840i64"
+      ],
+      "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run mark_split_plan_ready 47206786470312058402671262004field 2u8 1775231840i64",
+      "mode": "execute",
+      "started_at": "2026-04-03T16:07:59.140Z",
+      "finished_at": "2026-04-03T16:07:59.890Z",
+      "duration_ms": 750,
+      "exit_code": 0,
+      "signal": null,
+      "success": true,
+      "stdout": "📢 Loading environment variables from a `.env` file in the directory tree.\n  - NETWORK=testnet\n  - PRIVATE_KEY=APrivateKey1zkp9v3HZB8TV7u6zbXYDMHtnt9E6qWhaWMUfv8V68UeHoRs\n  - ENDPOINT=https://api.explorer.provable.com/v1\n\n       Leo 🔨 Compiling 'shadowbid_usdcx_record_utils_v1.aleo'\n       Leo     56 statements before dead code elimination.\n       Leo     56 statements after dead code elimination.\n       Leo     The program checksum is: '[216u8, 217u8, 230u8, 5u8, 236u8, 39u8, 4u8, 5u8, 166u8, 211u8, 12u8, 66u8, 177u8, 97u8, 131u8, 110u8, 246u8, 115u8, 173u8, 219u8, 2u8, 191u8, 201u8, 84u8, 35u8, 76u8, 174u8, 9u8, 255u8, 221u8, 213u8, 215u8]'.\n       Leo     Program size: 2.93 KB / 500.00 KB\n       Leo ✅ Compiled 'shadowbid_usdcx_record_utils_v1.aleo' into Aleo instructions.\n       Leo ✅ Generated ABI at 'build/abi.json'.\n\n➕Adding programs to the VM in the following order:\n  - shadowbid_usdcx_record_utils_v1.aleo (local)\n\n➡️  Output\n\n • {\n  program_id: shadowbid_usdcx_record_utils_v1.aleo,\n  function_name: mark_split_plan_ready,\n  arguments: [\n    47206786470312058402671262004field,\n    aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8,\n    2u8,\n    1775231840i64\n  ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "scenario_id": "private-commit-reveal-1-bidder",
+      "plan_type": "record_plan",
+      "step": "close",
+      "program_dir": "contracts/programs/shadowbid_usdcx_record_utils_v1",
+      "transition": "close_split_plan",
+      "inputs": [
+        "47206786470312058402671262004field",
+        "1775231900i64"
+      ],
+      "example_cli": "cd contracts/programs/shadowbid_usdcx_record_utils_v1 && leo run close_split_plan 47206786470312058402671262004field 1775231900i64",
+      "mode": "execute",
+      "started_at": "2026-04-03T16:07:59.891Z",
+      "finished_at": "2026-04-03T16:08:00.520Z",
+      "duration_ms": 629,
+      "exit_code": 0,
+      "signal": null,
+      "success": true,
+      "stdout": "📢 Loading environment variables from a `.env` file in the directory tree.\n  - NETWORK=testnet\n  - PRIVATE_KEY=APrivateKey1zkp9v3HZB8TV7u6zbXYDMHtnt9E6qWhaWMUfv8V68UeHoRs\n  - ENDPOINT=https://api.explorer.provable.com/v1\n\n       Leo 🔨 Compiling 'shadowbid_usdcx_record_utils_v1.aleo'\n       Leo     56 statements before dead code elimination.\n       Leo     56 statements after dead code elimination.\n       Leo     The program checksum is: '[216u8, 217u8, 230u8, 5u8, 236u8, 39u8, 4u8, 5u8, 166u8, 211u8, 12u8, 66u8, 177u8, 97u8, 131u8, 110u8, 246u8, 115u8, 173u8, 219u8, 2u8, 191u8, 201u8, 84u8, 35u8, 76u8, 174u8, 9u8, 255u8, 221u8, 213u8, 215u8]'.\n       Leo     Program size: 2.93 KB / 500.00 KB\n       Leo ✅ Compiled 'shadowbid_usdcx_record_utils_v1.aleo' into Aleo instructions.\n       Leo ✅ Generated ABI at 'build/abi.json'.\n\n➕Adding programs to the VM in the following order:\n  - shadowbid_usdcx_record_utils_v1.aleo (local)\n\n➡️  Output\n\n • {\n  program_id: shadowbid_usdcx_record_utils_v1.aleo,\n  function_name: close_split_plan,\n  arguments: [\n    47206786470312058402671262004field,\n    aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8,\n    1775231900i64\n  ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "scenario_id": "private-commit-reveal-1-bidder",
+      "plan_type": "credential_batch",
+      "step": "register",
+      "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+      "transition": "register_credential_batch",
+      "inputs": [
+        "38905760643366883502714571276field",
+        "36536746602055522047338162571field",
+        "66659395038045981524065423290field",
+        "1u8",
+        "1775231780i64"
+      ],
+      "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run register_credential_batch 38905760643366883502714571276field 36536746602055522047338162571field 66659395038045981524065423290field 1u8 1775231780i64",
+      "mode": "execute",
+      "started_at": "2026-04-03T16:08:00.520Z",
+      "finished_at": "2026-04-03T16:08:01.273Z",
+      "duration_ms": 753,
+      "exit_code": 0,
+      "signal": null,
+      "success": true,
+      "stdout": "📢 Loading environment variables from a `.env` file in the directory tree.\n  - NETWORK=testnet\n  - PRIVATE_KEY=APrivateKey1zkp9v3HZB8TV7u6zbXYDMHtnt9E6qWhaWMUfv8V68UeHoRs\n  - ENDPOINT=https://api.explorer.provable.com/v1\n\n       Leo 🔨 Compiling 'shadowbid_usdcx_cred_utils_v1.aleo'\n       Leo     51 statements before dead code elimination.\n       Leo     51 statements after dead code elimination.\n       Leo     The program checksum is: '[117u8, 173u8, 103u8, 179u8, 201u8, 158u8, 254u8, 130u8, 228u8, 192u8, 139u8, 147u8, 97u8, 223u8, 110u8, 54u8, 214u8, 163u8, 27u8, 154u8, 248u8, 51u8, 59u8, 36u8, 105u8, 21u8, 20u8, 147u8, 9u8, 135u8, 155u8, 113u8]'.\n       Leo     Program size: 2.89 KB / 500.00 KB\n       Leo ✅ Compiled 'shadowbid_usdcx_cred_utils_v1.aleo' into Aleo instructions.\n       Leo ✅ Generated ABI at 'build/abi.json'.\n\n➕Adding programs to the VM in the following order:\n  - shadowbid_usdcx_cred_utils_v1.aleo (local)\n\n➡️  Outputs\n\n • {\n  owner: aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8.private,\n  batch_id: 38905760643366883502714571276field.private,\n  expected_credentials: 1u8.private,\n  created_at: 1775231780i64.private,\n  _nonce: 4394682923740976181731461292460608933562161609241588226981319455939754937998group.public,\n  _version: 1u8.public\n}\n • {\n  program_id: shadowbid_usdcx_cred_utils_v1.aleo,\n  function_name: register_credential_batch,\n  arguments: [\n    38905760643366883502714571276field,\n    aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8,\n    36536746602055522047338162571field,\n    66659395038045981524065423290field,\n    1u8,\n    1775231780i64\n  ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "scenario_id": "private-commit-reveal-1-bidder",
+      "plan_type": "credential_batch",
+      "step": "mark_ready",
+      "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+      "transition": "mark_credential_batch_ready",
+      "inputs": [
+        "38905760643366883502714571276field",
+        "1u8",
+        "1775231840i64"
+      ],
+      "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run mark_credential_batch_ready 38905760643366883502714571276field 1u8 1775231840i64",
+      "mode": "execute",
+      "started_at": "2026-04-03T16:08:01.273Z",
+      "finished_at": "2026-04-03T16:08:01.888Z",
+      "duration_ms": 615,
+      "exit_code": 0,
+      "signal": null,
+      "success": true,
+      "stdout": "📢 Loading environment variables from a `.env` file in the directory tree.\n  - NETWORK=testnet\n  - PRIVATE_KEY=APrivateKey1zkp9v3HZB8TV7u6zbXYDMHtnt9E6qWhaWMUfv8V68UeHoRs\n  - ENDPOINT=https://api.explorer.provable.com/v1\n\n       Leo 🔨 Compiling 'shadowbid_usdcx_cred_utils_v1.aleo'\n       Leo     51 statements before dead code elimination.\n       Leo     51 statements after dead code elimination.\n       Leo     The program checksum is: '[117u8, 173u8, 103u8, 179u8, 201u8, 158u8, 254u8, 130u8, 228u8, 192u8, 139u8, 147u8, 97u8, 223u8, 110u8, 54u8, 214u8, 163u8, 27u8, 154u8, 248u8, 51u8, 59u8, 36u8, 105u8, 21u8, 20u8, 147u8, 9u8, 135u8, 155u8, 113u8]'.\n       Leo     Program size: 2.89 KB / 500.00 KB\n       Leo ✅ Compiled 'shadowbid_usdcx_cred_utils_v1.aleo' into Aleo instructions.\n       Leo ✅ Generated ABI at 'build/abi.json'.\n\n➕Adding programs to the VM in the following order:\n  - shadowbid_usdcx_cred_utils_v1.aleo (local)\n\n➡️  Output\n\n • {\n  program_id: shadowbid_usdcx_cred_utils_v1.aleo,\n  function_name: mark_credential_batch_ready,\n  arguments: [\n    38905760643366883502714571276field,\n    aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8,\n    1u8,\n    1775231840i64\n  ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "scenario_id": "private-commit-reveal-1-bidder",
+      "plan_type": "credential_batch",
+      "step": "close",
+      "program_dir": "contracts/programs/shadowbid_usdcx_credential_utils_v1",
+      "transition": "close_credential_batch",
+      "inputs": [
+        "38905760643366883502714571276field",
+        "1775231900i64"
+      ],
+      "example_cli": "cd contracts/programs/shadowbid_usdcx_credential_utils_v1 && leo run close_credential_batch 38905760643366883502714571276field 1775231900i64",
+      "mode": "execute",
+      "started_at": "2026-04-03T16:08:01.888Z",
+      "finished_at": "2026-04-03T16:08:02.641Z",
+      "duration_ms": 753,
+      "exit_code": 0,
+      "signal": null,
+      "success": true,
+      "stdout": "📢 Loading environment variables from a `.env` file in the directory tree.\n  - NETWORK=testnet\n  - PRIVATE_KEY=APrivateKey1zkp9v3HZB8TV7u6zbXYDMHtnt9E6qWhaWMUfv8V68UeHoRs\n  - ENDPOINT=https://api.explorer.provable.com/v1\n\n       Leo 🔨 Compiling 'shadowbid_usdcx_cred_utils_v1.aleo'\n       Leo     51 statements before dead code elimination.\n       Leo     51 statements after dead code elimination.\n       Leo     The program checksum is: '[117u8, 173u8, 103u8, 179u8, 201u8, 158u8, 254u8, 130u8, 228u8, 192u8, 139u8, 147u8, 97u8, 223u8, 110u8, 54u8, 214u8, 163u8, 27u8, 154u8, 248u8, 51u8, 59u8, 36u8, 105u8, 21u8, 20u8, 147u8, 9u8, 135u8, 155u8, 113u8]'.\n       Leo     Program size: 2.89 KB / 500.00 KB\n       Leo ✅ Compiled 'shadowbid_usdcx_cred_utils_v1.aleo' into Aleo instructions.\n       Leo ✅ Generated ABI at 'build/abi.json'.\n\n➕Adding programs to the VM in the following order:\n  - shadowbid_usdcx_cred_utils_v1.aleo (local)\n\n➡️  Output\n\n • {\n  program_id: shadowbid_usdcx_cred_utils_v1.aleo,\n  function_name: close_credential_batch,\n  arguments: [\n    38905760643366883502714571276field,\n    aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8,\n    1775231900i64\n  ]\n}\n",
+      "stderr": ""
+    }
+  ]
+}

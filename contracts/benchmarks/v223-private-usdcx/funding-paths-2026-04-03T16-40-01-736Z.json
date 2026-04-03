@@ -1,0 +1,173 @@
+{
+  "artifact_type": "usdcx-funding-paths",
+  "generated_at": "2026-04-03T16:40:06.360Z",
+  "network": "testnet",
+  "endpoint": "https://api.explorer.provable.com/v1",
+  "target_address": "aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+  "target_amount": "20000u128",
+  "latest_preconditions_artifact": "contracts/benchmarks/v223-private-usdcx/preconditions-2026-04-03T16-32-22-208Z.json",
+  "candidate_snapshots": [
+    {
+      "label": "platform_wallet",
+      "address": "aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8",
+      "source": "Current ShadowBid platform wallet and latest precondition target.",
+      "stablecoin_role": "null",
+      "freezelist_role": "null",
+      "public_balance": "20993000u128",
+      "freeze_status": "null",
+      "has_minter_role": false,
+      "has_burner_role": false,
+      "has_pause_role": false,
+      "has_admin_role": false,
+      "has_freezelist_role": false
+    },
+    {
+      "label": "stablecoin_program_owner",
+      "address": "aleo17pmtmh8t7zwh0qfj8z0cmg0rqt4rtg4t85dy5ldrst5u0c4yvufq3gl9lf",
+      "source": "Visible in imported stablecoin/freezelist initialize and constructor assertions.",
+      "stablecoin_role": "null",
+      "freezelist_role": "null",
+      "public_balance": "null",
+      "freeze_status": "null",
+      "has_minter_role": false,
+      "has_burner_role": false,
+      "has_pause_role": false,
+      "has_admin_role": false,
+      "has_freezelist_role": false
+    }
+  ],
+  "routes": [
+    {
+      "route_id": "preseeded-private-record",
+      "status": "recommended-next-spike",
+      "hidden_amount": true,
+      "funding_source": "existing private Token.record supplied out of band",
+      "reason": "This is the cleanest honest path because it avoids public amount leakage and does not rely on privileged minting.",
+      "blocker": "A usable private Token.record plus Merkle proofs and Credentials record still need to be sourced.",
+      "templates": {
+        "register": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+          "transition": "register_probe_target",
+          "inputs": [
+            "60985161099976599656163184103field",
+            "1u8",
+            "true",
+            "true",
+            "false",
+            "20000u128",
+            "1775234401i64"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run register_probe_target 60985161099976599656163184103field 1u8 true true false 20000u128 1775234401i64"
+        },
+        "get_creds": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+          "transition": "get_creds",
+          "inputs": [
+            "<proof_array_private>"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run get_creds <proof_array_private>"
+        },
+        "xfer_with_creds": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+          "transition": "xfer_with_creds",
+          "inputs": [
+            "<auction_custody_address_private>",
+            "20000u128",
+            "<private_token_record>",
+            "<credentials_record>"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run xfer_with_creds <auction_custody_address_private> 20000u128 <private_token_record> <credentials_record>"
+        }
+      }
+    },
+    {
+      "route_id": "minter-assisted-private-record",
+      "status": "blocked-no-known-minter",
+      "hidden_amount": true,
+      "funding_source": "controlled mint_private seeding before credentialed transfer",
+      "reason": "No repo-known address currently shows the stablecoin minter role on testnet.",
+      "blocker": "A real minter address must be identified before this privileged spike can be attempted.",
+      "templates": {
+        "register": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+          "transition": "register_probe_target",
+          "inputs": [
+            "11498008411036802265519959209field",
+            "5u8",
+            "false",
+            "false",
+            "false",
+            "20000u128",
+            "1775234401i64"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run register_probe_target 11498008411036802265519959209field 5u8 false false false 20000u128 1775234401i64"
+        },
+        "mint_priv": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+          "transition": "mint_priv",
+          "inputs": [
+            "<bidder_private_address>",
+            "20000u128"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run mint_priv <bidder_private_address> 20000u128"
+        },
+        "get_creds": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+          "transition": "get_creds",
+          "inputs": [
+            "<proof_array_private>"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run get_creds <proof_array_private>"
+        },
+        "xfer_with_creds": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+          "transition": "xfer_with_creds",
+          "inputs": [
+            "<auction_custody_address_private>",
+            "20000u128",
+            "<private_token_record>",
+            "<credentials_record>"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run xfer_with_creds <auction_custody_address_private> 20000u128 <private_token_record> <credentials_record>"
+        }
+      }
+    },
+    {
+      "route_id": "public-to-private-control",
+      "status": "available-but-not-private",
+      "hidden_amount": false,
+      "funding_source": "transfer_public_to_private control path",
+      "reason": "A public balance is visible for aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8, so this control path can likely be exercised.",
+      "blocker": "This route leaks the amount publicly by design and must never be used as evidence of sealed-bid privacy.",
+      "templates": {
+        "register": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+          "transition": "register_probe_target",
+          "inputs": [
+            "31026777995295168744155322945field",
+            "4u8",
+            "false",
+            "false",
+            "true",
+            "20000u128",
+            "1775234401i64"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run register_probe_target 31026777995295168744155322945field 4u8 false false true 20000u128 1775234401i64"
+        },
+        "xfer_pub_to_priv": {
+          "program_dir": "contracts/programs/shadowbid_usdcx_private_probe_v1",
+          "transition": "xfer_pub_to_priv",
+          "inputs": [
+            "<bidder_private_address>",
+            "20000u128"
+          ],
+          "example_cli": "cd contracts/programs/shadowbid_usdcx_private_probe_v1 && leo run xfer_pub_to_priv <bidder_private_address> 20000u128"
+        }
+      }
+    }
+  ],
+  "recommendation": {
+    "route_id": "preseeded-private-record",
+    "reason": "Use a genuinely private Token.record as the next spike input. Treat minter-assisted and public-to-private routes only as controlled support experiments."
+  }
+}

@@ -10,7 +10,6 @@ import {
   commitBidAleoPrivate,
   commitBidUSAD,
   generateNonce, 
-  generateCommitment, 
   saveNonce, 
   saveCommitment,
   updateCommitmentData,
@@ -54,6 +53,7 @@ import {
 import {
   createDispute,
   createOffer,
+  getAuctionSnapshot,
   getOpsApiDebugInfo,
   getAuctionProofBundle,
   getDisputes,
@@ -450,6 +450,73 @@ function getAuctionMetadataEndTime(auctionMetadata) {
   return Math.floor(auctionMetadata.createdAt / 1000) + durationValue * multiplier;
 }
 
+function inferAuctionCurrency(metadata) {
+  if (typeof metadata?.currency === 'string' && metadata.currency.trim()) {
+    return metadata.currency.trim();
+  }
+
+  if (typeof metadata?.token === 'string' && metadata.token.trim()) {
+    return metadata.token.trim();
+  }
+
+  switch (Number(metadata?.currencyType)) {
+    case 0:
+      return 'USDCx';
+    case 2:
+      return 'USAD';
+    case 1:
+    default:
+      return 'ALEO';
+  }
+}
+
+function normalizeAuctionMetadata(metadata) {
+  if (!metadata) {
+    return null;
+  }
+
+  return {
+    ...metadata,
+    id: metadata.id != null ? Number(metadata.id) : metadata.id,
+    title: metadata.title || null,
+    description: metadata.description || null,
+    creator: metadata.creator || metadata.seller || null,
+    currency: inferAuctionCurrency(metadata),
+    sellerVerification: metadata.sellerVerification || (
+      metadata.verificationStatus
+        ? { status: metadata.verificationStatus }
+        : null
+    ),
+    proofFiles: Array.isArray(metadata.proofFiles) ? metadata.proofFiles : [],
+    itemPhotos: Array.isArray(metadata.itemPhotos) ? metadata.itemPhotos : [],
+  };
+}
+
+function mergeAuctionMetadata(localMetadata, sharedMetadata) {
+  const normalizedLocal = normalizeAuctionMetadata(localMetadata);
+  const normalizedShared = normalizeAuctionMetadata(sharedMetadata);
+
+  if (!normalizedLocal) {
+    return normalizedShared;
+  }
+
+  if (!normalizedShared) {
+    return normalizedLocal;
+  }
+
+  return {
+    ...normalizedShared,
+    ...normalizedLocal,
+    title: normalizedLocal.title || normalizedShared.title || null,
+    description: normalizedLocal.description || normalizedShared.description || null,
+    creator: normalizedLocal.creator || normalizedShared.creator || normalizedShared.seller || null,
+    currency: normalizedLocal.currency || normalizedShared.currency || 'ALEO',
+    sellerVerification: normalizedLocal.sellerVerification || normalizedShared.sellerVerification || null,
+    proofFiles: normalizedLocal.proofFiles.length > 0 ? normalizedLocal.proofFiles : normalizedShared.proofFiles,
+    itemPhotos: normalizedLocal.itemPhotos.length > 0 ? normalizedLocal.itemPhotos : normalizedShared.itemPhotos,
+  };
+}
+
 function hasSubmittedTransaction(commitmentData) {
   return Boolean(
     commitmentData &&
@@ -789,9 +856,10 @@ export default function PremiumAuctionDetail() {
   const loadAuctionData = async () => {
     setLoading(true);
     try {
-      // Get auction metadata from localStorage
       const myAuctions = JSON.parse(localStorage.getItem('myAuctions') || '[]');
-      const auctionMetadata = myAuctions.find(a => a.id === parseInt(auctionId));
+      const localMetadata = myAuctions.find((auction) => auction.id === parseInt(auctionId, 10));
+      const sharedMetadata = await getAuctionSnapshot(auctionId);
+      const auctionMetadata = mergeAuctionMetadata(localMetadata, sharedMetadata);
 
       // Get on-chain data - try multiple times if needed
       let onChainData = null;
@@ -818,9 +886,9 @@ export default function PremiumAuctionDetail() {
         : parseFloat(auctionMetadata?.minBid || 0);
 
       const fallbackCurrencyType =
-        auctionMetadata?.currency === 'ALEO'
+        inferAuctionCurrency(auctionMetadata) === 'ALEO'
           ? 1
-          : auctionMetadata?.currency === 'USAD'
+          : inferAuctionCurrency(auctionMetadata) === 'USAD'
             ? 2
             : 0;
 
@@ -861,6 +929,7 @@ export default function PremiumAuctionDetail() {
         );
       
       const endTime = parseAleoInteger(onChainData?.end_time)
+        ?? parseAleoInteger(auctionMetadata?.endTimestamp)
         ?? getAuctionMetadataEndTime(auctionMetadata)
         ?? Math.floor(Date.now() / 1000) + 24 * 3600;
       
@@ -948,6 +1017,7 @@ export default function PremiumAuctionDetail() {
         endTimestamp: endTime,
         status,
         contractState: status.toUpperCase(),
+        creator: auctionMetadata?.creator || onChainData?.seller || 'Unknown',
         seller: onChainData?.seller || auctionMetadata?.creator || 'Unknown',
         winner: winnerAddress,
         winningBid,
@@ -981,7 +1051,7 @@ export default function PremiumAuctionDetail() {
         paymentClaimedAt,
         confirmationTimeout,
         confirmationTimeoutDays: Math.max(1, Math.round(confirmationTimeout / 86400)),
-        contractVersion: 'V2.21',
+        contractVersion: 'V2.22',
         sellerDisplayName: auctionMetadata?.sellerDisplayName || null,
         itemPhotos: Array.isArray(auctionMetadata?.itemPhotos) ? auctionMetadata.itemPhotos : [],
         sellerVerification: auctionMetadata?.sellerVerification || null,
@@ -1128,6 +1198,8 @@ export default function PremiumAuctionDetail() {
 
       await syncAuctionSnapshot({
         ...auction,
+        creator: auction.creator || auction.seller,
+        sellerDisplayName: auction.sellerDisplayName || sellerVerification?.sellerDisplayName || null,
         itemPhotosCount: Array.isArray(auction.itemPhotos) ? auction.itemPhotos.length : 0,
         proofFilesCount: Array.isArray(auctionProofBundle?.proofFiles)
           ? auctionProofBundle.proofFiles.length
@@ -1345,6 +1417,7 @@ export default function PremiumAuctionDetail() {
 
     saveNonce(auctionId, nonce, address);
     saveCommitment(auctionId, commitment, amount, address, currency, {
+      commitmentMode: commitment ? 'legacy-client-derived' : 'contract-derived',
       privacy,
       transactionId: storedTransactionId,
       walletTransactionId: transactionId,
@@ -1386,7 +1459,7 @@ export default function PremiumAuctionDetail() {
         `Your bid: ${(existingBid.amount / 1_000_000).toFixed(2)} ${auction.token}\n\n` +
         `Current status: ${bidStateLabel}.\n\n` +
         '⚠️ Bids are final and cannot be changed or canceled.\n\n' +
-        'This is a sealed-bid auction - once you place a bid, it is committed to the blockchain and cannot be modified.'
+        'This is a commit-reveal auction - once you place a bid, it is committed to the blockchain and cannot be modified.'
       );
       return;
     }
@@ -1425,11 +1498,11 @@ export default function PremiumAuctionDetail() {
       }
       
       // CRITICAL: credits.aleo/transfer_public requires ACCOUNT ADDRESS, not program name
-      // Program name: shadowbid_marketplace_v2_21.aleo
+      // Program name: shadowbid_marketplace_v2_22.aleo
       // Program account: Need to query or compute from program ID
       
       // Temporary: Try with program name (may not work for all wallets)
-      const programId = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_21.aleo';
+      const programId = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_22.aleo';
       
       const transferInputs = [
         programId,  // Try program name - wallet may resolve to address
@@ -1537,14 +1610,13 @@ export default function PremiumAuctionDetail() {
         throw new Error('Wallet does not support transactions. Please reconnect your wallet.');
       }
       
-      // Generate nonce and commitment
+      // Generate nonce; the contract derives the commitment on-chain.
       const nonce = generateNonce();
-      const commitment = generateCommitment(bidAmountMicro, nonce, address, auctionId);
       
       const commitResult = await commitBidAleo(
         executeTransaction,
         parseInt(auctionId),
-        commitment,
+        nonce,
         bidAmountMicro
       );
       
@@ -1569,7 +1641,7 @@ export default function PremiumAuctionDetail() {
       }
       
       const bidStatus = await persistBidSubmission({
-        commitment,
+        commitment: null,
         nonce,
         amount: bidAmountMicro,
         currency: 'aleo',
@@ -1675,9 +1747,8 @@ export default function PremiumAuctionDetail() {
     try {
       const bidAmountMicro = Math.floor(parseFloat(bidAmount) * 1_000_000);
       
-      // Generate nonce and commitment
+      // Generate nonce; the contract derives the commitment on-chain.
       const nonce = generateNonce();
-      const commitment = generateCommitment(bidAmountMicro, nonce, address, auctionId);
 
       const recordResponse = await requestRecords(PRIVATE_CREDITS_PROGRAM_ID, true);
       const walletRecords = Array.isArray(recordResponse)
@@ -1750,7 +1821,7 @@ export default function PremiumAuctionDetail() {
       const result = await commitBidAleoPrivate(
         executeTransaction,
         parseInt(auctionId, 10),
-        commitment,
+        nonce,
         selectedRecord,
         bidAmountMicro
       );
@@ -1773,7 +1844,7 @@ export default function PremiumAuctionDetail() {
       }
       
       const bidStatus = await persistBidSubmission({
-        commitment,
+        commitment: null,
         nonce,
         amount: bidAmountMicro,
         currency: 'aleo',
@@ -1912,7 +1983,6 @@ export default function PremiumAuctionDetail() {
       try {
         const bidAmountMicro = Math.floor(parseFloat(bidAmount) * 1_000_000);
         const nonce = generateNonce();
-        const commitment = generateCommitment(bidAmountMicro, nonce, address, auctionId);
         const isUsadBid = auction.currencyType === 2;
         
         if (!executeTransaction) {
@@ -1920,8 +1990,8 @@ export default function PremiumAuctionDetail() {
         }
         
         const result = isUsadBid
-          ? await commitBidUSAD(executeTransaction, parseInt(auctionId, 10), commitment, bidAmountMicro)
-          : await commitBid(executeTransaction, parseInt(auctionId, 10), commitment, bidAmountMicro);
+          ? await commitBidUSAD(executeTransaction, parseInt(auctionId, 10), nonce, bidAmountMicro)
+          : await commitBid(executeTransaction, parseInt(auctionId, 10), nonce, bidAmountMicro);
         
         // Verify transaction was accepted
         if (!result || result.status === 'REJECTED' || !result.transactionId) {
@@ -1929,7 +1999,7 @@ export default function PremiumAuctionDetail() {
         }
         
         const bidStatus = await persistBidSubmission({
-          commitment,
+          commitment: null,
           nonce,
           amount: bidAmountMicro,
           currency: isUsadBid ? 'usad' : 'usdcx',
@@ -2117,6 +2187,11 @@ export default function PremiumAuctionDetail() {
         showLifecycleNotice('❌ No bid found for this auction', { auto, tone: 'error' });
         return;
       }
+
+      if (!storedNonce) {
+        showLifecycleNotice('❌ Refund needs the saved nonce for this wallet. Restore the original browser data before retrying.', { auto, tone: 'error' });
+        return;
+      }
       
       if (!executeTransaction) {
         throw new Error('Wallet does not support transactions');
@@ -2128,6 +2203,7 @@ export default function PremiumAuctionDetail() {
         await claimRefund(
           executeTransaction,
           parseInt(auctionId),
+          storedNonce,
           commitmentData.amount
         );
         showLifecycleNotice('✅ Refund Claimed Successfully!\n\nYour USDCx has been returned.', { auto, tone: 'success' });
@@ -2136,6 +2212,7 @@ export default function PremiumAuctionDetail() {
         await claimRefundUSAD(
           executeTransaction,
           parseInt(auctionId),
+          storedNonce,
           commitmentData.amount
         );
         showLifecycleNotice('✅ Refund Claimed Successfully!\n\nYour USAD has been returned.', { auto, tone: 'success' });
@@ -2145,12 +2222,14 @@ export default function PremiumAuctionDetail() {
           await claimRefundAleoPrivate(
               executeTransaction,
               parseInt(auctionId, 10),
+              storedNonce,
               commitmentData.amount
             );
         } else {
           await claimRefundAleo(
               executeTransaction,
               parseInt(auctionId, 10),
+              storedNonce,
               commitmentData.amount
             );
         }
@@ -2398,14 +2477,14 @@ export default function PremiumAuctionDetail() {
     if (auction.hasEscrow) {
       alert(
         '❌ Cancel Unavailable\n\n' +
-        'Contract V2.21 only allows canceling an auction while total escrow is still 0.'
+        'Contract V2.22 only allows canceling an auction while total escrow is still 0.'
       );
       return;
     }
 
     const confirmCancel = window.confirm(
       'Cancel this auction?\n\n' +
-      'This action follows the V2.21 contract and is only available before any escrowed bids exist.'
+      'This action follows the V2.22 contract and is only available before any escrowed bids exist.'
     );
     if (!confirmCancel) return;
     
@@ -2481,7 +2560,7 @@ export default function PremiumAuctionDetail() {
   const handleCancelReserveNotMet = async (options = {}) => {
     const { auto = false } = options;
     showLifecycleNotice(
-      'ℹ️ In V2.21, reserve-miss handling is part of Settle After Reveal Timeout.\n\nUse the closed-state settlement action after the reveal deadline passes.',
+      'ℹ️ In V2.22, reserve-miss handling is part of Settle After Reveal Timeout.\n\nUse the closed-state settlement action after the reveal deadline passes.',
       { auto, tone: 'info' }
     );
   };
@@ -2627,7 +2706,7 @@ export default function PremiumAuctionDetail() {
           label: 'Anchored on-chain',
           note: result?.transactionId
             ? `Transaction submitted: ${result.transactionId}`
-            : 'Dispute root submitted to the V2.21 contract.',
+            : 'Dispute root submitted to the V2.22 contract.',
         };
 
         const updatedDispute = await updateDispute(createdDispute.id, {
@@ -2649,10 +2728,10 @@ export default function PremiumAuctionDetail() {
           : 'Local case saved and dispute root submitted on-chain.';
       } catch (error) {
         console.error('⚠️ Failed to open dispute on-chain:', error);
-        onChainResultMessage = `Saved locally, but V2.21 dispute anchoring failed.\n\n${error.message || error}`;
+        onChainResultMessage = `Saved locally, but V2.22 dispute anchoring failed.\n\n${error.message || error}`;
       }
     } else if (!canOpenOnChainDispute) {
-      onChainResultMessage = 'Saved locally. V2.21 dispute opening is only available once the auction reaches challenge or settled state.';
+      onChainResultMessage = 'Saved locally. V2.22 dispute opening is only available once the auction reaches challenge or settled state.';
     } else if (!executeTransaction) {
       onChainResultMessage = 'Saved locally. Reconnect a wallet with transaction support to also open the dispute on-chain.';
     }
@@ -3067,7 +3146,7 @@ export default function PremiumAuctionDetail() {
                     <span className="text-lg">{getAssetTypeIcon(auction.assetType)}</span>
                     <span className="font-mono text-gold-500">{getAssetTypeName(auction.assetType)}</span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
-                      V2.21
+                      V2.22
                     </span>
                   </div>
                 </div>
@@ -3227,7 +3306,7 @@ export default function PremiumAuctionDetail() {
                   </div>
 
                   <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-                    <div className="text-xs font-mono uppercase tracking-[0.18em] text-cyan-300">V2.21 On-Chain Anchors</div>
+                    <div className="text-xs font-mono uppercase tracking-[0.18em] text-cyan-300">V2.22 On-Chain Anchors</div>
                     <div className="mt-4 space-y-3 text-sm">
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-white/45">Seller profile</div>
@@ -3552,7 +3631,7 @@ export default function PremiumAuctionDetail() {
                     </div>
                     <div className="mt-2 text-xs text-white/45">
                       {canOpenOnChainDispute
-                        ? 'This auction can anchor a dispute directly to the V2.21 contract from this page.'
+                        ? 'This auction can anchor a dispute directly to the V2.22 contract from this page.'
                         : 'Dispute anchoring becomes available after the auction reaches challenge or settled state.'}
                     </div>
                   </div>
@@ -3603,15 +3682,15 @@ export default function PremiumAuctionDetail() {
               <div className="mb-6 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
                 <div className="flex items-start gap-3">
                   <Shield className="w-5 h-5 text-cyan-400 mt-0.5" />
-                  <div>
-                    <div className="font-mono text-sm text-cyan-400 mb-1">
-                      Private Sealed-Bid Auction
-                    </div>
-                    <div className="text-xs text-white/60">
-                      Contract V2.21 stores sealed commitments, escrow, reserve checks, dispute state, and fee accounting, but it does not expose a public per-bid history list in this UI.
+                    <div>
+                      <div className="font-mono text-sm text-cyan-400 mb-1">
+                        Commit-Reveal Auction
+                      </div>
+                      <div className="text-xs text-white/60">
+                        The live V2.22 deployment no longer stores per-bid escrow amounts in mapping state, but public funding transactions can still expose bid amounts before reveal.
+                      </div>
                     </div>
                   </div>
-                </div>
               </div>
 
               <div className="space-y-3">
@@ -3619,6 +3698,7 @@ export default function PremiumAuctionDetail() {
                   <div className="text-xs font-mono text-white/40 mb-2">Visible From Contract</div>
                   <div className="space-y-2 text-sm text-white/60">
                     <div>• Auction state: {auction.contractState}</div>
+                    <div>• Stored commitment roots and aggregate escrow totals in the live V2.22 deployment</div>
                     <div>• Seller settlement account exists on-chain, even when the marketplace masks it in the main UI</div>
                     <div>• Escrowed total: {auction.totalEscrowed.toFixed(2)} {auction.token}</div>
                     <div>• Winner address and winning amount after settlement steps</div>
@@ -3626,9 +3706,9 @@ export default function PremiumAuctionDetail() {
                   </div>
                 </div>
                 <div className="p-4 bg-void-800 rounded-xl border border-white/5">
-                  <div className="text-xs font-mono text-white/40 mb-2">Hidden Until Reveal</div>
+                  <div className="text-xs font-mono text-white/40 mb-2">Still Hidden Off-Chain</div>
                   <div className="space-y-2 text-sm text-white/60">
-                    <div>• Individual bid amounts during commit phase</div>
+                    <div>• Bidder-local nonce and reveal helpers saved in this browser</div>
                     <div>• Private ALEO transfer details when private credits are used</div>
                   </div>
                 </div>
@@ -3657,14 +3737,14 @@ export default function PremiumAuctionDetail() {
                           <div className="font-mono text-sm text-green-400">Bid Placed Successfully</div>
                           {isPrivateCommitment(submittedCommitmentData) && (
                             <span className="px-2 py-0.5 bg-gold-500/20 border border-gold-500/40 rounded text-xs font-mono text-gold-400">
-                              🔒 PRIVATE
+                              🔒 PRIVATE FUNDING
                             </span>
                           )}
                         </div>
                         <div className="text-xs text-white/60 mb-3">
                           Your bid has been committed to the blockchain.
                           {isPrivateCommitment(submittedCommitmentData) && (
-                            <span className="text-gold-400"> Transfer amount is hidden on-chain (private transaction).</span>
+                            <span className="text-gold-400"> Funding came from a private ALEO record, and V2.22 no longer stores your per-bid amount in the escrow mapping.</span>
                           )}
                         </div>
                         <div className="p-3 bg-void-800 rounded-lg">
@@ -3689,7 +3769,7 @@ export default function PremiumAuctionDetail() {
                               Bid is Final
                             </div>
                             <div className="text-xs text-white/60 leading-relaxed">
-                              Sealed-bid auctions require final commitments. Your bid cannot be changed or canceled once placed.
+                              Commit-reveal auctions require final commitments. Your bid cannot be changed or canceled once placed.
                             </div>
                           </div>
                         </div>
@@ -3711,7 +3791,7 @@ export default function PremiumAuctionDetail() {
                           <div className="font-mono text-sm text-cyan-400">Bid Awaiting Confirmation</div>
                           {isPrivateCommitment(pendingCommitmentData) && (
                             <span className="px-2 py-0.5 bg-gold-500/20 border border-gold-500/40 rounded text-xs font-mono text-gold-400">
-                              🔒 PRIVATE
+                              🔒 PRIVATE FUNDING
                             </span>
                           )}
                         </div>
@@ -3812,7 +3892,7 @@ export default function PremiumAuctionDetail() {
                               <Shield className="w-4 h-4 text-gold-500" />
                               <span className="text-sm font-mono text-white">Use Private Credits</span>
                               <span className="px-2 py-0.5 bg-gold-500/20 border border-gold-500/40 rounded text-xs font-mono text-gold-400">
-                                V2.21
+                                V2.22
                               </span>
                             </div>
                             <button
@@ -3829,7 +3909,7 @@ export default function PremiumAuctionDetail() {
                           </div>
                           <div className="text-xs text-white/60">
                             {usePrivateBid 
-                              ? 'Hidden on-chain. Paid from a private ALEO record.'
+                              ? 'Paid from a private ALEO record. The source record stays private, and V2.22 no longer stores a per-bid amount in the escrow mapping.'
                               : 'Visible on-chain. Usually faster and simpler for testing.'
                             }
                           </div>
@@ -3876,7 +3956,7 @@ export default function PremiumAuctionDetail() {
                                 Two-Step Process for Aleo Credits
                               </div>
                               <div className="text-xs text-white/60 mb-3">
-                                Contract V2.21 public ALEO flow uses transfer first, then commitment
+                                Contract V2.22 public ALEO flow uses transfer first, then commitment
                               </div>
                             </div>
                           </div>
@@ -3959,10 +4039,10 @@ export default function PremiumAuctionDetail() {
                             <Shield className="w-5 h-5 text-gold-500 mt-0.5" />
                             <div>
                               <div className="font-mono text-sm text-gold-500 mb-1">
-                                🔒 Bid with Private Credits
+                                🔒 Fund With Private Credits
                               </div>
                               <div className="text-xs text-white/60">
-                                Uses one private wallet record so your bid transfer stays hidden on-chain
+                                Uses one private wallet record for funding, while V2.22 keeps per-bid amounts out of the escrow mapping
                               </div>
                             </div>
                           </div>
@@ -4376,7 +4456,7 @@ export default function PremiumAuctionDetail() {
                       {/* Workflow guide */}
                       <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                         <div className="text-xs text-white/60">
-                          <div className="font-mono text-cyan-400 mb-2">Seller Workflow (V2.21):</div>
+                          <div className="font-mono text-cyan-400 mb-2">Seller Workflow (V2.22):</div>
                           <div className="space-y-1">
                             <div className={auction.status === 'open' && !auction.hasEscrow ? 'text-gold-400' : 'text-white/40'}>
                               🚫 Cancel auction while escrow is still 0
@@ -4663,7 +4743,7 @@ export default function PremiumAuctionDetail() {
                       {submittedCommitmentData && (
                         <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                           <div className="text-xs text-white/60">
-                            <div className="font-mono text-cyan-400 mb-2">Bidder Workflow (V2.21):</div>
+                            <div className="font-mono text-cyan-400 mb-2">Bidder Workflow (V2.22):</div>
                             <div className="space-y-1">
                               <div className={auction.status === 'open' ? 'text-gold-400' : 'text-white/40'}>
                                 ⏳ Wait for auction to close

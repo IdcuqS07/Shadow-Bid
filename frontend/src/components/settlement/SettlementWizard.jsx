@@ -388,7 +388,7 @@ export function SettlementWizard() {
     <Card className="border-purple-500/20">
       <CardHeader>
         <CardTitle className="text-xl">Settlement Wizard</CardTitle>
-        <p className="text-sm text-slate-400">Guided seller flow for the live V2.21 contract</p>
+        <p className="text-sm text-slate-400">Guided seller flow for the live V2.22 contract</p>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Auction ID Input */}
