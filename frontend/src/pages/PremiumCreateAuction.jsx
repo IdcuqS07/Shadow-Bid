@@ -2,22 +2,28 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { useMultiCurrencyBalance } from '@/hooks/useMultiCurrencyBalance';
+import { toast } from '@/components/ui/sonner';
 import {
   calculatePlatformFee,
   calculateSellerNetAmount,
   createAuction,
   getCurrentTimestamp,
   hashJsonToField,
+  PROGRAM_ID,
   setAuctionProofRootOnChain,
   upsertSellerProfileOnChain,
 } from '@/services/aleoServiceV2';
 import {
   getSellerVerification,
   syncAuctionRole,
-  syncAuctionSnapshot,
+  syncSharedAuctionReadModelEntry,
   upsertAuctionProofBundle,
   upsertSellerVerification,
 } from '@/services/localOpsService';
+import {
+  APPROVAL_PACK_SCENARIOS,
+  buildApprovalPackSellerVerification,
+} from '@/lib/testData/onChainApprovalPack';
 import GlassCard from '@/components/premium/GlassCard';
 import PremiumButton from '@/components/premium/PremiumButton';
 import PremiumInput from '@/components/premium/PremiumInput';
@@ -72,6 +78,13 @@ const EMPTY_FORM_DATA = {
   proofSummary: '',
   authenticityGuarantee: '',
 };
+
+const CURRENT_PROGRAM_ID = PROGRAM_ID;
+const CURRENT_CONTRACT_VERSION_MATCH = CURRENT_PROGRAM_ID.match(/shadowbid_marketplace_v(\d+)_(\d+)\.aleo/i);
+const CURRENT_CONTRACT_VERSION = CURRENT_CONTRACT_VERSION_MATCH
+  ? `v${CURRENT_CONTRACT_VERSION_MATCH[1]}.${CURRENT_CONTRACT_VERSION_MATCH[2]}`
+  : 'current';
+const CURRENT_CONTRACT_VERSION_LABEL = CURRENT_CONTRACT_VERSION.toUpperCase();
 
 function getDurationSeconds(value, unit) {
   const parsedValue = parseInt(value, 10);
@@ -152,6 +165,41 @@ function mapVerificationTierToU8(tier) {
   }
 }
 
+function formatScenarioWindow(seconds) {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+
+  if (minutes < 60) {
+    return `Ends in ${minutes}m`;
+  }
+
+  const hours = Math.round((seconds / 3600) * 10) / 10;
+  return `Ends in ${hours}h`;
+}
+
+function getScenarioDurationDraft(seconds) {
+  const safeSeconds = Math.max(60, Math.round(seconds));
+  const safeMinutes = Math.max(1, Math.round(safeSeconds / 60));
+
+  if (safeMinutes % (24 * 60) === 0) {
+    return {
+      durationValue: String(safeMinutes / (24 * 60)),
+      durationUnit: 'days',
+    };
+  }
+
+  if (safeMinutes % 60 === 0) {
+    return {
+      durationValue: String(safeMinutes / 60),
+      durationUnit: 'hours',
+    };
+  }
+
+  return {
+    durationValue: String(safeMinutes),
+    durationUnit: 'minutes',
+  };
+}
+
 export default function PremiumCreateAuction() {
   const navigate = useNavigate();
   const { connected, address, executeTransaction } = useWallet();
@@ -162,6 +210,7 @@ export default function PremiumCreateAuction() {
   const [formData, setFormData] = useState(EMPTY_FORM_DATA);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeExampleScenarioId, setActiveExampleScenarioId] = useState(APPROVAL_PACK_SCENARIOS[0]?.id || null);
   const [itemPhotos, setItemPhotos] = useState([]); // NEW: Item photos for RWA
   const [supportingProofs, setSupportingProofs] = useState([]);
 
@@ -213,24 +262,82 @@ export default function PremiumCreateAuction() {
   const projectedSellerNet = referenceWinningAmountMicro > 0
     ? microToDisplayAmount(calculateSellerNetAmount(referenceWinningAmountMicro))
     : 0;
-  const durationLabel = getDurationLabel(formData.durationValue, formData.durationUnit);
   const reserveVisibilityLabel = formData.reservePrice
     ? `${formatAmount(reserveBasisAmount)} ${formData.currency}`
     : minimumBidAmount > 0
       ? `Falls back to min bid (${formatAmount(minimumBidAmount)} ${formData.currency})`
       : 'Uses min bid if reserve is left blank';
+  const activeExampleScenario = APPROVAL_PACK_SCENARIOS.find((scenario) => scenario.id === activeExampleScenarioId)
+    || APPROVAL_PACK_SCENARIOS[0]
+    || null;
+  const activeExampleScenarioIndex = activeExampleScenario
+    ? APPROVAL_PACK_SCENARIOS.findIndex((scenario) => scenario.id === activeExampleScenario.id)
+    : -1;
 
   const auctionFormats = [
     {
       id: 'sealed',
       name: 'Sealed-Bid',
-      description: 'Commitments stay sealed until reveal, and V2.22 no longer stores per-bid amounts in the escrow mapping.',
+      description: `Commitments stay sealed until reveal, and ${CURRENT_CONTRACT_VERSION_LABEL} no longer stores per-bid amounts in the escrow mapping.`,
       icon: Shield,
       color: 'gold',
       available: true,
-      version: 'V2.22',
+      version: CURRENT_CONTRACT_VERSION_LABEL,
     },
   ];
+
+  const setActiveExampleScenario = (scenarioId) => {
+    setActiveExampleScenarioId(scenarioId);
+  };
+
+  const stepActiveExampleScenario = (direction) => {
+    if (!APPROVAL_PACK_SCENARIOS.length) {
+      return;
+    }
+
+    const currentIndex = activeExampleScenarioIndex >= 0 ? activeExampleScenarioIndex : 0;
+    const nextIndex = (currentIndex + direction + APPROVAL_PACK_SCENARIOS.length) % APPROVAL_PACK_SCENARIOS.length;
+    setActiveExampleScenarioId(APPROVAL_PACK_SCENARIOS[nextIndex].id);
+  };
+
+  const loadExampleScenarioIntoForm = (scenario) => {
+    if (!scenario) {
+      return;
+    }
+
+    const durationDraft = getScenarioDurationDraft(scenario.endOffsetSeconds);
+    const exampleSeller = buildApprovalPackSellerVerification(address);
+
+    setActiveExampleScenarioId(scenario.id);
+    setFormData((previous) => ({
+      ...previous,
+      title: scenario.title,
+      description: scenario.detail,
+      format: 'sealed',
+      minBid: String(scenario.minBid),
+      reservePrice: String(scenario.reservePrice),
+      durationValue: durationDraft.durationValue,
+      durationUnit: durationDraft.durationUnit,
+      currency: scenario.currency,
+      assetType: String(scenario.assetType),
+      sellerDisplayName: exampleSeller.sellerDisplayName || '',
+      verificationStatus: exampleSeller.status || 'pending',
+      verificationTier: exampleSeller.tier || 'standard',
+      issuingAuthority: exampleSeller.issuingAuthority || '',
+      certificateId: scenario.certificateId || exampleSeller.certificateId || '',
+      provenanceNote: scenario.provenanceNote || '',
+      proofSummary: scenario.proofSummary || '',
+      authenticityGuarantee: scenario.authenticityGuarantee || '',
+    }));
+    setItemPhotos(scenario.itemPhotos.map((photo) => ({ ...photo })));
+    setSupportingProofs(scenario.proofFiles.map((proof) => ({ ...proof })));
+
+    toast.success(`"${scenario.title}" loaded into the form. You can still edit the bid amount before creating it.`);
+
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -279,7 +386,7 @@ export default function PremiumCreateAuction() {
       // Calculate end time using flexible units for easier testing.
       const endTime = Math.floor(Date.now() / 1000) + durationSeconds;
       
-      // V2.21 splits reveal and dispute windows on-chain.
+      // The live contract splits reveal and dispute windows on-chain.
       // Keep shorter defaults on testnet so the full lifecycle remains demo-friendly.
       const revealPeriod = Number.parseInt(
         import.meta.env.VITE_REVEAL_PERIOD_SECONDS || import.meta.env.VITE_CHALLENGE_PERIOD_SECONDS || '900',
@@ -323,7 +430,8 @@ export default function PremiumCreateAuction() {
         parseInt(formData.assetType),         // Asset type
         endTime,
         revealPeriod,
-        disputePeriod
+        disputePeriod,
+        { programId: CURRENT_PROGRAM_ID }
       );
       
       console.log('✅ Auction created successfully:', result);
@@ -350,6 +458,8 @@ export default function PremiumCreateAuction() {
       // Save auction metadata to localStorage
       const auctionMetadata = {
         id: auctionId,
+        programId: CURRENT_PROGRAM_ID,
+        version: CURRENT_CONTRACT_VERSION,
         title: formData.title,
         description: formData.description,
         minBid: formData.minBid,
@@ -422,7 +532,7 @@ export default function PremiumCreateAuction() {
           disclosureRoot
         );
       } catch (anchorError) {
-        console.error('⚠️ Failed to anchor V2.22 proof metadata on-chain:', anchorError);
+        console.error(`⚠️ Failed to anchor ${CURRENT_CONTRACT_VERSION_LABEL} proof metadata on-chain:`, anchorError);
         anchorWarnings.push(anchorError.message || String(anchorError));
       }
 
@@ -435,8 +545,10 @@ export default function PremiumCreateAuction() {
           token: formData.currency,
           assetType: parseInt(formData.assetType, 10),
         }),
-        syncAuctionSnapshot({
+        syncSharedAuctionReadModelEntry({
           id: auctionId,
+          programId: CURRENT_PROGRAM_ID,
+          version: CURRENT_CONTRACT_VERSION,
           title: formData.title,
           description: formData.description,
           status: 'open',
@@ -487,8 +599,8 @@ export default function PremiumCreateAuction() {
       alert(
         `✅ Auction Created Successfully!\n\nAuction ID: ${auctionId}\nTransaction submitted to blockchain.` +
         (anchorWarnings.length > 0
-          ? `\n\n⚠️ V2.22 proof anchoring was skipped:\n${anchorWarnings.join('\n')}`
-          : `\n\nV2.22 seller profile and proof roots were also anchored on-chain.`)
+          ? `\n\n⚠️ ${CURRENT_CONTRACT_VERSION_LABEL} proof anchoring was skipped:\n${anchorWarnings.join('\n')}`
+          : `\n\n${CURRENT_CONTRACT_VERSION_LABEL} seller profile and proof roots were also anchored on-chain.`)
       );
       
       // Navigate to auction list
@@ -613,7 +725,7 @@ export default function PremiumCreateAuction() {
             {/* Version Badge */}
             <div className="px-3 py-1 bg-gold-500/10 border border-gold-500/30 rounded-lg">
               <span className="text-xs font-mono text-gold-400">
-                V2.22 • Split Deadlines • Dispute • RWA
+                {CURRENT_CONTRACT_VERSION_LABEL} • Split Deadlines • Dispute • RWA
               </span>
             </div>
           </div>
@@ -664,7 +776,7 @@ export default function PremiumCreateAuction() {
                       Asset Category
                       <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
                         <CheckCircle className="w-3 h-3" />
-                        V2.22
+                        {CURRENT_CONTRACT_VERSION_LABEL}
                       </span>
                     </label>
                     <select
@@ -712,7 +824,7 @@ export default function PremiumCreateAuction() {
                         <span className="ml-2 text-red-400">*</span>
                         <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
                           <CheckCircle className="w-3 h-3" />
-                          V2.22
+                          {CURRENT_CONTRACT_VERSION_LABEL}
                         </span>
                       </label>
                       
@@ -973,7 +1085,7 @@ export default function PremiumCreateAuction() {
                     <div className="flex items-start gap-3">
                       <Info className="mt-0.5 h-5 w-5 text-cyan-400" />
                       <div className="text-xs leading-relaxed text-white/65">
-                        Seller profile roots and proof roots are anchored to V2.22. Full documents, supporting files,
+                        Seller profile roots and proof roots are anchored to {CURRENT_CONTRACT_VERSION_LABEL}. Full documents, supporting files,
                         and evidence references are kept in the app data layer for richer UI panels and ops workflows.
                       </div>
                     </div>
@@ -988,7 +1100,7 @@ export default function PremiumCreateAuction() {
                 <div className="grid grid-cols-2 gap-4">
                   {auctionFormats.length === 1 && (
                     <div className="col-span-2 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-xs text-white/60">
-                      Contract V2.22 currently supports one live commit-reveal auction format.
+                      Contract {CURRENT_CONTRACT_VERSION_LABEL} currently supports one live commit-reveal auction format.
                     </div>
                   )}
                   {auctionFormats.map((format) => (
@@ -1053,7 +1165,7 @@ export default function PremiumCreateAuction() {
                   <div className="flex items-start gap-3">
                     <Info className="w-5 h-5 text-cyan-400 mt-0.5" />
                     <div className="text-xs text-white/60">
-                      <span className="text-cyan-400 font-mono">Current Model:</span> The active V2.22 contract exposes commit-reveal auction creation only, so this UI is locked to the same format.
+                      <span className="text-cyan-400 font-mono">Current Model:</span> The active {CURRENT_CONTRACT_VERSION_LABEL} contract exposes commit-reveal auction creation only, so this UI is locked to the same format.
                     </div>
                   </div>
                 </div>
@@ -1103,7 +1215,7 @@ export default function PremiumCreateAuction() {
                   <div className="flex items-start gap-3">
                     <Info className="w-5 h-5 text-cyan-400 mt-0.5" />
                     <div className="text-xs text-white/60">
-                      <span className="text-cyan-400 font-mono">V2.22</span> supports 3 currencies: Aleo Credits, USDCx, and USAD.
+                      <span className="text-cyan-400 font-mono">{CURRENT_CONTRACT_VERSION_LABEL}</span> supports 3 currencies: Aleo Credits, USDCx, and USAD.
                       <span className="text-cyan-400 font-mono"> Reserve Price</span> is enforced during settlement, and platform fees are calculated automatically on the winning bid.
                     </div>
                   </div>
@@ -1267,11 +1379,11 @@ export default function PremiumCreateAuction() {
                           <span className="font-mono text-sm">Sealed Commit-Reveal</span>
                           <span className="inline-flex items-center gap-1 rounded border border-green-500/40 bg-green-500/20 px-2 py-0.5 text-xs font-mono text-green-400">
                             <CheckCircle className="h-3 w-3" />
-                            V2.22 Live
+                            {CURRENT_CONTRACT_VERSION_LABEL} Live
                           </span>
                         </div>
                         <div className="text-xs text-white/60">
-                          Commitments are recorded before reveal, and V2.22 keeps per-bid amounts out of mapping state. Public funding transactions can still expose amounts.
+                          Commitments are recorded before reveal, and {CURRENT_CONTRACT_VERSION_LABEL} keeps per-bid amounts out of mapping state. Public funding transactions can still expose amounts.
                         </div>
                       </div>
                       <span className="font-mono text-sm text-cyan-300">Enabled</span>
@@ -1289,7 +1401,7 @@ export default function PremiumCreateAuction() {
                           </span>
                         </div>
                         <div className="text-xs text-white/60">
-                          Reserve protection is active in V2.22, but the reserve itself is not hidden by the contract.
+                          Reserve protection is active in {CURRENT_CONTRACT_VERSION_LABEL}, but the reserve itself is not hidden by the contract.
                         </div>
                       </div>
                       <span className="font-mono text-right text-sm text-gold-400">{reserveVisibilityLabel}</span>
@@ -1306,7 +1418,7 @@ export default function PremiumCreateAuction() {
                         Current Contract Reality
                       </div>
                       <div className="text-xs text-white/60">
-                        The live V2.22 testnet deployment now hashes commitments in-contract and removes per-bid escrow amounts from mapping state. Public funding flows still expose transfer amounts until a fully private escrow design ships.
+                        The live {CURRENT_CONTRACT_VERSION_LABEL} testnet deployment now hashes commitments in-contract and removes per-bid escrow amounts from mapping state. Public funding flows still expose transfer amounts until a fully private escrow design ships.
                       </div>
                     </div>
                   </div>
@@ -1384,6 +1496,135 @@ export default function PremiumCreateAuction() {
 
             </div>
           </div>
+
+          <GlassCard className="mt-8 p-8">
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+              <div className="max-w-3xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-mono uppercase tracking-[0.2em] text-cyan-300">
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Example Seller Pack
+                </div>
+                <h2 className="mt-4 text-3xl font-display font-bold">
+                  Load {APPROVAL_PACK_SCENARIOS.length} editable example auctions into the form first
+                </h2>
+                <p className="mt-3 text-sm leading-relaxed text-white/65">
+                  Choose one example, review it, then load it into the create form. Testers can still change the minimum bid,
+                  reserve, duration, proof files, photos, and seller fields before they approve a `create_auction` transaction.
+                </p>
+                <div className="mt-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-xs leading-relaxed text-white/70">
+                  <span className="font-mono text-cyan-300">New tester flow:</span> this section now acts as an editable draft picker on
+                  `/premium-create`. It does not auto-submit all eight examples anymore, so users can inspect and adjust each example before creating it.
+                </div>
+              </div>
+
+              <div className="w-full xl:max-w-md space-y-3">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-cyan-300">Selected Draft</div>
+                  <div className="mt-2 text-lg font-display font-bold text-white">
+                    {activeExampleScenario?.title || 'Choose an example below'}
+                  </div>
+                  <div className="mt-2 text-xs leading-relaxed text-white/55">
+                    {activeExampleScenario?.detail || 'Select one of the example cards below to prefill the form.'}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <PremiumButton
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => stepActiveExampleScenario(-1)}
+                    disabled={!APPROVAL_PACK_SCENARIOS.length || isSubmitting}
+                  >
+                    Prev
+                  </PremiumButton>
+                  <PremiumButton
+                    type="button"
+                    variant="cyan"
+                    className="col-span-2 w-full"
+                    onClick={() => loadExampleScenarioIntoForm(activeExampleScenario)}
+                    disabled={!activeExampleScenario || isSubmitting}
+                  >
+                    Load Into Form
+                  </PremiumButton>
+                </div>
+
+                <PremiumButton
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => stepActiveExampleScenario(1)}
+                  disabled={!APPROVAL_PACK_SCENARIOS.length || isSubmitting}
+                >
+                  Next Example
+                </PremiumButton>
+
+                <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/60">
+                  {connected && address
+                    ? `Seller wallet for the final create step: ${address.slice(0, 12)}...${address.slice(-8)}`
+                    : 'You can browse and load the examples first. Connect a wallet only when you are ready to create the selected auction.'}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {APPROVAL_PACK_SCENARIOS.map((scenario) => {
+                const isActive = scenario.id === activeExampleScenarioId;
+                const statusClass = isActive
+                  ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300'
+                  : 'border-white/10 bg-white/5 text-white/50';
+
+                return (
+                  <div
+                    key={scenario.id}
+                    className={`rounded-2xl border p-4 transition-all ${
+                      isActive
+                        ? 'border-cyan-500/40 bg-cyan-500/5 shadow-[0_0_0_1px_rgba(34,211,238,0.08)]'
+                        : 'border-white/10 bg-void-800/70'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-display text-lg font-bold text-white">{scenario.title}</div>
+                        <div className="mt-2 text-xs leading-relaxed text-white/55">{scenario.detail}</div>
+                      </div>
+                      <div className={`rounded-full border px-2 py-1 text-[10px] font-mono uppercase tracking-[0.18em] ${statusClass}`}>
+                        {isActive ? 'selected' : 'template'}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-1 text-xs text-white/45">
+                      <div>{scenario.currency} • {scenario.assetLabel}</div>
+                      <div>Min {scenario.minBid} / Reserve {scenario.reservePrice}</div>
+                      <div>{formatScenarioWindow(scenario.endOffsetSeconds)}</div>
+                      <div>{scenario.itemPhotos.length} photos • {scenario.proofFiles.length} proof files</div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <PremiumButton
+                        type="button"
+                        variant={isActive ? 'secondary' : 'ghost'}
+                        className="w-full"
+                        onClick={() => setActiveExampleScenario(scenario.id)}
+                        disabled={isSubmitting}
+                      >
+                        {isActive ? 'Selected' : 'Choose'}
+                      </PremiumButton>
+                      <PremiumButton
+                        type="button"
+                        variant="cyan"
+                        className="w-full"
+                        onClick={() => loadExampleScenarioIntoForm(scenario)}
+                        disabled={isSubmitting}
+                      >
+                        Use Draft
+                      </PremiumButton>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </GlassCard>
 
           {/* Submit Button - Outside Grid */}
           <div className="mt-8 relative" style={{ zIndex: 9999, position: 'relative' }}>

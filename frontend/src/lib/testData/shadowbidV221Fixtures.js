@@ -16,14 +16,18 @@ import {
 } from '@/services/localOpsService';
 import {
   PLATFORM_ADDRESS,
+  PROGRAM_ID,
   clearCommitment,
   clearNonce,
+  inferContractVersionFromProgramId,
   saveCommitment,
   saveNonce,
 } from '@/services/aleoServiceV2';
 
 export const SHADOWBID_FIXTURE_VERSION = 'shadowbid-v221-local-fixtures-1';
 export const SHADOWBID_FIXTURE_STORAGE_KEY = '__shadowbid_v221_fixture_bundle';
+const ACTIVE_FIXTURE_CONTRACT_VERSION = inferContractVersionFromProgramId(PROGRAM_ID);
+const ACTIVE_FIXTURE_CONTRACT_VERSION_LABEL = ACTIVE_FIXTURE_CONTRACT_VERSION.toUpperCase();
 
 const EMPTY_ALEO_ADDRESS = 'aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc';
 const DEFAULT_PRIMARY_WALLET = 'aleo1fixtureprimarywallet0000000000000000000000000000000000000005';
@@ -53,6 +57,35 @@ function buildFakeTxId(suffix) {
   return `at1shadowbidfixture${String(suffix).padStart(10, '0')}`;
 }
 
+function normalizeFixtureWallet(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function pickDistinctFixtureWallet(preferredWallet, excludedWallets = []) {
+  const excluded = new Set(
+    excludedWallets
+      .map((wallet) => normalizeFixtureWallet(wallet))
+      .filter(Boolean)
+  );
+  const candidates = [
+    preferredWallet,
+    DEFAULT_ALT_BIDDER,
+    DEFAULT_ALT_WINNER,
+    DEFAULT_ALT_COLLECTOR,
+    DEFAULT_ALT_SELLER,
+    DEFAULT_PRIMARY_WALLET,
+  ];
+
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeFixtureWallet(candidate);
+    if (normalizedCandidate && !excluded.has(normalizedCandidate)) {
+      return candidate;
+    }
+  }
+
+  return preferredWallet;
+}
+
 function createSvgDataUri(label, colorA, colorB) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
@@ -69,7 +102,7 @@ function createSvgDataUri(label, colorA, colorB) {
         ${label}
       </text>
       <text x="96" y="500" fill="rgba(255,255,255,0.76)" font-family="JetBrains Mono, monospace" font-size="28">
-        ShadowBid V2.21 test fixture
+        ShadowBid ${ACTIVE_FIXTURE_CONTRACT_VERSION_LABEL} test fixture
       </text>
     </svg>
   `.trim();
@@ -229,14 +262,17 @@ function buildLegacyAuction({
   };
 }
 
-function buildFixtureBundle(primaryWallet) {
+function buildFixtureBundle({ primaryWallet, sellerWallet } = {}) {
   const nowMs = Date.now();
   const now = Math.floor(nowMs / 1000);
-  const primary = primaryWallet || DEFAULT_PRIMARY_WALLET;
-  const otherSeller = DEFAULT_ALT_SELLER;
-  const otherBidder = DEFAULT_ALT_BIDDER;
-  const otherWinner = DEFAULT_ALT_WINNER;
-  const collector = DEFAULT_ALT_COLLECTOR;
+  const primary = sellerWallet || primaryWallet || DEFAULT_PRIMARY_WALLET;
+  const otherSeller = primary;
+  const fixtureBidder = normalizeFixtureWallet(primaryWallet) && normalizeFixtureWallet(primaryWallet) !== normalizeFixtureWallet(primary)
+    ? primaryWallet
+    : pickDistinctFixtureWallet(DEFAULT_ALT_BIDDER, [primary]);
+  const otherBidder = pickDistinctFixtureWallet(DEFAULT_ALT_BIDDER, [primary, fixtureBidder]);
+  const otherWinner = pickDistinctFixtureWallet(DEFAULT_ALT_WINNER, [primary, fixtureBidder, otherBidder]);
+  const collector = pickDistinctFixtureWallet(DEFAULT_ALT_COLLECTOR, [primary, fixtureBidder, otherBidder, otherWinner]);
   const revealPeriod = 2 * 3600;
   const disputePeriod = 6 * 3600;
   const physicalTimeout = 14 * 24 * 3600;
@@ -252,7 +288,7 @@ function buildFixtureBundle(primaryWallet) {
     status: 'verified',
     tier: 'premium',
     issuingAuthority: 'Jakarta Assay & Vault',
-    certificateId: 'FIX-V221-0001',
+    certificateId: 'FIX-V222-0001',
     provenanceNote: 'Stored under insured custody with serial and appraisal documents attached.',
     authenticityGuarantee: 'Seller guarantees buyback if the appraisal packet and serial proof mismatch.',
   });
@@ -262,7 +298,7 @@ function buildFixtureBundle(primaryWallet) {
     status: 'submitted',
     tier: 'standard',
     issuingAuthority: 'Demo Freight Registry',
-    certificateId: 'FIX-V221-0002',
+    certificateId: 'FIX-V222-0002',
     provenanceNote: 'Chain-of-custody still pending manual review.',
     authenticityGuarantee: 'Warehouse release requires courier and inspection evidence.',
   });
@@ -288,7 +324,7 @@ function buildFixtureBundle(primaryWallet) {
     summary: 'Open auction already overdue so seller can test close + executor flow.',
     provenanceNote: 'Fixtures intentionally set end time in the past.',
     authenticityGuarantee: 'Testing close_auction readiness.',
-    certificateId: 'FIX-V221-OVERDUE',
+    certificateId: 'FIX-V222-OVERDUE',
     proofFiles: [createProofFile('overdue-checklist.pdf')],
     itemPhotos: [bluePhoto],
     token: 'USDCx',
@@ -376,7 +412,7 @@ function buildFixtureBundle(primaryWallet) {
     {
       id: FIXTURE_IDS.CLOSED_REVEAL,
       title: 'Fixture: Reveal Window Active',
-      description: 'Closed auction where the connected wallet is a bidder with a stored commitment ready to reveal.',
+      description: 'Closed auction with a dedicated bidder wallet that already has a stored commitment ready to reveal.',
       currency: 'ALEO',
       currencyType: 1,
       assetType: 3,
@@ -416,17 +452,17 @@ function buildFixtureBundle(primaryWallet) {
       itemPhotos: [greenPhoto],
       proofFiles: [createProofFile('mint-hash.txt', 'text/plain')],
       bidRecords: [
-        { bidder: primary, amount: 7.25, revealed: false, txId: buildFakeTxId(301), timestamp: nowMs - 7_200_000 },
+        { bidder: fixtureBidder, amount: 7.25, revealed: false, txId: buildFakeTxId(301), timestamp: nowMs - 7_200_000 },
         { bidder: otherBidder, amount: 6.5, revealed: true, txId: buildFakeTxId(302), timestamp: nowMs - 6_900_000 },
       ],
       localBids: [
-        { wallet: primary, amount: 7.25, txId: buildFakeTxId(301), revealed: false, privacy: 'private', currency: 'aleo' },
+        { wallet: fixtureBidder, amount: 7.25, txId: buildFakeTxId(301), revealed: false, privacy: 'private', currency: 'aleo' },
       ],
       commitments: [
-        { wallet: primary, amountMicro: toMicro(7.25), nonce: 'fixture-nonce-reveal', commitment: '123456789field', privacy: 'private', currency: 'aleo', transactionId: buildFakeTxId(301) },
+        { wallet: fixtureBidder, amountMicro: toMicro(7.25), nonce: 'fixture-nonce-reveal', commitment: '123456789field', privacy: 'private', currency: 'aleo', transactionId: buildFakeTxId(301) },
       ],
       offers: [
-        { wallet: primary, amount: 7.5, currency: 'ALEO', note: '[Fixture] Fast settlement if metadata decrypts cleanly.', disclosureMode: 'selective', proofOfFundsStatus: 'zk-proof-ready', status: 'pending' },
+        { wallet: fixtureBidder, amount: 7.5, currency: 'ALEO', note: '[Fixture] Fast settlement if metadata decrypts cleanly.', disclosureMode: 'selective', proofOfFundsStatus: 'zk-proof-ready', status: 'pending' },
       ],
       disputes: [],
     },
@@ -563,7 +599,7 @@ function buildFixtureBundle(primaryWallet) {
     {
       id: FIXTURE_IDS.SETTLED_WINNER,
       title: 'Fixture: Winner Receipt Pending',
-      description: 'Settled auction where the connected wallet is the winner and can confirm receipt.',
+      description: 'Settled auction where a dedicated winner wallet can confirm receipt.',
       currency: 'ALEO',
       currencyType: 1,
       assetType: 3,
@@ -571,7 +607,7 @@ function buildFixtureBundle(primaryWallet) {
       reservePrice: 9,
       status: 'settled',
       seller: otherSeller,
-      winner: primary,
+      winner: fixtureBidder,
       createdAt: nowMs - (5 * 24 * 3600 * 1000),
       durationSeconds: 24 * 3600,
       endTimestamp: now - (4 * 24 * 3600),
@@ -604,10 +640,10 @@ function buildFixtureBundle(primaryWallet) {
       proofFiles: [createProofFile('delivery-note.txt', 'text/plain')],
       bidRecords: [],
       localBids: [
-        { wallet: primary, amount: 11.5, txId: buildFakeTxId(701), revealed: true, privacy: 'private', currency: 'aleo' },
+        { wallet: fixtureBidder, amount: 11.5, txId: buildFakeTxId(701), revealed: true, privacy: 'private', currency: 'aleo' },
       ],
       commitments: [
-        { wallet: primary, amountMicro: toMicro(11.5), nonce: 'fixture-nonce-winner', commitment: '777777777field', privacy: 'private', currency: 'aleo', transactionId: buildFakeTxId(701) },
+        { wallet: fixtureBidder, amountMicro: toMicro(11.5), nonce: 'fixture-nonce-winner', commitment: '777777777field', privacy: 'private', currency: 'aleo', transactionId: buildFakeTxId(701) },
       ],
       offers: [],
       disputes: [],
@@ -670,7 +706,7 @@ function buildFixtureBundle(primaryWallet) {
     {
       id: FIXTURE_IDS.CANCELLED_REFUND,
       title: 'Fixture: Reserve Miss Refund',
-      description: 'Cancelled auction where reserve was not met and bidder refund should be available.',
+      description: 'Cancelled auction where reserve was not met and a dedicated bidder wallet should be able to claim refund.',
       currency: 'ALEO',
       currencyType: 1,
       assetType: 5,
@@ -710,13 +746,13 @@ function buildFixtureBundle(primaryWallet) {
       itemPhotos: [redPhoto],
       proofFiles: [createProofFile('reserve-analysis.pdf')],
       bidRecords: [
-        { bidder: primary, amount: 7, revealed: true, txId: buildFakeTxId(901), timestamp: nowMs - (3 * 24 * 3600) },
+        { bidder: fixtureBidder, amount: 7, revealed: true, txId: buildFakeTxId(901), timestamp: nowMs - (3 * 24 * 3600) },
       ],
       localBids: [
-        { wallet: primary, amount: 7, txId: buildFakeTxId(901), revealed: true, privacy: 'public', currency: 'aleo' },
+        { wallet: fixtureBidder, amount: 7, txId: buildFakeTxId(901), revealed: true, privacy: 'public', currency: 'aleo' },
       ],
       commitments: [
-        { wallet: primary, amountMicro: toMicro(7), nonce: 'fixture-nonce-refund', commitment: '999999999field', privacy: 'public', currency: 'aleo', transactionId: buildFakeTxId(901) },
+        { wallet: fixtureBidder, amountMicro: toMicro(7), nonce: 'fixture-nonce-refund', commitment: '999999999field', privacy: 'public', currency: 'aleo', transactionId: buildFakeTxId(901) },
       ],
       offers: [],
       disputes: [],
@@ -1100,8 +1136,8 @@ async function syncFixturesToOps(bundle, debugInfo) {
   };
 }
 
-export async function seedShadowBidV221Fixtures({ primaryWallet } = {}) {
-  const bundle = buildFixtureBundle(primaryWallet);
+export async function seedShadowBidV221Fixtures({ primaryWallet, sellerWallet } = {}) {
+  const bundle = buildFixtureBundle({ primaryWallet, sellerWallet });
   writeLocalStorageBundle(bundle);
 
   const debugInfo = getOpsApiDebugInfo();

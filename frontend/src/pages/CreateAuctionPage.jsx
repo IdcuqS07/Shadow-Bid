@@ -14,12 +14,10 @@ import * as AleoServiceV2 from '@/services/aleoServiceV2';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { useLocalAuctions } from '@/hooks/useLocalAuctions';
 
-
-const steps = ['Basic Info', 'Item Details', 'Settings', 'Review'];
-
 export default function CreateAuctionPage() {
   const { connected, executeTransaction, address } = useWallet();
   const { addAuction } = useLocalAuctions();
+  const activeContractVersion = AleoServiceV2.inferContractVersionFromProgramId(AleoServiceV2.PROGRAM_ID) || 'current';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState({
     title: '',
@@ -34,7 +32,7 @@ export default function CreateAuctionPage() {
 
   const handlePublishAuction = async () => {
     console.log('[CreateAuction] Starting publish auction');
-    console.log('[CreateAuction] Contract Version: V2.22');
+    console.log('[CreateAuction] Contract Version:', activeContractVersion.toUpperCase());
     console.log('[CreateAuction] Connected:', connected);
     console.log('[CreateAuction] Form:', form);
     
@@ -74,7 +72,7 @@ export default function CreateAuctionPage() {
         endTimeDate: new Date(endTime * 1000).toISOString(),
         revealPeriod,
         disputePeriod,
-        version: 'v2.22'
+        version: activeContractVersion
       });
 
       toast.info(`Submitting ${form.currency === 'aleo' ? 'Aleo' : 'USDCx'} auction to blockchain...`);
@@ -106,7 +104,7 @@ export default function CreateAuctionPage() {
         closingDate: form.closingDate.toLocaleDateString(),
         seller: address,
         txId: result?.transactionId,
-        version: 'v2.22'
+        version: activeContractVersion
       };
       
       console.log('[CreateAuction] Saving auction locally:', auctionData);

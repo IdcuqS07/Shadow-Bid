@@ -1,7 +1,7 @@
 {
-    "program": "shadowbid_marketplace_v2_22.aleo",
+    "program": "shadowbid_marketplace_v2_24.aleo",
     "version": "0.0.0",
-    "description": "ShadowBid Marketplace V2.22 - Privacy-remediated sealed-bid auctions with deterministic reveal timeout and dispute-aware settlement",
+    "description": "ShadowBid Marketplace V2.24 - Refund identity consistency for Aleo auctions plus v2.23 lifecycle guards",
     "license": "MIT",
     "leo": "4.0.0",
     "dependencies": [

@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { AlertCircle, Bot, ChartColumn, RefreshCw, ShieldCheck, Zap } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
+  PROGRAM_ID,
+  inferContractVersionFromProgramId,
   isPlatformOwner,
   resolveDisputeRefundWinnerOnChain,
   resolveDisputeReleaseSellerOnChain,
@@ -12,6 +14,7 @@ import {
   getAnalyticsOverview,
   getDisputes,
   getExecutorState,
+  getOpsApiDebugInfo,
   getLocalApiHealth,
   runExecutorScan,
   updateDispute,
@@ -26,6 +29,8 @@ function formatAmount(value) {
   return Number(value || 0).toFixed(2);
 }
 
+const ACTIVE_CONTRACT_VERSION = (inferContractVersionFromProgramId(PROGRAM_ID) || 'current').toUpperCase();
+
 export default function AdminDashboardV3() {
   const { connected, address, executeTransaction } = useWallet();
   const [loading, setLoading] = useState(true);
@@ -39,27 +44,72 @@ export default function AdminDashboardV3() {
     jobs: [],
     recentRuns: [],
   });
+  const [isHealthStale, setIsHealthStale] = useState(false);
   const platformOwnerConnected = Boolean(address && isPlatformOwner(address));
+  const opsApiDebugInfo = getOpsApiDebugInfo();
+  const activeProgramAnalytics = analytics?.byProgramId?.[PROGRAM_ID] || null;
+  const cachedHealthRef = useRef(null);
+  const consecutiveHealthFailuresRef = useRef(0);
 
   const refresh = async () => {
     setLoading(true);
 
-    const [healthResponse, analyticsResponse, executorResponse, disputesResponse] = await Promise.all([
-      getLocalApiHealth(),
-      getAnalyticsOverview(),
-      getExecutorState(),
-      getDisputes(),
-    ]);
+    try {
+      const [healthResponse, analyticsResponse, executorResponse, disputesResponse] = await Promise.all([
+        getLocalApiHealth(),
+        getAnalyticsOverview(),
+        getExecutorState(),
+        getDisputes(),
+      ]);
 
-    setHealth(healthResponse);
-    setAnalytics(analyticsResponse);
-    setExecutor(executorResponse);
-    setDisputes(disputesResponse);
-    setLoading(false);
+      if (healthResponse) {
+        cachedHealthRef.current = healthResponse;
+        consecutiveHealthFailuresRef.current = 0;
+        setHealth(healthResponse);
+        setIsHealthStale(false);
+      } else {
+        consecutiveHealthFailuresRef.current += 1;
+
+        if (cachedHealthRef.current && consecutiveHealthFailuresRef.current < 2) {
+          setHealth(cachedHealthRef.current);
+          setIsHealthStale(true);
+        } else {
+          cachedHealthRef.current = null;
+          setHealth(null);
+          setIsHealthStale(false);
+        }
+      }
+
+      setAnalytics(analyticsResponse);
+      setExecutor(executorResponse);
+      setDisputes(disputesResponse);
+    } catch (error) {
+      console.error('Failed to refresh ops dashboard:', error);
+      consecutiveHealthFailuresRef.current += 1;
+
+      if (cachedHealthRef.current && consecutiveHealthFailuresRef.current < 2) {
+        setHealth(cachedHealthRef.current);
+        setIsHealthStale(true);
+      } else {
+        cachedHealthRef.current = null;
+        setHealth(null);
+        setIsHealthStale(false);
+      }
+
+      setAnalytics(null);
+      setExecutor({
+        settings: null,
+        jobs: [],
+        recentRuns: [],
+      });
+      setDisputes([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    refresh();
+    void refresh();
     const interval = setInterval(refresh, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -143,7 +193,7 @@ export default function AdminDashboardV3() {
           <h1 className="mt-2 text-3xl font-bold text-white">Analytics, Executor, and Verification Ops</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-300">
             This console reads from the app data layer to surface business analytics, lifecycle automation,
-            and seller-proof readiness alongside the live V2.22 flow.
+            and seller-proof readiness alongside the live {ACTIVE_CONTRACT_VERSION} flow.
           </p>
         </div>
 
@@ -175,10 +225,40 @@ export default function AdminDashboardV3() {
               <div>
                 <div className="font-semibold">Ops API is offline</div>
                 <div className="mt-1 text-red-100/80">
-                  {import.meta.env.DEV
-                    ? 'Start it with `npm run dev:api` inside `frontend` to enable analytics sync, notifications, and executor jobs.'
-                    : 'This deployment is not reaching the shared operations backend right now, so analytics and automation data are temporarily unavailable.'}
+                  {opsApiDebugInfo.isLocalTarget
+                    ? 'Start it with `npm run dev:ops` from the repo root, or `npm run dev:api` inside `frontend`, to enable analytics sync, notifications, and executor jobs.'
+                    : opsApiDebugInfo.isLocalPage
+                      ? 'Your local frontend is pointing at the shared ops backend, but that backend is not currently allowing this localhost origin. Run the local ops API instead, or add your localhost origin to the remote `OPS_ALLOWED_ORIGIN` setting.'
+                    : 'This app is not reaching the shared operations backend right now, so analytics and automation data are temporarily unavailable.'}
                 </div>
+                {opsApiDebugInfo.baseUrl && (
+                  <div className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-red-100/60">
+                    Target: {opsApiDebugInfo.baseUrl}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {health && isHealthStale && !loading && (
+        <Card className="border-amber-500/30">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3 text-sm text-amber-100">
+              <AlertCircle className="mt-0.5 h-5 w-5 text-amber-300" />
+              <div>
+                <div className="font-semibold">Ops API health check is retrying</div>
+                <div className="mt-1 text-amber-100/80">
+                  {opsApiDebugInfo.isLocalTarget
+                    ? 'Using the last known ops snapshot while the local health probe retries.'
+                    : 'Using the last known ops snapshot while the shared operations backend finishes reconnecting.'}
+                </div>
+                {opsApiDebugInfo.baseUrl && (
+                  <div className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-amber-100/70">
+                    Target: {opsApiDebugInfo.baseUrl}
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -188,10 +268,12 @@ export default function AdminDashboardV3() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total Auctions</CardDescription>
-            <CardTitle>{analytics?.totals.auctions ?? 0}</CardTitle>
+            <CardDescription>Current Program Auctions</CardDescription>
+            <CardTitle>{activeProgramAnalytics?.auctions ?? 0}</CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-slate-300">Tracked inside the app operations data store.</CardContent>
+          <CardContent className="text-xs text-slate-300">
+            Synced snapshots for {ACTIVE_CONTRACT_VERSION}. Shared store total: {analytics?.totals.auctions ?? 0}.
+          </CardContent>
         </Card>
 
         <Card>
@@ -207,7 +289,9 @@ export default function AdminDashboardV3() {
             <CardDescription>Fee Potential</CardDescription>
             <CardTitle>{formatAmount(analytics?.financials.feePotential)} credits</CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-slate-300">Platform fee estimate derived from V2.22 settlement data.</CardContent>
+          <CardContent className="text-xs text-slate-300">
+            Platform fee estimate derived from {ACTIVE_CONTRACT_VERSION} settlement data.
+          </CardContent>
         </Card>
 
         <Card>
@@ -394,7 +478,7 @@ export default function AdminDashboardV3() {
             <CardHeader>
               <CardTitle>Dispute Resolution</CardTitle>
               <CardDescription>
-                Owner-only controls wired to the V2.22 dispute resolution transitions.
+                Owner-only controls wired to the {ACTIVE_CONTRACT_VERSION} dispute resolution transitions.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

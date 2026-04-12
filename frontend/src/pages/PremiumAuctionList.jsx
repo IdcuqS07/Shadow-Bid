@@ -8,16 +8,17 @@ import {
   getAuctionInfo,
   getAssetTypeName,
   getAssetTypeIcon,
+  PROGRAM_ID,
 } from '@/services/aleoServiceV2';
 import {
-  getAuctionSnapshots,
+  getSharedAuctionReadModel,
   getOpsApiDebugInfo,
   getSavedSearches,
   getWatchlist,
   saveSavedSearches,
   saveWatchlist,
   syncAuctionRole,
-  syncAuctionSnapshot,
+  syncSharedAuctionReadModelEntry,
 } from '@/services/localOpsService';
 import { mapStateToStatus } from '@/lib/auctionUtils';
 import GlassCard from '@/components/premium/GlassCard';
@@ -26,6 +27,100 @@ import PremiumNav from '@/components/premium/PremiumNav';
 import PremiumSelect from '@/components/premium/PremiumSelect';
 import StatusBadge from '@/components/premium/StatusBadge';
 import { Clock, TrendingUp, Shield, Search, Filter, Info, CheckCircle, Bookmark, BookmarkCheck, UserRoundCheck } from 'lucide-react';
+
+const ACTIVE_PROGRAM_ID = PROGRAM_ID;
+const ACTIVE_CONTRACT_VERSION = inferVersionFromProgramId(ACTIVE_PROGRAM_ID) || 'v2.24';
+const LOCAL_ONLY_AUCTION_GRACE_MS = 30 * 60 * 1000;
+const ON_CHAIN_CACHE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getSharedReadModelSourceLabel(isLocalTarget = false) {
+  return isLocalTarget ? 'Local Read Model API' : 'Shared Read Model';
+}
+
+function normalizeProgramId(programId) {
+  return typeof programId === 'string' && programId.trim()
+    ? programId.trim()
+    : null;
+}
+
+function normalizeAuctionVersionLabel(version) {
+  if (typeof version !== 'string' || !version.trim()) {
+    return null;
+  }
+
+  const normalizedVersion = version.trim().toLowerCase();
+
+  if (normalizedVersion === 'current') {
+    return ACTIVE_CONTRACT_VERSION;
+  }
+
+  const explicitVersionMatch = normalizedVersion.match(/\bv2\.\d+\b/);
+  if (explicitVersionMatch) {
+    return explicitVersionMatch[0];
+  }
+
+  return normalizedVersion;
+}
+
+function inferVersionFromProgramId(programId) {
+  if (typeof programId !== 'string') {
+    return null;
+  }
+
+  const versionMatch = programId.match(/shadowbid_marketplace_v(\d+)_(\d+)\.aleo/i);
+  if (versionMatch) {
+    return `v${versionMatch[1]}.${versionMatch[2]}`;
+  }
+
+  return null;
+}
+
+function inferProgramIdFromVersion(version) {
+  const normalizedVersion = normalizeAuctionVersionLabel(version);
+  const versionMatch = normalizedVersion?.match(/^v(\d+)\.(\d+)$/i);
+
+  if (!versionMatch) {
+    return null;
+  }
+
+  return `shadowbid_marketplace_v${versionMatch[1]}_${versionMatch[2]}.aleo`;
+}
+
+function resolveAuctionProgramId(auction) {
+  return normalizeProgramId(
+    auction?.programId
+      || auction?.contractProgramId
+      || auction?.onChainProgramId
+  ) || inferProgramIdFromVersion(getExplicitAuctionVersion(auction))
+    || ACTIVE_PROGRAM_ID;
+}
+
+function resolveAuctionVersion(auction) {
+  const explicitVersion = getExplicitAuctionVersion(auction);
+
+  if (explicitVersion) {
+    return explicitVersion;
+  }
+
+  return normalizeAuctionVersionLabel(inferVersionFromProgramId(resolveAuctionProgramId(auction)))
+    || ACTIVE_CONTRACT_VERSION;
+}
+
+function buildAuctionDetailPath(auction) {
+  const searchParams = new URLSearchParams();
+  const programId = resolveAuctionProgramId(auction);
+
+  if (programId) {
+    searchParams.set('programId', programId);
+  }
+
+  const search = searchParams.toString();
+  return `/premium-auction/${auction.id}${search ? `?${search}` : ''}`;
+}
+
+function getAuctionIdentityKey(auction) {
+  return `${resolveAuctionProgramId(auction)}:${Number(auction?.id)}`;
+}
 
 function parseAleoInteger(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -90,6 +185,126 @@ function formatCompactAmount(value) {
 
 function normalizeWalletAddress(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function parseAuctionTimestampMs(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 1_000_000_000_000 ? value : value > 1_000_000_000 ? value * 1000 : null;
+  }
+
+  if (typeof value === 'string') {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) {
+      return parseAuctionTimestampMs(numericValue);
+    }
+
+    const parsedDate = Date.parse(value);
+    return Number.isFinite(parsedDate) ? parsedDate : null;
+  }
+
+  return null;
+}
+
+function detectLegacyVersionInText(text) {
+  if (typeof text !== 'string' || !text.trim()) {
+    return null;
+  }
+
+  const versionMatch = text.toLowerCase().match(/\bv2\.\d+\b/);
+  if (!versionMatch) {
+    return null;
+  }
+
+  return versionMatch[0] === ACTIVE_CONTRACT_VERSION ? null : versionMatch[0];
+}
+
+function getExplicitAuctionVersion(auction) {
+  return normalizeAuctionVersionLabel(auction?.explicitVersion)
+    || normalizeAuctionVersionLabel(auction?.contractVersion)
+    || detectLegacyVersionInText(auction?.title)
+    || detectLegacyVersionInText(auction?.description)
+    || normalizeAuctionVersionLabel(auction?.version);
+}
+
+function isLegacyAuctionSeed(auction) {
+  const explicitProgramId = normalizeProgramId(
+    auction?.programId
+      || auction?.contractProgramId
+      || auction?.onChainProgramId
+  );
+
+  if (
+    explicitProgramId
+    && explicitProgramId.includes('shadowbid_marketplace_v2_')
+    && explicitProgramId !== ACTIVE_PROGRAM_ID
+  ) {
+    return true;
+  }
+
+  const explicitVersion = getExplicitAuctionVersion(auction);
+  return Boolean(
+    explicitVersion
+    && explicitVersion !== ACTIVE_CONTRACT_VERSION
+    && /^v2\.\d+$/i.test(explicitVersion)
+  );
+}
+
+function isRecentAuctionSeed(auction) {
+  const newestTimestampMs = Math.max(
+    parseAuctionTimestampMs(auction?.createdAtMs) ?? 0,
+    parseAuctionTimestampMs(auction?.updatedAtMs) ?? 0,
+    parseAuctionTimestampMs(auction?.createdAt) ?? 0,
+    parseAuctionTimestampMs(auction?.updatedAt) ?? 0
+  );
+
+  return newestTimestampMs >= Date.now() - LOCAL_ONLY_AUCTION_GRACE_MS;
+}
+
+function hasRecentlySeenOnChain(auction) {
+  const onChainTimestampMs = Math.max(
+    parseAuctionTimestampMs(auction?.lastSeenOnChainAt) ?? 0,
+    parseAuctionTimestampMs(auction?.lastSeenOnChainAtMs) ?? 0
+  );
+
+  return onChainTimestampMs >= Date.now() - ON_CHAIN_CACHE_GRACE_MS;
+}
+
+function shouldRetainFallbackAuction(auction, { isLocalTarget = false } = {}) {
+  if (!auction) {
+    return false;
+  }
+
+  if (isLegacyAuctionSeed(auction)) {
+    return false;
+  }
+
+  if (isLocalTarget && Boolean(auction.isFixture || auction.mockOnChain)) {
+    return true;
+  }
+
+  if (isLocalTarget && Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot)) {
+    return true;
+  }
+
+  return Boolean(
+    auction.hasLocalMetadata &&
+    (
+      isRecentAuctionSeed(auction) ||
+      hasRecentlySeenOnChain(auction)
+    )
+  );
+}
+
+function isVisibleAuctionSeed(auction) {
+  if (!auction) {
+    return false;
+  }
+
+  if (isLegacyAuctionSeed(auction)) {
+    return false;
+  }
+
+  return resolveAuctionProgramId(auction) === ACTIVE_PROGRAM_ID;
 }
 
 function formatDurationLabel(totalSeconds) {
@@ -348,7 +563,7 @@ function inferCurrencyFromAuction(auction) {
   }
 }
 
-function normalizeAuctionSeed(auction) {
+function normalizeAuctionSeed(auction, source = 'shared') {
   if (!auction || auction.id == null) {
     return null;
   }
@@ -370,6 +585,9 @@ function normalizeAuctionSeed(auction) {
   return {
     ...auction,
     id: normalizedId,
+    identityKey: getAuctionIdentityKey({ ...auction, id: normalizedId }),
+    programId: resolveAuctionProgramId(auction),
+    version: resolveAuctionVersion(auction),
     title: auction.title || `Auction #${normalizedId}`,
     currency: inferCurrencyFromAuction(auction),
     creator: auction.creator || auction.seller || null,
@@ -382,6 +600,13 @@ function normalizeAuctionSeed(auction) {
         ? { status: auction.verificationStatus }
         : null
     ),
+    explicitVersion: getExplicitAuctionVersion(auction),
+    hasLocalMetadata: source === 'local',
+    hasSharedReadModel: source === 'shared',
+    hasSharedSnapshot: source === 'shared',
+    sharedReadModelSourceLabel: auction.sharedReadModelSourceLabel || null,
+    createdAtMs: parseAuctionTimestampMs(auction.createdAt),
+    updatedAtMs: parseAuctionTimestampMs(auction.updatedAt),
     proofFiles,
     itemPhotos,
     proofFilesCount,
@@ -400,6 +625,11 @@ function mergeAuctionSeedRecord(existingAuction, incomingAuction) {
     title: incomingAuction.title || existingAuction.title,
     description: incomingAuction.description || existingAuction.description,
     currency: incomingAuction.currency || existingAuction.currency,
+    programId: incomingAuction.programId || existingAuction.programId || ACTIVE_PROGRAM_ID,
+    version: incomingAuction.version
+      || existingAuction.version
+      || normalizeAuctionVersionLabel(inferVersionFromProgramId(incomingAuction.programId || existingAuction.programId))
+      || ACTIVE_CONTRACT_VERSION,
     creator: incomingAuction.creator || existingAuction.creator || existingAuction.seller || null,
     minBid: incomingAuction.minBid ?? existingAuction.minBid,
     reservePrice: incomingAuction.reservePrice ?? existingAuction.reservePrice,
@@ -410,22 +640,107 @@ function mergeAuctionSeedRecord(existingAuction, incomingAuction) {
     proofFilesCount: incomingAuction.proofFilesCount || existingAuction.proofFilesCount || 0,
     itemPhotosCount: incomingAuction.itemPhotosCount || existingAuction.itemPhotosCount || 0,
     status: incomingAuction.status || existingAuction.status,
+    explicitVersion: incomingAuction.explicitVersion || existingAuction.explicitVersion || null,
+    hasLocalMetadata: Boolean(existingAuction.hasLocalMetadata || incomingAuction.hasLocalMetadata),
+    hasSharedReadModel: Boolean(
+      existingAuction.hasSharedReadModel
+      || existingAuction.hasSharedSnapshot
+      || incomingAuction.hasSharedReadModel
+      || incomingAuction.hasSharedSnapshot
+    ),
+    hasSharedSnapshot: Boolean(
+      existingAuction.hasSharedReadModel
+      || existingAuction.hasSharedSnapshot
+      || incomingAuction.hasSharedReadModel
+      || incomingAuction.hasSharedSnapshot
+    ),
+    sharedReadModelSourceLabel: incomingAuction.sharedReadModelSourceLabel
+      || existingAuction.sharedReadModelSourceLabel
+      || null,
+    createdAtMs: incomingAuction.createdAtMs || existingAuction.createdAtMs || null,
+    updatedAtMs: incomingAuction.updatedAtMs || existingAuction.updatedAtMs || null,
   };
 }
 
 function mergeAuctionSources(localAuctions, sharedAuctions) {
   const mergedById = new Map();
 
-  for (const auction of sharedAuctions.map(normalizeAuctionSeed).filter(Boolean)) {
-    mergedById.set(String(auction.id), auction);
+  for (const auction of sharedAuctions.map((entry) => normalizeAuctionSeed(entry, 'shared')).filter(Boolean)) {
+    mergedById.set(auction.identityKey, auction);
   }
 
-  for (const auction of localAuctions.map(normalizeAuctionSeed).filter(Boolean)) {
-    const key = String(auction.id);
+  for (const auction of localAuctions.map((entry) => normalizeAuctionSeed(entry, 'local')).filter(Boolean)) {
+    const key = auction.identityKey;
     mergedById.set(key, mergeAuctionSeedRecord(mergedById.get(key), auction));
   }
 
   return Array.from(mergedById.values());
+}
+
+function persistAuctionSeedLocally(auction) {
+  if (typeof window === 'undefined' || !auction?.id) {
+    return;
+  }
+
+  try {
+    const storedAuctions = JSON.parse(localStorage.getItem('myAuctions') || '[]');
+    const nextStoredAuctions = Array.isArray(storedAuctions)
+      ? storedAuctions.filter((entry) => !isLegacyAuctionSeed(entry))
+      : [];
+    const incomingAuction = normalizeAuctionSeed({
+      ...auction,
+      token: auction.currency || auction.token || 'ALEO',
+      currency: auction.currency || auction.token || 'ALEO',
+      createdAt: auction.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+      lastSeenOnChainAt: auction.lastSeenOnChainAt || null,
+    }, 'local');
+
+    if (!incomingAuction) {
+      return;
+    }
+
+    incomingAuction.hasLocalMetadata = true;
+    incomingAuction.hasSharedReadModel = Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot);
+    incomingAuction.hasSharedSnapshot = Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot);
+    incomingAuction.hasOnChainData = Boolean(auction.hasOnChainData);
+    incomingAuction.sharedReadModelSourceLabel = auction.sharedReadModelSourceLabel || incomingAuction.sharedReadModelSourceLabel || null;
+    incomingAuction.opsApiSourceLabel = auction.sharedReadModelSourceLabel || auction.opsApiSourceLabel || incomingAuction.opsApiSourceLabel || null;
+
+    const existingIndex = nextStoredAuctions.findIndex((storedAuction) => (
+      Number(storedAuction?.id) === Number(incomingAuction.id)
+      && resolveAuctionProgramId(storedAuction) === incomingAuction.programId
+    ));
+
+    const existingAuction = existingIndex >= 0
+      ? {
+          ...normalizeAuctionSeed(nextStoredAuctions[existingIndex], 'local'),
+          hasLocalMetadata: true,
+          hasSharedReadModel: Boolean(
+            nextStoredAuctions[existingIndex]?.hasSharedReadModel
+            || nextStoredAuctions[existingIndex]?.hasSharedSnapshot
+          ),
+          hasSharedSnapshot: Boolean(
+            nextStoredAuctions[existingIndex]?.hasSharedReadModel
+            || nextStoredAuctions[existingIndex]?.hasSharedSnapshot
+          ),
+          hasOnChainData: Boolean(nextStoredAuctions[existingIndex]?.hasOnChainData),
+          sharedReadModelSourceLabel: nextStoredAuctions[existingIndex]?.sharedReadModelSourceLabel || null,
+          opsApiSourceLabel: nextStoredAuctions[existingIndex]?.opsApiSourceLabel || null,
+        }
+      : null;
+    const mergedAuction = mergeAuctionSeedRecord(existingAuction, incomingAuction);
+
+    if (existingIndex >= 0) {
+      nextStoredAuctions[existingIndex] = mergedAuction;
+    } else {
+      nextStoredAuctions.push(mergedAuction);
+    }
+
+    localStorage.setItem('myAuctions', JSON.stringify(nextStoredAuctions));
+  } catch (error) {
+    console.warn('[PremiumAuctionList] Failed to persist local auction cache:', error);
+  }
 }
 
 const STATUS_FILTER_OPTIONS = [
@@ -502,12 +817,17 @@ export default function PremiumAuctionList() {
   const loadAuctions = async () => {
     setLoading(true);
     try {
-      const localAuctions = JSON.parse(localStorage.getItem('myAuctions') || '[]');
-      const sharedAuctions = await getAuctionSnapshots();
-      const auctionSeeds = mergeAuctionSources(localAuctions, sharedAuctions);
+      const storedLocalAuctions = JSON.parse(localStorage.getItem('myAuctions') || '[]');
+      const localAuctions = storedLocalAuctions.filter((auction) => !isLegacyAuctionSeed(auction));
+      if (localAuctions.length !== storedLocalAuctions.length) {
+        localStorage.setItem('myAuctions', JSON.stringify(localAuctions));
+      }
+      const sharedReadModelAuctions = await getSharedAuctionReadModel();
+      const auctionSeeds = mergeAuctionSources(localAuctions, sharedReadModelAuctions)
+        .filter((auction) => isVisibleAuctionSeed(auction));
 
       console.log('📋 Loaded local auctions:', localAuctions);
-      console.log('🌐 Loaded shared auction snapshots:', sharedAuctions);
+      console.log('🌐 Loaded shared auction read model:', sharedReadModelAuctions);
       console.log('🧩 Merged auction seeds:', auctionSeeds);
       
       // Fetch on-chain data for each auction
@@ -515,8 +835,13 @@ export default function PremiumAuctionList() {
         auctionSeeds.map(async (auction) => {
           try {
             console.log(`🔍 Fetching on-chain data for auction ${auction.id}...`);
-            const onChainData = await getAuctionInfo(auction.id);
+            const onChainData = await getAuctionInfo(auction.id, auction.programId);
             console.log(`📊 On-chain data for ${auction.id}:`, onChainData);
+
+            if (!onChainData && !shouldRetainFallbackAuction(auction, { isLocalTarget: opsDebugInfo.isLocalTarget })) {
+              console.log(`🧹 Hiding stale shared read model entry without active on-chain data for auction ${auction.id}`);
+              return null;
+            }
             
             const now = Math.floor(Date.now() / 1000);
             const endTime = parseAleoInteger(onChainData?.end_time)
@@ -536,26 +861,37 @@ export default function PremiumAuctionList() {
                   ? 2
                   : 0;
             const currencyType = parseAleoInteger(onChainData?.currency_type) ?? fallbackCurrencyType;
-            const winningAmountMicro = parseAleoUnsignedIntegerString(onChainData?.winning_amount);
+            const winningAmountMicro = parseAleoUnsignedIntegerString(onChainData?.winning_amount)
+              ?? auction.winningAmountMicro
+              ?? null;
             const currentBid = winningAmountMicro
               ? formatCompactAmount(winningAmountMicro)
               : '0';
             const winner = typeof onChainData?.winner === 'string' && onChainData.winner !== EMPTY_ALEO_ADDRESS
               ? onChainData.winner
-              : null;
+              : auction.winner || null;
             const reservePriceMicro = parseAleoUnsignedIntegerString(onChainData?.reserve_price)
+              ?? auction.reservePriceMicro
               ?? (
                 auction.reservePrice
                   ? `${Math.round(parseFloat(auction.reservePrice) * 1_000_000)}`
                   : null
               );
             const platformFeeMicro = parseAleoUnsignedIntegerString(onChainData?.platform_fee_amount)
+              ?? auction.platformFeeMicro
               ?? (winningAmountMicro ? calculatePlatformFee(winningAmountMicro) : null);
             const sellerNetAmountMicro = parseAleoUnsignedIntegerString(onChainData?.seller_net_amount)
+              ?? auction.sellerNetAmountMicro
               ?? (winningAmountMicro ? calculateSellerNetAmount(winningAmountMicro) : null);
-            const totalEscrowedMicro = parseAleoUnsignedIntegerString(onChainData?.total_escrowed) || '0';
-            const revealDeadline = parseAleoInteger(onChainData?.reveal_deadline) ?? 0;
-            const disputeDeadline = parseAleoInteger(onChainData?.dispute_deadline) ?? 0;
+            const totalEscrowedMicro = parseAleoUnsignedIntegerString(onChainData?.total_escrowed)
+              || auction.totalEscrowedMicro
+              || '0';
+            const cachedRevealDeadline = Number(auction.revealDeadline);
+            const cachedDisputeDeadline = Number(auction.disputeDeadline);
+            const revealDeadline = parseAleoInteger(onChainData?.reveal_deadline)
+              ?? (Number.isFinite(cachedRevealDeadline) ? cachedRevealDeadline : 0);
+            const disputeDeadline = parseAleoInteger(onChainData?.dispute_deadline)
+              ?? (Number.isFinite(cachedDisputeDeadline) ? cachedDisputeDeadline : 0);
             const presentation = deriveAuctionPresentation({
               status,
               endTimestamp: endTime,
@@ -568,6 +904,9 @@ export default function PremiumAuctionList() {
 
             const auctionData = {
               id: auction.id,
+              identityKey: auction.identityKey || getAuctionIdentityKey(auction),
+              programId: auction.programId,
+              version: auction.version,
               title: auction.title,
               description: auction.description || '',
               format: 'Sealed-Bid',
@@ -575,15 +914,15 @@ export default function PremiumAuctionList() {
               minBid: auction.minBid,
               status,
               displayStatus: presentation.displayStatus,
-              contractState: getContractStateLabel(state),
+              contractState: state !== null ? getContractStateLabel(state) : status.toUpperCase(),
               state,
               isEndingSoon: presentation.isEndingSoon,
-              bidCount: onChainData?.bid_count || 0,
+              bidCount: parseAleoInteger(onChainData?.commitment_count) ?? Number(auction.bidCount || 0),
               currency: auction.currency || 'ALEO',
               currencyType,
               assetType: auction.assetType || 0, // NEW: Asset type
               creator: auction.creator || auction.seller || null,
-              seller: onChainData?.seller || auction.creator || null,
+              seller: onChainData?.seller || auction.seller || auction.creator || null,
               sellerDisplayName: auction.sellerDisplayName || null,
               winner,
               winningBid: winningAmountMicro ? microToDisplayAmount(winningAmountMicro) : 0,
@@ -595,25 +934,32 @@ export default function PremiumAuctionList() {
               disputeDeadline,
               reservePrice: auction.reservePrice || auction.minBid || '0',
               reservePriceMicro,
-              reserveMet: parseAleoBoolean(onChainData?.reserve_met),
-              settledAt: parseAleoInteger(onChainData?.settled_at) ?? 0,
-              claimableAt: parseAleoInteger(onChainData?.claimable_at) ?? 0,
-              itemReceived: parseAleoBoolean(onChainData?.item_received) ?? false,
-              itemReceivedAt: parseAleoInteger(onChainData?.item_received_at) ?? 0,
-              paymentClaimed: parseAleoBoolean(onChainData?.payment_claimed) ?? false,
-              paymentClaimedAt: parseAleoInteger(onChainData?.payment_claimed_at) ?? 0,
-              platformFeeClaimed: parseAleoBoolean(onChainData?.platform_fee_claimed) ?? false,
-              platformFeeClaimedAt: parseAleoInteger(onChainData?.platform_fee_claimed_at) ?? 0,
+              reserveMet: parseAleoBoolean(onChainData?.reserve_met) ?? auction.reserveMet ?? null,
+              settledAt: parseAleoInteger(onChainData?.settled_at) ?? Number(auction.settledAt || 0),
+              claimableAt: parseAleoInteger(onChainData?.claimable_at) ?? Number(auction.claimableAt || 0),
+              itemReceived: parseAleoBoolean(onChainData?.item_received) ?? Boolean(auction.itemReceived),
+              itemReceivedAt: parseAleoInteger(onChainData?.item_received_at) ?? Number(auction.itemReceivedAt || 0),
+              paymentClaimed: parseAleoBoolean(onChainData?.payment_claimed) ?? Boolean(auction.paymentClaimed),
+              paymentClaimedAt: parseAleoInteger(onChainData?.payment_claimed_at) ?? Number(auction.paymentClaimedAt || 0),
+              platformFeeClaimed: parseAleoBoolean(onChainData?.platform_fee_claimed) ?? Boolean(auction.platformFeeClaimed),
+              platformFeeClaimedAt: parseAleoInteger(onChainData?.platform_fee_claimed_at) ?? Number(auction.platformFeeClaimedAt || 0),
               platformFee: microToDisplayAmount(platformFeeMicro),
               platformFeeMicro,
               sellerNetAmount: microToDisplayAmount(sellerNetAmountMicro),
               sellerNetAmountMicro,
               totalEscrowed: microToDisplayAmount(totalEscrowedMicro),
               totalEscrowedMicro,
-              confirmationTimeout: parseAleoInteger(onChainData?.confirmation_timeout) ?? 0,
+              confirmationTimeout: parseAleoInteger(onChainData?.confirmation_timeout) ?? Number(auction.confirmationTimeout || 0),
               proofFilesCount: auction.proofFilesCount ?? (Array.isArray(auction.proofFiles) ? auction.proofFiles.length : 0),
               itemPhotosCount: auction.itemPhotosCount ?? (Array.isArray(auction.itemPhotos) ? auction.itemPhotos.length : 0),
               verificationStatus: auction.sellerVerification?.status || auction.verificationStatus || 'pending',
+              hasOnChainData: Boolean(onChainData),
+              hasLocalMetadata: Boolean(auction.hasLocalMetadata),
+              hasSharedReadModel: Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot),
+              hasSharedSnapshot: Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot),
+              sharedReadModelSourceLabel: getSharedReadModelSourceLabel(opsDebugInfo.isLocalTarget),
+              opsApiSourceLabel: getSharedReadModelSourceLabel(opsDebugInfo.isLocalTarget),
+              lastSeenOnChainAt: onChainData ? new Date().toISOString() : auction.lastSeenOnChainAt || null,
               featured: false,
               isFixture: Boolean(auction.isFixture || auction.mockOnChain),
               metricLabel: presentation.metricLabel,
@@ -629,6 +975,10 @@ export default function PremiumAuctionList() {
             return auctionData;
           } catch (error) {
             console.error(`❌ Error loading auction ${auction.id}:`, error);
+            if (!shouldRetainFallbackAuction(auction, { isLocalTarget: opsDebugInfo.isLocalTarget })) {
+              return null;
+            }
+
             // Return auction with local data only
             const now = Math.floor(Date.now() / 1000);
             const fallbackStatus = normalizeAuctionLifecycleStatus(auction.status)
@@ -649,23 +999,23 @@ export default function PremiumAuctionList() {
               title: auction.title,
               description: auction.description || '',
               format: 'Sealed-Bid',
-              currentBid: '0',
+              currentBid: auction.winningAmountMicro ? formatCompactAmount(auction.winningAmountMicro) : (auction.currentBid || '0'),
               minBid: auction.minBid,
               status: fallbackStatus,
               displayStatus: fallbackPresentation.displayStatus,
               contractState: auction.contractState || fallbackStatus.toUpperCase(),
               state: 0,
               isEndingSoon: fallbackPresentation.isEndingSoon,
-              bidCount: 0,
+              bidCount: Number(auction.bidCount || 0),
               currency: auction.currency || 'ALEO',
               currencyType: auction.currency === 'ALEO' ? 1 : auction.currency === 'USAD' ? 2 : 0,
               assetType: auction.assetType || 0, // NEW: Asset type
               creator: auction.creator || auction.seller || null,
-              seller: auction.creator || null,
+              seller: auction.seller || auction.creator || null,
               sellerDisplayName: auction.sellerDisplayName || null,
-              winner: null,
-              winningBid: 0,
-              winningAmountMicro: null,
+              winner: auction.winner || null,
+              winningBid: auction.winningAmountMicro ? microToDisplayAmount(auction.winningAmountMicro) : 0,
+              winningAmountMicro: auction.winningAmountMicro ?? null,
               endTimestamp: fallbackEndTimestamp,
               revealPeriod: Number(auction.revealPeriod) || 0,
               disputePeriod: Number(auction.disputePeriod) || 0,
@@ -674,24 +1024,31 @@ export default function PremiumAuctionList() {
               reservePrice: auction.reservePrice || auction.minBid || '0',
               reservePriceMicro: auction.reservePriceMicro ?? null,
               reserveMet: null,
-              settledAt: 0,
-              claimableAt: 0,
-              itemReceived: false,
-              itemReceivedAt: 0,
-              paymentClaimed: false,
-              paymentClaimedAt: 0,
-              platformFeeClaimed: false,
-              platformFeeClaimedAt: 0,
-              platformFee: 0,
-              platformFeeMicro: null,
-              sellerNetAmount: 0,
-              sellerNetAmountMicro: null,
-              totalEscrowed: 0,
+              settledAt: Number(auction.settledAt || 0),
+              claimableAt: Number(auction.claimableAt || 0),
+              itemReceived: Boolean(auction.itemReceived),
+              itemReceivedAt: Number(auction.itemReceivedAt || 0),
+              paymentClaimed: Boolean(auction.paymentClaimed),
+              paymentClaimedAt: Number(auction.paymentClaimedAt || 0),
+              platformFeeClaimed: Boolean(auction.platformFeeClaimed),
+              platformFeeClaimedAt: Number(auction.platformFeeClaimedAt || 0),
+              platformFee: Number(auction.platformFee || 0),
+              platformFeeMicro: auction.platformFeeMicro ?? null,
+              sellerNetAmount: Number(auction.sellerNetAmount || 0),
+              sellerNetAmountMicro: auction.sellerNetAmountMicro ?? null,
+              totalEscrowed: microToDisplayAmount(auction.totalEscrowedMicro ?? '0'),
               totalEscrowedMicro: auction.totalEscrowedMicro ?? '0',
-              confirmationTimeout: 0,
+              confirmationTimeout: Number(auction.confirmationTimeout || 0),
               proofFilesCount: auction.proofFilesCount ?? (Array.isArray(auction.proofFiles) ? auction.proofFiles.length : 0),
               itemPhotosCount: auction.itemPhotosCount ?? (Array.isArray(auction.itemPhotos) ? auction.itemPhotos.length : 0),
               verificationStatus: auction.sellerVerification?.status || auction.verificationStatus || 'pending',
+              hasOnChainData: false,
+              hasLocalMetadata: Boolean(auction.hasLocalMetadata),
+              hasSharedReadModel: Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot),
+              hasSharedSnapshot: Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot),
+              sharedReadModelSourceLabel: getSharedReadModelSourceLabel(opsDebugInfo.isLocalTarget),
+              opsApiSourceLabel: getSharedReadModelSourceLabel(opsDebugInfo.isLocalTarget),
+              lastSeenOnChainAt: auction.lastSeenOnChainAt || null,
               featured: false,
               isFixture: Boolean(auction.isFixture || auction.mockOnChain),
               metricLabel: fallbackPresentation.metricLabel,
@@ -705,13 +1062,15 @@ export default function PremiumAuctionList() {
           }
         })
       );
+
+      const visibleAuctions = auctionsWithData.filter(Boolean);
       
       // Sort by creation time (newest first)
-      auctionsWithData.sort((a, b) => b.id - a.id);
+      visibleAuctions.sort((a, b) => b.id - a.id);
       
       // Mark the most actionable auction as featured
-      if (auctionsWithData.length > 0) {
-        const featuredIndex = auctionsWithData
+      if (visibleAuctions.length > 0) {
+        const featuredIndex = visibleAuctions
           .map((auction, index) => ({ auction, index }))
           .sort((left, right) => {
             const rankDiff = getFeaturedAuctionRank(left.auction) - getFeaturedAuctionRank(right.auction);
@@ -723,18 +1082,23 @@ export default function PremiumAuctionList() {
           })[0]?.index;
 
         if (Number.isInteger(featuredIndex)) {
-          auctionsWithData[featuredIndex].featured = true;
+          visibleAuctions[featuredIndex].featured = true;
         }
       }
-      
-      console.log('📊 Final auctions list:', auctionsWithData);
-      setAuctions(auctionsWithData);
 
-      await Promise.allSettled(auctionsWithData
+      console.log('📊 Final auctions list:', visibleAuctions);
+      visibleAuctions.forEach((auction) => {
+        persistAuctionSeedLocally(auction);
+      });
+      setAuctions(visibleAuctions);
+
+      await Promise.allSettled(visibleAuctions
         .filter((auction) => opsDebugInfo.isLocalTarget || !auction.isFixture)
         .map(async (auction) => {
-        await syncAuctionSnapshot({
+        await syncSharedAuctionReadModelEntry({
           id: auction.id,
+          programId: auction.programId,
+          version: auction.version,
           title: auction.title,
           description: auction.description || '',
           status: auction.status,
@@ -790,6 +1154,26 @@ export default function PremiumAuctionList() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      loadAuctions();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadAuctions();
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const persistWatchlist = async (nextWatchlist) => {
     setWatchlist(nextWatchlist);
@@ -989,7 +1373,7 @@ export default function PremiumAuctionList() {
             <div className="relative grid gap-8 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.85fr)] xl:items-end">
               <div className="max-w-3xl">
                 <div className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.24em] text-white/45">
-                  Powered by Zero-Knowledge
+                  Aleo Commit-Reveal
                 </div>
 
                 <h1 className="mt-4 text-3xl font-display font-bold leading-tight text-white sm:text-4xl xl:text-[2.8rem]">
@@ -998,14 +1382,14 @@ export default function PremiumAuctionList() {
                 </h1>
 
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-white/62 sm:text-base">
-                  V2.22 uses commit-reveal bidding with contract-verifiable settlement. Bidder-local reveal secrets stay off-chain,
-                  while public funding transactions can still expose amounts until fully private escrow ships.
+                  {ACTIVE_CONTRACT_VERSION.toUpperCase()} uses contract-verifiable commit-reveal settlement. On-chain state drives lifecycle and funds, bidder recovery secrets stay browser-local,
+                  and shared Ops metadata only augments the UI. Public funding transactions can still expose amounts before fully private escrow exists.
                 </p>
 
                 <div className="mt-5 flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-cyan-300">
                     <Info className="h-3.5 w-3.5" />
-                    V2.22 Live
+                    {ACTIVE_CONTRACT_VERSION.toUpperCase()} Live
                   </span>
 
                   <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">
@@ -1214,9 +1598,17 @@ export default function PremiumAuctionList() {
                 <p className="mb-6 text-white/60">
                   Create your first commit-reveal auction
                 </p>
-                <PremiumButton onClick={() => navigate('/premium-create')}>
-                  Create Auction
-                </PremiumButton>
+                <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+                  <PremiumButton
+                    variant="ghost"
+                    onClick={() => loadAuctions()}
+                  >
+                    Refresh List
+                  </PremiumButton>
+                  <PremiumButton onClick={() => navigate('/premium-create')}>
+                    Create Auction
+                  </PremiumButton>
+                </div>
               </GlassCard>
             </div>
           )}
@@ -1250,14 +1642,14 @@ export default function PremiumAuctionList() {
               <div className={cardGridLayout}>
                 {visibleAuctions.map((auction) => (
                   <GlassCard
-                    key={auction.id}
+                    key={auction.identityKey || `${auction.programId}:${auction.id}`}
                     hover
                     className={`group relative flex h-full min-h-[320px] cursor-pointer flex-col overflow-hidden p-5 ${
                       auction.featured
                         ? 'border-gold-500/28 shadow-[0_18px_50px_rgba(212,175,55,0.08)]'
                         : ''
                     }`}
-                    onClick={() => navigate(`/premium-auction/${auction.id}`)}
+                    onClick={() => navigate(buildAuctionDetailPath(auction))}
                   >
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.04] via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
@@ -1284,6 +1676,23 @@ export default function PremiumAuctionList() {
                             <span>{getAssetTypeIcon(auction.assetType)}</span>
                             <span>{getAssetTypeName(auction.assetType)}</span>
                           </span>
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 ${
+                            auction.hasOnChainData
+                              ? 'border-green-500/24 bg-green-500/10 text-green-300'
+                              : 'border-amber-500/24 bg-amber-500/10 text-amber-200'
+                          }`}>
+                            {auction.hasOnChainData ? 'On-Chain Live' : 'Cache Fallback'}
+                          </span>
+                          {Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot) && (
+                            <span className="inline-flex items-center rounded-full border border-cyan-500/24 bg-cyan-500/10 px-2.5 py-1 text-cyan-300">
+                              Shared Mirror
+                            </span>
+                          )}
+                          {!Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot) && auction.hasLocalMetadata && (
+                            <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-white/60">
+                              Local Cache
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -1327,6 +1736,12 @@ export default function PremiumAuctionList() {
                           </span>
                         )}
                       </div>
+
+                      {!auction.hasOnChainData && (
+                        <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-100/80">
+                          Showing browser-local cached metadata while live on-chain state reloads. Shared Ops metadata may still be catching up.
+                        </div>
+                      )}
 
                       {auction.seller && (
                         <div className="mt-3">

@@ -17,10 +17,11 @@ import { useState, useEffect } from "react";
 import * as AleoServiceV2 from "@/services/aleoServiceV2";
 
 export default function DashboardPage() {
+  const activeContractVersion = (AleoServiceV2.inferContractVersionFromProgramId(AleoServiceV2.PROGRAM_ID) || 'current').toUpperCase();
   const { auctions } = useLocalAuctions();
   const { bids } = useLocalBids();
   const recentAuctions = auctions.slice(0, 5);
-  const { formatted, loading } = useAleoBalance();
+  useAleoBalance();
   const { connected } = useWallet();
   const { txHistory, loading: txLoading, refresh } = useTxHistory();
   const [winnersData, setWinnersData] = useState([]);
@@ -136,7 +137,7 @@ export default function DashboardPage() {
 
           {/* Description */}
           <p className="text-xl text-slate-300 max-w-2xl mb-8">
-            Commitments and local reveal secrets drive the live V2.22 flow.
+            Commitments and local reveal secrets drive the live {activeContractVersion} flow.
             Per-bid escrow amounts are no longer stored in mapping state, although public funding transactions can still reveal amounts.
           </p>
 

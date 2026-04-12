@@ -1,8 +1,8 @@
 # ShadowBid Contracts
 
-This directory contains the active ShadowBid `v2.22` Leo program.
+This directory contains the active ShadowBid `v2.24` Leo program.
 
-Safe privacy claim for `v2.22`: it closes the original code-level privacy flaws, but it does not yet provide full hidden-amount sealed-bid privacy because the live funding flows still expose transfer amounts.
+Safe privacy claim for `v2.24`: it closes the original code-level privacy flaws, but it does not yet provide full hidden-amount sealed-bid privacy because the live funding flows still expose transfer amounts.
 
 ## Contents
 
@@ -12,7 +12,7 @@ Safe privacy claim for `v2.22`: it closes the original code-level privacy flaws,
 
 ## Supported Currencies
 
-The active `v2.22` contract supports one native currency and two ARC-21 stablecoins:
+The active `v2.24` contract supports one native currency and two ARC-21 stablecoins:
 
 | `currency_type` | Currency | Program | Contract path |
 | --- | --- | --- | --- |

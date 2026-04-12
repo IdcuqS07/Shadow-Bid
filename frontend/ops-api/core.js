@@ -110,7 +110,12 @@ export function mergeDefaults(db = {}) {
         ...(db.settings?.executor || {}),
       },
     },
-    auctions: db.auctions || {},
+    auctions: Object.fromEntries(
+      Object.entries(db.auctions || {}).map(([auctionId, snapshot]) => {
+        const normalizedSnapshot = normalizeStoredAuctionSnapshot(snapshot, auctionId);
+        return [String(normalizedSnapshot.id || auctionId), normalizedSnapshot];
+      })
+    ),
     engagements: db.engagements || {},
     sellerVerifications: db.sellerVerifications || {},
     auctionProofs: db.auctionProofs || {},
@@ -216,6 +221,79 @@ function toOptionalTrimmedString(value, fallback = null) {
 
   const trimmed = value.trim();
   return trimmed ? trimmed : fallback;
+}
+
+function normalizeProgramId(value) {
+  return toOptionalTrimmedString(value);
+}
+
+function normalizeAuctionVersionLabel(value) {
+  const normalizedValue = toOptionalTrimmedString(value);
+  if (!normalizedValue) {
+    return null;
+  }
+
+  const explicitVersionMatch = normalizedValue.toLowerCase().match(/\bv\d+\.\d+\b/);
+  return explicitVersionMatch ? explicitVersionMatch[0] : normalizedValue.toLowerCase();
+}
+
+function detectAuctionVersionInText(text) {
+  const normalizedText = toOptionalTrimmedString(text);
+  if (!normalizedText) {
+    return null;
+  }
+
+  const versionMatch = normalizedText.toLowerCase().match(/\bv\d+\.\d+\b/);
+  return versionMatch ? versionMatch[0] : null;
+}
+
+function inferVersionFromProgramId(programId) {
+  const normalizedProgramId = normalizeProgramId(programId);
+  const versionMatch = normalizedProgramId?.match(/shadowbid_marketplace_v(\d+)_(\d+)\.aleo/i);
+  return versionMatch ? `v${versionMatch[1]}.${versionMatch[2]}` : null;
+}
+
+function inferProgramIdFromVersion(version) {
+  const normalizedVersion = normalizeAuctionVersionLabel(version);
+  const versionMatch = normalizedVersion?.match(/^v(\d+)\.(\d+)$/i);
+  return versionMatch ? `shadowbid_marketplace_v${versionMatch[1]}_${versionMatch[2]}.aleo` : null;
+}
+
+function deriveAuctionContractIdentity(snapshot) {
+  const explicitVersion = normalizeAuctionVersionLabel(snapshot?.explicitVersion)
+    || normalizeAuctionVersionLabel(snapshot?.contractVersion)
+    || detectAuctionVersionInText(snapshot?.title)
+    || detectAuctionVersionInText(snapshot?.description)
+    || normalizeAuctionVersionLabel(snapshot?.version);
+  const programId = normalizeProgramId(
+    snapshot?.programId
+      || snapshot?.contractProgramId
+      || snapshot?.onChainProgramId
+  ) || inferProgramIdFromVersion(explicitVersion);
+  const resolvedVersion = explicitVersion || inferVersionFromProgramId(programId);
+
+  return {
+    programId,
+    version: resolvedVersion,
+    contractVersion: resolvedVersion ? resolvedVersion.toUpperCase() : null,
+    explicitVersion,
+  };
+}
+
+function normalizeStoredAuctionSnapshot(snapshot, fallbackId) {
+  const normalizedSnapshot = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const contractIdentity = deriveAuctionContractIdentity(normalizedSnapshot);
+
+  return {
+    ...normalizedSnapshot,
+    id: String(normalizedSnapshot.id ?? fallbackId ?? ''),
+    programId: contractIdentity.programId,
+    contractProgramId: contractIdentity.programId,
+    onChainProgramId: contractIdentity.programId,
+    version: contractIdentity.version,
+    contractVersion: contractIdentity.contractVersion,
+    explicitVersion: contractIdentity.explicitVersion,
+  };
 }
 
 function sanitizeProofAttachment(attachment, options = {}) {
@@ -672,6 +750,33 @@ function computeAnalytics(db) {
   const totalFeeClaimed = feeClaimed.reduce((sum, auction) => sum + toDisplayAmount(auction.platformFee ?? auction.platformFeeMicro), 0);
   const refundEligible = auctions.filter((auction) => auction.status === 'cancelled').length;
   const executorJobs = deriveExecutorJobs(db);
+  const byProgramId = auctions.reduce((accumulator, auction) => {
+    const contractIdentity = deriveAuctionContractIdentity(auction);
+    const programId = contractIdentity.programId || 'unknown';
+
+    if (!accumulator[programId]) {
+      accumulator[programId] = {
+        programId,
+        version: contractIdentity.version || null,
+        contractVersion: contractIdentity.contractVersion || null,
+        auctions: 0,
+        settled: 0,
+        cancelled: 0,
+      };
+    }
+
+    accumulator[programId].auctions += 1;
+
+    if (auction.status === 'settled') {
+      accumulator[programId].settled += 1;
+    }
+
+    if (auction.status === 'cancelled') {
+      accumulator[programId].cancelled += 1;
+    }
+
+    return accumulator;
+  }, {});
 
   return {
     generatedAt: new Date().toISOString(),
@@ -704,6 +809,7 @@ function computeAnalytics(db) {
       accumulator[key] = (accumulator[key] || 0) + 1;
       return accumulator;
     }, {}),
+    byProgramId,
   };
 }
 
@@ -964,7 +1070,21 @@ function listAuctionSnapshots(db) {
   });
 }
 
+function isAuctionReadModelCollectionPath(pathname) {
+  return pathname === '/api/auctions' || pathname === '/api/read-model/auctions';
+}
+
+function matchAuctionReadModelEntryPath(pathname) {
+  return pathname.match(/^\/api\/auctions\/([^/]+)$/)
+    || pathname.match(/^\/api\/read-model\/auctions\/([^/]+)$/);
+}
+
+function isAuctionReadModelSyncPath(pathname) {
+  return pathname === '/api/auctions/sync' || pathname === '/api/read-model/auctions/sync';
+}
+
 function sanitizeSnapshot(snapshot) {
+  const contractIdentity = deriveAuctionContractIdentity(snapshot);
   const sellerVerification = sanitizeSellerVerification({
     ...(snapshot.sellerVerification || {}),
     wallet: snapshot.sellerVerification?.wallet || snapshot.seller,
@@ -989,9 +1109,14 @@ function sanitizeSnapshot(snapshot) {
     description: snapshot.description || '',
     status: snapshot.status || 'open',
     contractState: snapshot.contractState || String(snapshot.status || 'open').toUpperCase(),
+    programId: contractIdentity.programId,
+    contractProgramId: contractIdentity.programId,
+    onChainProgramId: contractIdentity.programId,
+    version: contractIdentity.version,
+    contractVersion: contractIdentity.contractVersion,
+    explicitVersion: contractIdentity.explicitVersion,
     seller: snapshot.seller || null,
     creator: snapshot.creator || snapshot.seller || null,
-    sellerDisplayName: snapshot.sellerDisplayName || null,
     winner: snapshot.winner || null,
     token: snapshot.token || 'ALEO',
     endTimestamp: toNumber(snapshot.endTimestamp, 0),
@@ -1048,6 +1173,7 @@ function createHealthPayload({ serviceName, environment, storageDriver, db, stor
     storage: storageInfo,
     totals: {
       auctions: Object.keys(db.auctions || {}).length,
+      sharedReadModelAuctions: Object.keys(db.auctions || {}).length,
       disputes: Object.keys(db.disputes || {}).length,
       offers: Object.keys(db.offers || {}).length,
       watchlists: Object.keys(db.watchlists || {}).length,
@@ -1109,6 +1235,7 @@ async function runOpsRoute({
         environment,
         totals: {
           auctions: 0,
+          sharedReadModelAuctions: 0,
           disputes: 0,
           offers: 0,
           watchlists: 0,
@@ -1120,7 +1247,7 @@ async function runOpsRoute({
 
   let db = await storage.loadDb();
 
-  if (method === 'GET' && pathname === '/api/auctions') {
+  if (method === 'GET' && isAuctionReadModelCollectionPath(pathname)) {
     return {
       status: 200,
       payload: {
@@ -1130,7 +1257,7 @@ async function runOpsRoute({
     };
   }
 
-  const auctionMatch = pathname.match(/^\/api\/auctions\/([^/]+)$/);
+  const auctionMatch = matchAuctionReadModelEntryPath(pathname);
   if (method === 'GET' && auctionMatch) {
     const auctionId = String(decodeURIComponent(auctionMatch[1]));
     const auction = db.auctions[auctionId] || null;
@@ -1154,7 +1281,7 @@ async function runOpsRoute({
     };
   }
 
-  if (method === 'POST' && pathname === '/api/auctions/sync') {
+  if (method === 'POST' && isAuctionReadModelSyncPath(pathname)) {
     const snapshot = sanitizeSnapshot(body || {});
     db.auctions[snapshot.id] = {
       ...(db.auctions[snapshot.id] || {}),
@@ -1167,6 +1294,41 @@ async function runOpsRoute({
       payload: {
         ok: true,
         auction: db.auctions[snapshot.id],
+      },
+    };
+  }
+
+  const engagementMatch = pathname.match(/^\/api\/engagements\/([^/]+)$/);
+  if (method === 'GET' && engagementMatch) {
+    const wallet = normalizeAddress(decodeURIComponent(engagementMatch[1]));
+    const auctionId = String(searchParams.get('auctionId') || '');
+
+    if (!wallet || !auctionId) {
+      return {
+        status: 400,
+        payload: {
+          ok: false,
+          error: 'wallet and auctionId are required',
+        },
+      };
+    }
+
+    const persistedEngagement = db.engagements[wallet]?.[auctionId] || null;
+    const snapshot = db.auctions[auctionId] || null;
+    const roles = snapshot
+      ? Array.from(getAuctionRoles(db, snapshot, wallet))
+      : dedupe(Array.isArray(persistedEngagement?.roles) ? persistedEngagement.roles : []);
+
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        engagement: {
+          wallet,
+          auctionId,
+          roles,
+          updatedAt: persistedEngagement?.updatedAt || null,
+        },
       },
     };
   }

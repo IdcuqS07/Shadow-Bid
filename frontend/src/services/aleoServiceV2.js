@@ -1,11 +1,15 @@
-// Aleo Service V2 - For shadowbid_marketplace_v2_22.aleo
-// V2.21: Split deadlines, reveal-timeout settlement, dispute resolution, proof anchors
+import { recordWalletDebug } from '@/wallets/walletDebug';
+
+// Aleo Service V2 - For shadowbid_marketplace_v2_24.aleo
+// V2.24: Refund identity consistency for Aleo plus v2.23 lifecycle guards
 // V2.19: Platform fee (2.5%), reserve price, settlement timing fix
 
 // NOTE: write-path helpers below target the remediated contract ABI in `contracts/src/main.leo`.
 // Point `VITE_PROGRAM_ID` at the redeployed program before using commit/refund transactions.
-const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_22.aleo';
+const PROGRAM_ID = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_24.aleo';
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.explorer.provable.com/v1/testnet';
+const BID_RECOVERY_SCHEMA = 'shadowbid.bid-recovery';
+const BID_RECOVERY_SCHEMA_VERSION = 1;
 
 // V2.19 NEW: Platform fee configuration
 const PLATFORM_FEE_RATE = 250; // 2.5% (250 basis points / 10000)
@@ -14,6 +18,22 @@ export const EMPTY_ALEO_ADDRESS = 'aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeProgramId(programId) {
+  return typeof programId === 'string' && programId.trim()
+    ? programId.trim()
+    : PROGRAM_ID;
+}
+
+export function inferContractVersionFromProgramId(programId = PROGRAM_ID) {
+  const normalizedProgramId = normalizeProgramId(programId);
+  const versionMatch = normalizedProgramId.match(/shadowbid_marketplace_v(\d+)_(\d+)\.aleo/i);
+  if (!versionMatch) {
+    return 'current';
+  }
+
+  return `v${versionMatch[1]}.${versionMatch[2]}`;
 }
 
 function nonceStorageKey(auctionId, walletAddress) {
@@ -106,6 +126,9 @@ export function normalizeAuctionInfoResponse(data) {
     'platform_fee_claimed_at',
     'reserve_price',
     'reserve_met',
+    'commitment_count',
+    'revealed_count',
+    'cancel_reason',
   ];
 
   const normalized = {};
@@ -220,6 +243,61 @@ function formatFieldInput(value) {
   throw new Error(`Invalid field value: ${value}`);
 }
 
+function formatTransactionInputPreview(value) {
+  if (value && typeof value === 'object') {
+    return 'Object';
+  }
+
+  return String(value);
+}
+
+function buildTransactionPreviewMessage(txPayload, options = {}) {
+  const heading = typeof options.debugHeading === 'string' && options.debugHeading.trim()
+    ? options.debugHeading.trim()
+    : 'Submitting transaction.';
+  const inputLabels = Array.isArray(options.inputLabels) ? options.inputLabels : [];
+  const lines = [
+    heading,
+    `- Program: ${txPayload.program}`,
+    `- Function: ${txPayload.function}`,
+    '- Inputs:',
+  ];
+
+  txPayload.inputs.forEach((input, index) => {
+    const label = inputLabels[index] || `input_${index + 1}`;
+    lines.push(`${index + 1}. ${label}: ${formatTransactionInputPreview(input)}`);
+  });
+
+  return lines.join('\n');
+}
+
+export function buildPrivateBidAleoSubmissionPreview({
+  programId = PROGRAM_ID,
+  auctionId,
+  nonce,
+  privateRecord,
+  amountCredits,
+}) {
+  return buildTransactionPreviewMessage({
+    program: normalizeProgramId(programId),
+    function: 'commit_bid_aleo_private',
+    inputs: [
+      formatFieldInput(auctionId),
+      formatFieldInput(nonce),
+      privateRecord,
+      formatUnsignedTransactionInput(amountCredits, 'u64'),
+    ],
+  }, {
+    debugHeading: 'Submitting private bid transaction.',
+    inputLabels: [
+      'auction_id',
+      'nonce',
+      'private_credits',
+      'amount_credits',
+    ],
+  });
+}
+
 export async function hashStringToField(value) {
   const normalizedValue = typeof value === 'string' ? value : JSON.stringify(value ?? null);
   const cryptoApi = globalThis.crypto;
@@ -250,16 +328,37 @@ export async function hashJsonToField(value) {
 }
 
 // Helper: Request transaction
-async function requestTx(executeTransaction, programFunction, inputs, fee = 1_000_000, privateFee = false) {
+async function requestTx(
+  executeTransaction,
+  programFunction,
+  inputs,
+  fee = 1_000_000,
+  privateFee = false,
+  options = {}
+) {
   if (!executeTransaction) throw new Error('Wallet not available');
   
   const txPayload = {
-    program: PROGRAM_ID,
+    program: normalizeProgramId(options.programId),
     function: programFunction,
     inputs,
     fee,
     privateFee,
   };
+
+  if (options.debugHeading || Array.isArray(options.inputLabels)) {
+    const previewMessage = buildTransactionPreviewMessage(txPayload, options);
+    console.info(`[aleoServiceV2] ${previewMessage}`);
+    recordWalletDebug('transaction-request', {
+      program: txPayload.program,
+      function: txPayload.function,
+      fee: txPayload.fee,
+      privateFee: txPayload.privateFee,
+      inputLabels: Array.isArray(options.inputLabels) ? options.inputLabels : [],
+      inputPreview: txPayload.inputs.map((input) => formatTransactionInputPreview(input)),
+      previewMessage,
+    });
+  }
   
   try {
     return await executeTransaction(txPayload);
@@ -309,7 +408,8 @@ export async function createAuction(
   assetType,
   endTime,
   revealPeriod = 86400,
-  disputePeriod = revealPeriod
+  disputePeriod = revealPeriod,
+  options = {}
 ) {
   const inputs = [
     `${auctionId}field`,
@@ -322,42 +422,42 @@ export async function createAuction(
     `${disputePeriod}i64`
   ];
   
-  return requestTx(executeTransaction, 'create_auction', inputs);
+  return requestTx(executeTransaction, 'create_auction', inputs, 1_000_000, false, options);
 }
 
 // 1b. Cancel Auction (V2.10)
 // Seller can cancel auction if no bids have been placed yet
-export async function cancelAuction(executeTransaction, auctionId) {
+export async function cancelAuction(executeTransaction, auctionId, options = {}) {
   return requestTx(executeTransaction, 'cancel_auction', [
     `${auctionId}field`     // V2.10: Changed to field
-  ]);
+  ], 1_000_000, false, options);
 }
 
 // 2. Commit Bid (V2.21)
 // Params: auction_id, nonce (private), amount_usdx
 // NOTE: This will transfer USDX from bidder to contract
-export async function commitBid(executeTransaction, auctionId, nonce, amountUsdx) {
+export async function commitBid(executeTransaction, auctionId, nonce, amountUsdx, options = {}) {
   const inputs = [
     `${auctionId}field`,
     formatFieldInput(nonce),
     `${amountUsdx}u128`
   ];
   
-  return requestTx(executeTransaction, 'commit_bid', inputs);
+  return requestTx(executeTransaction, 'commit_bid', inputs, 1_000_000, false, options);
 }
 
 // 3. Close Auction (V2.21 keeper-friendly)
-export async function closeAuction(executeTransaction, auctionId, closedAt = null) {
+export async function closeAuction(executeTransaction, auctionId, closedAt = null, options = {}) {
   const timestamp = closedAt || getCurrentTimestamp();
   return requestTx(executeTransaction, 'close_auction', [
     `${auctionId}field`,
     `${timestamp}i64`
-  ]);
+  ], 1_000_000, false, options);
 }
 
 // 4. Reveal Bid (V2.21 reveal timestamp)
 // Params: auction_id, amount_usdx (private), nonce (private), revealed_at
-export async function revealBid(executeTransaction, auctionId, amountUsdx, nonce, revealedAt = null) {
+export async function revealBid(executeTransaction, auctionId, amountUsdx, nonce, revealedAt = null, options = {}) {
   const timestamp = revealedAt || getCurrentTimestamp();
   const normalizedNonce = typeof nonce === 'string' && nonce.endsWith('field')
     ? nonce
@@ -370,74 +470,74 @@ export async function revealBid(executeTransaction, auctionId, amountUsdx, nonce
     `${timestamp}i64`
   ];
   
-  return requestTx(executeTransaction, 'reveal_bid', inputs);
+  return requestTx(executeTransaction, 'reveal_bid', inputs, 1_000_000, false, options);
 }
 
 // 5. Settle After Reveal Timeout (V2.21 keeper-friendly)
-export async function settleAfterRevealTimeout(executeTransaction, auctionId, settledAt = null) {
+export async function settleAfterRevealTimeout(executeTransaction, auctionId, settledAt = null, options = {}) {
   const timestamp = settledAt || getCurrentTimestamp();
   return requestTx(executeTransaction, 'settle_after_reveal_timeout', [
     `${auctionId}field`,
     `${timestamp}i64`
-  ]);
+  ], 1_000_000, false, options);
 }
 
 // Backward-compatible alias for older UI flows.
-export async function determineWinner(executeTransaction, auctionId, determinedAt = null) {
-  return settleAfterRevealTimeout(executeTransaction, auctionId, determinedAt);
+export async function determineWinner(executeTransaction, auctionId, determinedAt = null, options = {}) {
+  return settleAfterRevealTimeout(executeTransaction, auctionId, determinedAt, options);
 }
 
 // 6. Finalize Winner (V2.21 - After dispute deadline)
-export async function finalizeWinner(executeTransaction, auctionId, finalizedAt = null) {
+export async function finalizeWinner(executeTransaction, auctionId, finalizedAt = null, options = {}) {
   const timestamp = finalizedAt || getCurrentTimestamp();
   return requestTx(executeTransaction, 'finalize_winner', [
     `${auctionId}field`,
     `${timestamp}i64`
-  ]);
+  ], 1_000_000, false, options);
 }
 
 // 6b. Pay Seller (V2.10)
 // Transfer USDX from contract to seller
 // Call this AFTER finalize_winner
-export async function paySeller(executeTransaction, auctionId, sellerAddress, winningAmount) {
+export async function paySeller(executeTransaction, auctionId, sellerAddress, winningAmount, options = {}) {
   const inputs = [
     `${auctionId}field`,    // V2.10: Changed to field
     sellerAddress,
     `${winningAmount}u128`
   ];
   
-  return requestTx(executeTransaction, 'pay_seller', inputs);
+  return requestTx(executeTransaction, 'pay_seller', inputs, 1_000_000, false, options);
 }
 
 // 7. Claim Refund (V2.21)
 // User must provide the original nonce so the contract can recompute the commitment.
-export async function claimRefund(executeTransaction, auctionId, nonce, refundAmount) {
+export async function claimRefund(executeTransaction, auctionId, nonce, refundAmount, options = {}) {
   return requestTx(executeTransaction, 'claim_refund', [
     `${auctionId}field`,
     formatFieldInput(nonce),
     `${refundAmount}u128`
-  ]);
+  ], 1_000_000, false, options);
 }
 
 // 7b. Process Refund (V2.5 NEW)
 // Transfer USDX from contract to loser
 // Call this AFTER claim_refund
-export async function processRefund(executeTransaction, bidderAddress, refundAmount) {
+export async function processRefund(executeTransaction, bidderAddress, refundAmount, options = {}) {
   const inputs = [
     bidderAddress,
     `${refundAmount}u128`
   ];
   
-  return requestTx(executeTransaction, 'process_refund', inputs);
+  return requestTx(executeTransaction, 'process_refund', inputs, 1_000_000, false, options);
 }
 
 // Query Functions
 
 // Get auction info from on-chain mapping
-export async function getAuctionInfo(auctionId) {
+export async function getAuctionInfo(auctionId, programId = null) {
   try {
     return await fetchJsonWithFixtureFallback(
-      `/program/${PROGRAM_ID}/mapping/auctions/${auctionId}field`,
+      `/program/${normalizeProgramId(programId)}/mapping/auctions/${auctionId}field`,
       'getMockFixtureAuctionInfo',
       [auctionId],
       normalizeAuctionInfoResponse
@@ -473,10 +573,10 @@ export async function getEscrow(auctionId) {
 }
 
 // Get highest bid
-export async function getHighestBid(auctionId) {
+export async function getHighestBid(auctionId, programId = null) {
   try {
     return await fetchJsonWithFixtureFallback(
-      `/program/${PROGRAM_ID}/mapping/highest_bid/${auctionId}field`,
+      `/program/${normalizeProgramId(programId)}/mapping/highest_bid/${auctionId}field`,
       'getMockFixtureHighestBid',
       [auctionId]
     );
@@ -487,10 +587,10 @@ export async function getHighestBid(auctionId) {
 }
 
 // Get highest bidder
-export async function getHighestBidder(auctionId) {
+export async function getHighestBidder(auctionId, programId = null) {
   try {
     return await fetchJsonWithFixtureFallback(
-      `/program/${PROGRAM_ID}/mapping/highest_bidder/${auctionId}field`,
+      `/program/${normalizeProgramId(programId)}/mapping/highest_bidder/${auctionId}field`,
       'getMockFixtureHighestBidder',
       [auctionId]
     );
@@ -547,7 +647,18 @@ export function saveCommitment(auctionId, commitment, amount, walletAddress, cur
 export function getCommitmentData(auctionId, walletAddress) {
   const data = localStorage.getItem(commitmentStorageKey(auctionId, walletAddress));
   if (!data) return null;
-  return JSON.parse(data);
+
+  try {
+    return JSON.parse(data);
+  } catch (error) {
+    console.warn('[aleoServiceV2] Dropping malformed commitment data from localStorage', {
+      auctionId,
+      walletAddress,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    localStorage.removeItem(commitmentStorageKey(auctionId, walletAddress));
+    return null;
+  }
 }
 
 export function updateCommitmentData(auctionId, walletAddress, updates = {}) {
@@ -572,6 +683,119 @@ export function updateCommitmentData(auctionId, walletAddress, updates = {}) {
 
 export function clearCommitment(auctionId, walletAddress) {
   localStorage.removeItem(commitmentStorageKey(auctionId, walletAddress));
+}
+
+export function buildBidRecoveryBundle(auctionId, walletAddress, options = {}) {
+  const normalizedWalletAddress = typeof walletAddress === 'string' ? walletAddress.trim() : '';
+  if (!auctionId || !normalizedWalletAddress) {
+    return null;
+  }
+
+  const nonce = options.nonce || getNonce(auctionId, normalizedWalletAddress);
+  const commitmentData = options.commitmentData || getCommitmentData(auctionId, normalizedWalletAddress);
+  const amount = Number(options.amount ?? commitmentData?.amount ?? commitmentData?.amountUsdx ?? 0);
+
+  if (!nonce || !commitmentData || !Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  const resolvedProgramId = normalizeProgramId(
+    options.programId
+      || commitmentData?.programId
+  );
+
+  return {
+    schema: BID_RECOVERY_SCHEMA,
+    schemaVersion: BID_RECOVERY_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    auctionId: Number(auctionId),
+    walletAddress: normalizedWalletAddress,
+    programId: resolvedProgramId,
+    contractVersion: inferContractVersionFromProgramId(resolvedProgramId),
+    nonce,
+    amount,
+    currency: commitmentData?.currency || options.currency || 'usdcx',
+    privacy: commitmentData?.privacy || options.privacy || 'public',
+    commitment: commitmentData?.commitment || null,
+    transactionId: commitmentData?.transactionId || null,
+    walletTransactionId: commitmentData?.walletTransactionId || null,
+    explorerTransactionId: commitmentData?.explorerTransactionId || null,
+    status: commitmentData?.status || null,
+    revealStatus: commitmentData?.revealStatus || null,
+    commitmentMode: commitmentData?.commitmentMode || 'contract-derived',
+    timestamp: commitmentData?.timestamp || Date.now(),
+  };
+}
+
+export function serializeBidRecoveryBundle(bundle) {
+  return JSON.stringify(bundle, null, 2);
+}
+
+export function restoreBidRecoveryBundle(bundleOrText, options = {}) {
+  const bundle = typeof bundleOrText === 'string'
+    ? JSON.parse(bundleOrText)
+    : bundleOrText;
+
+  if (!bundle || typeof bundle !== 'object') {
+    throw new Error('Recovery bundle is empty or malformed.');
+  }
+
+  if (bundle.schema !== BID_RECOVERY_SCHEMA || bundle.schemaVersion !== BID_RECOVERY_SCHEMA_VERSION) {
+    throw new Error('Unsupported recovery bundle format.');
+  }
+
+  const auctionId = Number(bundle.auctionId);
+  const walletAddress = typeof bundle.walletAddress === 'string' ? bundle.walletAddress.trim() : '';
+  const expectedWalletAddress = typeof options.walletAddress === 'string' ? options.walletAddress.trim() : '';
+  const expectedAuctionId = options.auctionId != null ? Number(options.auctionId) : null;
+  const amount = Number(bundle.amount);
+
+  if (!Number.isFinite(auctionId) || auctionId <= 0) {
+    throw new Error('Recovery bundle is missing a valid auction ID.');
+  }
+
+  if (!walletAddress) {
+    throw new Error('Recovery bundle is missing the bidder wallet address.');
+  }
+
+  if (!bundle.nonce || typeof bundle.nonce !== 'string') {
+    throw new Error('Recovery bundle is missing the nonce required for reveal and refund.');
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Recovery bundle is missing the committed bid amount.');
+  }
+
+  if (expectedWalletAddress && walletAddress.toLowerCase() !== expectedWalletAddress.toLowerCase()) {
+    throw new Error(`Recovery bundle belongs to ${walletAddress}, not the currently connected wallet.`);
+  }
+
+  if (expectedAuctionId !== null && auctionId !== expectedAuctionId) {
+    throw new Error(`Recovery bundle targets auction #${auctionId}, not auction #${expectedAuctionId}.`);
+  }
+
+  saveNonce(auctionId, bundle.nonce, walletAddress);
+  saveCommitment(auctionId, bundle.commitment || null, amount, walletAddress, bundle.currency || 'usdcx', {
+    privacy: bundle.privacy || 'public',
+    transactionId: bundle.transactionId || null,
+    walletTransactionId: bundle.walletTransactionId || null,
+    explorerTransactionId: bundle.explorerTransactionId || null,
+    status: bundle.status || 'confirmed',
+    revealStatus: bundle.revealStatus || null,
+    commitmentMode: bundle.commitmentMode || 'contract-derived',
+    programId: normalizeProgramId(bundle.programId),
+    restoredAt: Date.now(),
+    restoredFromRecoveryBundle: true,
+    timestamp: bundle.timestamp || Date.now(),
+  });
+
+  return {
+    ...bundle,
+    auctionId,
+    walletAddress,
+    amount,
+    programId: normalizeProgramId(bundle.programId),
+  };
 }
 
 async function fetchApiPayload(path) {
@@ -706,23 +930,23 @@ export { PROGRAM_ID, API_BASE };
 // -------------------------
 
 // 2b. Commit Bid with Aleo Credits
-export async function commitBidAleo(executeTransaction, auctionId, nonce, amountCredits) {
+export async function commitBidAleo(executeTransaction, auctionId, nonce, amountCredits, options = {}) {
   const inputs = [
     `${auctionId}field`,
     formatFieldInput(nonce),
     `${amountCredits}u64`
   ];
   
-  return requestTx(executeTransaction, 'commit_bid_aleo', inputs);
+  return requestTx(executeTransaction, 'commit_bid_aleo', inputs, 1_000_000, false, options);
 }
 
 // 7b. Claim Refund with Aleo Credits
-export async function claimRefundAleo(executeTransaction, auctionId, nonce, refundAmount) {
+export async function claimRefundAleo(executeTransaction, auctionId, nonce, refundAmount, options = {}) {
   return requestTx(executeTransaction, 'claim_refund_aleo', [
     `${auctionId}field`,
     formatFieldInput(nonce),
     `${refundAmount}u64`
-  ]);
+  ], 1_000_000, false, options);
 }
 
 // Helper: Detect currency from auction info
@@ -1186,7 +1410,7 @@ function normalizePrivateRecordInput(privateRecord) {
 //     private_credits: credits.aleo/credits,
 //     public amount_credits: u64
 // )
-export async function commitBidAleoPrivate(executeTransaction, auctionId, nonce, privateRecord, amountCredits) {
+export async function commitBidAleoPrivate(executeTransaction, auctionId, nonce, privateRecord, amountCredits, options = {}) {
   const normalizedRecord = normalizePrivateRecordInput(privateRecord);
 
   if (typeof normalizedRecord !== 'string') {
@@ -1211,12 +1435,22 @@ export async function commitBidAleoPrivate(executeTransaction, auctionId, nonce,
     'commit_bid_aleo_private',
     inputs,
     2_000_000, // Higher fee for private transactions
-    false
+    false,
+    {
+      ...options,
+      debugHeading: 'Submitting private bid transaction.',
+      inputLabels: [
+        'auction_id',
+        'nonce',
+        'private_credits',
+        'amount_credits',
+      ],
+    }
   );
 }
 
 // Claim refund with private ALEO output.
-export async function claimRefundAleoPrivate(executeTransaction, auctionId, nonce, refundAmount) {
+export async function claimRefundAleoPrivate(executeTransaction, auctionId, nonce, refundAmount, options = {}) {
   const inputs = [
     `${auctionId}field`,
     formatFieldInput(nonce),
@@ -1226,12 +1460,15 @@ export async function claimRefundAleoPrivate(executeTransaction, auctionId, nonc
   return requestTx(
     executeTransaction,
     'claim_refund_aleo_private',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
 // Commit bid with USAD.
-export async function commitBidUSAD(executeTransaction, auctionId, nonce, amountUsad) {
+export async function commitBidUSAD(executeTransaction, auctionId, nonce, amountUsad, options = {}) {
   const inputs = [
     `${auctionId}field`,
     formatFieldInput(nonce),
@@ -1241,12 +1478,15 @@ export async function commitBidUSAD(executeTransaction, auctionId, nonce, amount
   return requestTx(
     executeTransaction,
     'commit_bid_usad',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
 // Claim refund USAD.
-export async function claimRefundUSAD(executeTransaction, auctionId, nonce, refundAmount) {
+export async function claimRefundUSAD(executeTransaction, auctionId, nonce, refundAmount, options = {}) {
   const inputs = [
     `${auctionId}field`,
     formatFieldInput(nonce),
@@ -1256,12 +1496,15 @@ export async function claimRefundUSAD(executeTransaction, auctionId, nonce, refu
   return requestTx(
     executeTransaction,
     'claim_refund_usad',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
 // Confirm receipt - Winner confirms item received (V2.18 only)
-export async function confirmReceiptV2_18(executeTransaction, auctionId) {
+export async function confirmReceiptV2_18(executeTransaction, auctionId, options = {}) {
   const receivedAt = Math.floor(Date.now() / 1000);
   const inputs = [
     `${auctionId}field`,
@@ -1271,12 +1514,15 @@ export async function confirmReceiptV2_18(executeTransaction, auctionId) {
   return requestTx(
     executeTransaction,
     'confirm_receipt',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
 // Claim winning bid - ALEO (V2.19 - Uses seller_net_amount)
-export async function claimWinningAleo(executeTransaction, auctionId, sellerNetAmount, sellerAddress, claimAt = null) {
+export async function claimWinningAleo(executeTransaction, auctionId, sellerNetAmount, sellerAddress, claimAt = null, options = {}) {
   const timestamp = claimAt || getCurrentTimestamp();
   const inputs = [
     `${auctionId}field`,
@@ -1288,12 +1534,15 @@ export async function claimWinningAleo(executeTransaction, auctionId, sellerNetA
   return requestTx(
     executeTransaction,
     'claim_winning_aleo',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
 // Claim winning bid - USDCx (V2.19 - Uses seller_net_amount)
-export async function claimWinningUSDCx(executeTransaction, auctionId, sellerNetAmount, sellerAddress, claimAt = null) {
+export async function claimWinningUSDCx(executeTransaction, auctionId, sellerNetAmount, sellerAddress, claimAt = null, options = {}) {
   const timestamp = claimAt || getCurrentTimestamp();
   const inputs = [
     `${auctionId}field`,
@@ -1305,12 +1554,15 @@ export async function claimWinningUSDCx(executeTransaction, auctionId, sellerNet
   return requestTx(
     executeTransaction,
     'claim_winning_usdcx',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
 // Claim winning bid - USAD (V2.19 - Uses seller_net_amount)
-export async function claimWinningUSAD(executeTransaction, auctionId, sellerNetAmount, sellerAddress, claimAt = null) {
+export async function claimWinningUSAD(executeTransaction, auctionId, sellerNetAmount, sellerAddress, claimAt = null, options = {}) {
   const timestamp = claimAt || getCurrentTimestamp();
   const inputs = [
     `${auctionId}field`,
@@ -1322,7 +1574,10 @@ export async function claimWinningUSAD(executeTransaction, auctionId, sellerNetA
   return requestTx(
     executeTransaction,
     'claim_winning_usad',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
@@ -1341,7 +1596,7 @@ export function getCurrencyName(currencyType) {
 // ========================================
 
 // Claim Platform Fee - ALEO
-export async function claimPlatformFeeAleo(executeTransaction, auctionId, feeAmount, claimedAt = null) {
+export async function claimPlatformFeeAleo(executeTransaction, auctionId, feeAmount, claimedAt = null, options = {}) {
   const timestamp = claimedAt || getCurrentTimestamp();
   const inputs = [
     `${auctionId}field`,
@@ -1352,12 +1607,15 @@ export async function claimPlatformFeeAleo(executeTransaction, auctionId, feeAmo
   return requestTx(
     executeTransaction,
     'claim_platform_fee_aleo',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
 // Claim Platform Fee - USDCx
-export async function claimPlatformFeeUsdcx(executeTransaction, auctionId, feeAmount, claimedAt = null) {
+export async function claimPlatformFeeUsdcx(executeTransaction, auctionId, feeAmount, claimedAt = null, options = {}) {
   const timestamp = claimedAt || getCurrentTimestamp();
   const inputs = [
     `${auctionId}field`,
@@ -1368,12 +1626,15 @@ export async function claimPlatformFeeUsdcx(executeTransaction, auctionId, feeAm
   return requestTx(
     executeTransaction,
     'claim_platform_fee_usdcx',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
 // Claim Platform Fee - USAD
-export async function claimPlatformFeeUsad(executeTransaction, auctionId, feeAmount, claimedAt = null) {
+export async function claimPlatformFeeUsad(executeTransaction, auctionId, feeAmount, claimedAt = null, options = {}) {
   const timestamp = claimedAt || getCurrentTimestamp();
   const inputs = [
     `${auctionId}field`,
@@ -1384,13 +1645,16 @@ export async function claimPlatformFeeUsad(executeTransaction, auctionId, feeAmo
   return requestTx(
     executeTransaction,
     'claim_platform_fee_usad',
-    inputs
+    inputs,
+    1_000_000,
+    false,
+    options
   );
 }
 
 // Cancel Auction - Reserve Not Met
-export async function cancelAuctionReserveNotMet(executeTransaction, auctionId, settledAt = null) {
-  return settleAfterRevealTimeout(executeTransaction, auctionId, settledAt);
+export async function cancelAuctionReserveNotMet(executeTransaction, auctionId, settledAt = null, options = {}) {
+  return settleAfterRevealTimeout(executeTransaction, auctionId, settledAt, options);
 }
 
 // ========================================
@@ -1403,7 +1667,8 @@ export async function upsertSellerProfileOnChain(
   verificationTier,
   profileRoot,
   attestationExpiry,
-  updatedAt = null
+  updatedAt = null,
+  options = {}
 ) {
   const timestamp = updatedAt || getCurrentTimestamp();
   return requestTx(executeTransaction, 'upsert_seller_profile', [
@@ -1412,40 +1677,40 @@ export async function upsertSellerProfileOnChain(
     formatFieldInput(profileRoot),
     `${attestationExpiry}i64`,
     `${timestamp}i64`,
-  ]);
+  ], 1_000_000, false, options);
 }
 
-export async function setAuctionProofRootOnChain(executeTransaction, auctionId, proofRoot, disclosureRoot) {
+export async function setAuctionProofRootOnChain(executeTransaction, auctionId, proofRoot, disclosureRoot, options = {}) {
   return requestTx(executeTransaction, 'set_auction_proof_root', [
     `${auctionId}field`,
     formatFieldInput(proofRoot),
     formatFieldInput(disclosureRoot),
-  ]);
+  ], 1_000_000, false, options);
 }
 
-export async function openDisputeOnChain(executeTransaction, auctionId, disputeRoot, openedAt = null) {
+export async function openDisputeOnChain(executeTransaction, auctionId, disputeRoot, openedAt = null, options = {}) {
   const timestamp = openedAt || getCurrentTimestamp();
   return requestTx(executeTransaction, 'open_dispute', [
     `${auctionId}field`,
     formatFieldInput(disputeRoot),
     `${timestamp}i64`,
-  ]);
+  ], 1_000_000, false, options);
 }
 
-export async function resolveDisputeReleaseSellerOnChain(executeTransaction, auctionId, resolvedAt = null) {
+export async function resolveDisputeReleaseSellerOnChain(executeTransaction, auctionId, resolvedAt = null, options = {}) {
   const timestamp = resolvedAt || getCurrentTimestamp();
   return requestTx(executeTransaction, 'resolve_dispute_release_seller', [
     `${auctionId}field`,
     `${timestamp}i64`,
-  ]);
+  ], 1_000_000, false, options);
 }
 
-export async function resolveDisputeRefundWinnerOnChain(executeTransaction, auctionId, resolvedAt = null) {
+export async function resolveDisputeRefundWinnerOnChain(executeTransaction, auctionId, resolvedAt = null, options = {}) {
   const timestamp = resolvedAt || getCurrentTimestamp();
   return requestTx(executeTransaction, 'resolve_dispute_refund_winner', [
     `${auctionId}field`,
     `${timestamp}i64`,
-  ]);
+  ], 1_000_000, false, options);
 }
 
 export async function getSellerProfileOnChain(address) {

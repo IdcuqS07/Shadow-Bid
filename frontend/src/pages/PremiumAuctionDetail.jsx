@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { toast } from 'sonner';
 import {
@@ -48,12 +48,18 @@ import {
   getAssetTypeName,
   getAssetTypeIcon,
   getAssetTypeTimeout,
-  getCategoryInstructions
+  getCategoryInstructions,
+  PROGRAM_ID,
+  buildPrivateBidAleoSubmissionPreview,
+  buildBidRecoveryBundle,
+  restoreBidRecoveryBundle,
+  serializeBidRecoveryBundle,
 } from '@/services/aleoServiceV2';
 import {
   createDispute,
   createOffer,
-  getAuctionSnapshot,
+  getAuctionEngagement,
+  getSharedAuctionReadModelEntry,
   getOpsApiDebugInfo,
   getAuctionProofBundle,
   getDisputes,
@@ -63,7 +69,7 @@ import {
   getWatchlist,
   saveWatchlist,
   syncAuctionRole,
-  syncAuctionSnapshot,
+  syncSharedAuctionReadModelEntry,
   updateDispute,
 } from '@/services/localOpsService';
 import GlassCard from '@/components/premium/GlassCard';
@@ -76,6 +82,7 @@ import {
   Clock,
   TrendingUp,
   Shield,
+  Info,
   AlertCircle,
   CheckCircle,
   Zap,
@@ -91,6 +98,15 @@ import {
 
 const PRIVATE_CREDITS_PROGRAM_ID = 'credits.aleo';
 const EMPTY_ALEO_ADDRESS = 'aleo1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3ljyzc';
+const ACTIVE_PROGRAM_ID = PROGRAM_ID;
+const ACTIVE_CONTRACT_VERSION = inferVersionFromProgramId(ACTIVE_PROGRAM_ID) || 'v2.24';
+const ACTIVE_CONTRACT_VERSION_LABEL = ACTIVE_CONTRACT_VERSION.toUpperCase();
+const LOCAL_ONLY_AUCTION_GRACE_MS = 30 * 60 * 1000;
+
+function getSharedReadModelSourceLabel(isLocalTarget = false) {
+  return isLocalTarget ? 'Local Read Model API' : 'Shared Read Model';
+}
+
 const CONTRACT_STATUS_BY_STATE = {
   0: 'open',
   1: 'closed',
@@ -99,6 +115,317 @@ const CONTRACT_STATUS_BY_STATE = {
   4: 'cancelled',
   5: 'disputed',
 };
+const CANCEL_REASON_INFO = {
+  0: {
+    key: 'none',
+    label: 'Not specified',
+    sellerSummary: 'Cancellation reason was not recorded on-chain.',
+    bidderSummary: 'Cancellation reason was not recorded on-chain.',
+  },
+  1: {
+    key: 'seller_cancel_prebid',
+    label: 'Seller Cancelled Before Bids',
+    sellerSummary: 'Seller cancelled the auction before any bid was committed.',
+    bidderSummary: 'Seller cancelled the auction before any bid was committed.',
+  },
+  2: {
+    key: 'no_bid',
+    label: 'No Bid',
+    sellerSummary: 'No bids were committed before the auction closed, so the contract cancelled it directly.',
+    bidderSummary: 'No bids were committed before the auction closed, so the contract cancelled it directly.',
+  },
+  3: {
+    key: 'no_reveal',
+    label: 'No Reveal',
+    sellerSummary: 'Bids were committed, but no bidder revealed before the deadline.',
+    bidderSummary: 'Bids were committed, but no bidder revealed before the deadline. Refunds remain available.',
+  },
+  4: {
+    key: 'reserve_not_met',
+    label: 'Reserve Not Met',
+    sellerSummary: 'At least one bid was revealed, but the highest valid reveal did not meet the reserve price.',
+    bidderSummary: 'At least one bid was revealed, but the highest valid reveal did not meet the reserve price. Refunds remain available.',
+  },
+  5: {
+    key: 'dispute_refund',
+    label: 'Dispute Refund',
+    sellerSummary: 'The platform resolved the dispute by cancelling the auction and refunding the winner path.',
+    bidderSummary: 'The platform resolved the dispute by cancelling the auction and refunding the winner path.',
+  },
+};
+
+function normalizeProgramId(programId) {
+  return typeof programId === 'string' && programId.trim()
+    ? programId.trim()
+    : null;
+}
+
+function parseContractVersionParts(version) {
+  if (typeof version !== 'string') {
+    return null;
+  }
+
+  const versionMatch = version.trim().toLowerCase().match(/^v(\d+)\.(\d+)$/);
+  if (!versionMatch) {
+    return null;
+  }
+
+  return {
+    major: Number(versionMatch[1]),
+    minor: Number(versionMatch[2]),
+  };
+}
+
+function isVersionAtLeast(version, minimumVersion) {
+  const parsedVersion = parseContractVersionParts(version);
+  const parsedMinimum = parseContractVersionParts(minimumVersion);
+
+  if (!parsedVersion || !parsedMinimum) {
+    return false;
+  }
+
+  if (parsedVersion.major !== parsedMinimum.major) {
+    return parsedVersion.major > parsedMinimum.major;
+  }
+
+  return parsedVersion.minor >= parsedMinimum.minor;
+}
+
+function resolveCancelReasonInfo(reasonCode) {
+  return CANCEL_REASON_INFO[reasonCode] || CANCEL_REASON_INFO[0];
+}
+
+function normalizeAuctionVersionLabel(version) {
+  if (typeof version !== 'string' || !version.trim()) {
+    return null;
+  }
+
+  const normalizedVersion = version.trim().toLowerCase();
+
+  if (normalizedVersion === 'current') {
+    return ACTIVE_CONTRACT_VERSION;
+  }
+
+  const explicitVersionMatch = normalizedVersion.match(/\bv2\.\d+\b/);
+  if (explicitVersionMatch) {
+    return explicitVersionMatch[0];
+  }
+
+  return normalizedVersion;
+}
+
+function inferProgramIdFromVersion(version) {
+  const normalizedVersion = normalizeAuctionVersionLabel(version);
+  const versionMatch = normalizedVersion?.match(/^v(\d+)\.(\d+)$/i);
+
+  if (!versionMatch) {
+    return null;
+  }
+
+  return `shadowbid_marketplace_v${versionMatch[1]}_${versionMatch[2]}.aleo`;
+}
+
+function inferVersionFromProgramId(programId) {
+  if (typeof programId !== 'string') {
+    return null;
+  }
+
+  const versionMatch = programId.match(/shadowbid_marketplace_v(\d+)_(\d+)\.aleo/i);
+  if (versionMatch) {
+    return `v${versionMatch[1]}.${versionMatch[2]}`;
+  }
+
+  return null;
+}
+
+function resolveAuctionProgramId(...sources) {
+  for (const source of sources) {
+    if (!source) {
+      continue;
+    }
+
+    if (typeof source === 'string') {
+      const directProgramId = normalizeProgramId(source);
+      if (directProgramId) {
+        return directProgramId;
+      }
+
+      const versionProgramId = inferProgramIdFromVersion(source.toLowerCase());
+      if (versionProgramId) {
+        return versionProgramId;
+      }
+
+      continue;
+    }
+
+    if (typeof source !== 'object') {
+      continue;
+    }
+
+    const directProgramId = normalizeProgramId(
+      source.programId
+        || source.contractProgramId
+        || source.onChainProgramId
+    );
+    if (directProgramId) {
+      return directProgramId;
+    }
+
+    const versionProgramId = inferProgramIdFromVersion(
+      getExplicitAuctionVersion(source)
+    );
+    if (versionProgramId) {
+      return versionProgramId;
+    }
+  }
+
+  return ACTIVE_PROGRAM_ID;
+}
+
+function resolveAuctionVersion(programId, ...sources) {
+  for (const source of sources) {
+    if (!source) {
+      continue;
+    }
+
+    if (typeof source === 'string') {
+      const normalizedVersion = normalizeAuctionVersionLabel(source);
+      if (normalizedVersion) {
+        return normalizedVersion;
+      }
+    }
+
+    if (typeof source === 'object') {
+      const normalizedVersion = getExplicitAuctionVersion(source);
+      if (normalizedVersion) {
+        return normalizedVersion;
+      }
+    }
+  }
+
+  return normalizeAuctionVersionLabel(inferVersionFromProgramId(programId))
+    || ACTIVE_CONTRACT_VERSION;
+}
+
+function parseAuctionTimestampMs(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 1_000_000_000_000 ? value : value > 1_000_000_000 ? value * 1000 : null;
+  }
+
+  if (typeof value === 'string') {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) {
+      return parseAuctionTimestampMs(numericValue);
+    }
+
+    const parsedDate = Date.parse(value);
+    return Number.isFinite(parsedDate) ? parsedDate : null;
+  }
+
+  return null;
+}
+
+function detectLegacyVersionInText(text) {
+  if (typeof text !== 'string' || !text.trim()) {
+    return null;
+  }
+
+  const versionMatch = text.toLowerCase().match(/\bv2\.\d+\b/);
+  if (!versionMatch) {
+    return null;
+  }
+
+  return versionMatch[0] === ACTIVE_CONTRACT_VERSION ? null : versionMatch[0];
+}
+
+function getExplicitAuctionVersion(metadata) {
+  return normalizeAuctionVersionLabel(metadata?.explicitVersion)
+    || normalizeAuctionVersionLabel(metadata?.contractVersion)
+    || detectLegacyVersionInText(metadata?.title)
+    || detectLegacyVersionInText(metadata?.description)
+    || normalizeAuctionVersionLabel(metadata?.version);
+}
+
+function isLegacyAuctionMetadata(metadata) {
+  const explicitProgramId = normalizeProgramId(
+    metadata?.programId
+      || metadata?.contractProgramId
+      || metadata?.onChainProgramId
+  );
+
+  if (
+    explicitProgramId
+    && explicitProgramId.includes('shadowbid_marketplace_v2_')
+    && explicitProgramId !== ACTIVE_PROGRAM_ID
+  ) {
+    return true;
+  }
+
+  const explicitVersion = getExplicitAuctionVersion(metadata);
+  return Boolean(
+    explicitVersion
+    && explicitVersion !== ACTIVE_CONTRACT_VERSION
+    && /^v2\.\d+$/i.test(explicitVersion)
+  );
+}
+
+function isRecentAuctionMetadata(metadata) {
+  const newestTimestampMs = Math.max(
+    parseAuctionTimestampMs(metadata?.createdAtMs) ?? 0,
+    parseAuctionTimestampMs(metadata?.updatedAtMs) ?? 0,
+    parseAuctionTimestampMs(metadata?.createdAt) ?? 0,
+    parseAuctionTimestampMs(metadata?.updatedAt) ?? 0
+  );
+
+  return newestTimestampMs >= Date.now() - LOCAL_ONLY_AUCTION_GRACE_MS;
+}
+
+function shouldRetainLocalOnlyAuction(metadata, { isLocalTarget = false } = {}) {
+  if (!metadata) {
+    return false;
+  }
+
+  if (isLegacyAuctionMetadata(metadata)) {
+    return false;
+  }
+
+  if (isLocalTarget && Boolean(metadata.isFixture || metadata.mockOnChain)) {
+    return true;
+  }
+
+  if (isLocalTarget && Boolean(metadata.hasSharedReadModel || metadata.hasSharedSnapshot)) {
+    return true;
+  }
+
+  return Boolean(metadata.hasLocalMetadata && isRecentAuctionMetadata(metadata));
+}
+
+function isSupportedAuctionMetadata(metadata, programId = null) {
+  const resolvedProgramId = resolveAuctionProgramId(programId, metadata);
+  const resolvedVersion = resolveAuctionVersion(resolvedProgramId, metadata);
+
+  if (resolvedProgramId !== ACTIVE_PROGRAM_ID) {
+    return false;
+  }
+
+  if (resolvedVersion !== ACTIVE_CONTRACT_VERSION) {
+    return false;
+  }
+
+  return !isLegacyAuctionMetadata(metadata);
+}
+
+function buildAuctionDetailUrl(origin, auctionId, programId) {
+  const searchParams = new URLSearchParams();
+  const normalizedProgramId = normalizeProgramId(programId);
+
+  if (normalizedProgramId) {
+    searchParams.set('programId', normalizedProgramId);
+  }
+
+  const search = searchParams.toString();
+  return `${origin}/premium-auction/${auctionId}${search ? `?${search}` : ''}`;
+}
 
 function findNestedMicrocredits(value, depth = 0) {
   if (value == null || depth > 6) {
@@ -233,12 +560,67 @@ function getPrivateRecordLockStorageKey(walletAddress) {
   return `private_record_locks_${walletAddress}`;
 }
 
-function getCloseAuctionLockStorageKey(auctionId, walletAddress) {
+function getLegacyCloseAuctionLockStorageKey(auctionId, walletAddress) {
   if (!auctionId || !walletAddress) {
     return null;
   }
 
   return `close_auction_lock_${auctionId}_${walletAddress.toLowerCase()}`;
+}
+
+function getCloseAuctionLockStorageKey(auctionId, walletAddress, programId) {
+  if (!auctionId || !walletAddress) {
+    return null;
+  }
+
+  return `close_auction_lock_${resolveAuctionProgramId(programId)}_${auctionId}_${walletAddress.toLowerCase()}`;
+}
+
+function getRecoveryBundleAckStorageKey(auctionId, walletAddress) {
+  if (!auctionId || !walletAddress) {
+    return null;
+  }
+
+  return `recovery_bundle_ack_${auctionId}_${walletAddress.toLowerCase()}`;
+}
+
+function getRecoveryBundleAck(auctionId, walletAddress) {
+  const storageKey = getRecoveryBundleAckStorageKey(auctionId, walletAddress);
+  if (!storageKey) {
+    return null;
+  }
+
+  try {
+    const rawValue = localStorage.getItem(storageKey);
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+    return parsedValue && typeof parsedValue === 'object' ? parsedValue : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveRecoveryBundleAck(auctionId, walletAddress, options = {}) {
+  const storageKey = getRecoveryBundleAckStorageKey(auctionId, walletAddress);
+  if (!storageKey) {
+    return null;
+  }
+
+  const method = typeof options.method === 'string' && options.method.trim()
+    ? options.method.trim()
+    : 'saved';
+  const reference = options.reference != null ? String(options.reference) : null;
+  const nextValue = {
+    method,
+    reference,
+    savedAt: Date.now(),
+  };
+
+  localStorage.setItem(storageKey, JSON.stringify(nextValue));
+  return nextValue;
 }
 
 function extractPrivateRecordIdentity(record) {
@@ -333,8 +715,7 @@ function unlockPrivateRecord(walletAddress, recordIdentity) {
   );
 }
 
-function getPendingCloseAuction(auctionId, walletAddress) {
-  const storageKey = getCloseAuctionLockStorageKey(auctionId, walletAddress);
+function readPendingCloseAuctionByKey(storageKey) {
   if (!storageKey) {
     return null;
   }
@@ -352,22 +733,52 @@ function getPendingCloseAuction(auctionId, walletAddress) {
   }
 }
 
-function savePendingCloseAuction(auctionId, walletAddress, data) {
-  const storageKey = getCloseAuctionLockStorageKey(auctionId, walletAddress);
+function getPendingCloseAuction(auctionId, walletAddress, programId) {
+  const storageKey = getCloseAuctionLockStorageKey(auctionId, walletAddress, programId);
+  const nextValue = readPendingCloseAuctionByKey(storageKey);
+  if (nextValue) {
+    return nextValue;
+  }
+
+  const legacyValue = readPendingCloseAuctionByKey(getLegacyCloseAuctionLockStorageKey(auctionId, walletAddress));
+  if (!legacyValue) {
+    return null;
+  }
+
+  return {
+    ...legacyValue,
+    programId: legacyValue.programId || resolveAuctionProgramId(programId),
+  };
+}
+
+function savePendingCloseAuction(auctionId, walletAddress, programId, data) {
+  const storageKey = getCloseAuctionLockStorageKey(auctionId, walletAddress, programId);
   if (!storageKey || !data || typeof data !== 'object') {
     return;
   }
 
-  localStorage.setItem(storageKey, JSON.stringify(data));
+  localStorage.setItem(storageKey, JSON.stringify({
+    ...data,
+    programId: resolveAuctionProgramId(data.programId, programId),
+  }));
+
+  const legacyKey = getLegacyCloseAuctionLockStorageKey(auctionId, walletAddress);
+  if (legacyKey && legacyKey !== storageKey) {
+    localStorage.removeItem(legacyKey);
+  }
 }
 
-function clearPendingCloseAuction(auctionId, walletAddress) {
-  const storageKey = getCloseAuctionLockStorageKey(auctionId, walletAddress);
-  if (!storageKey) {
-    return;
-  }
+function clearPendingCloseAuction(auctionId, walletAddress, programId = null) {
+  const storageKeys = new Set([
+    getLegacyCloseAuctionLockStorageKey(auctionId, walletAddress),
+    getCloseAuctionLockStorageKey(auctionId, walletAddress, programId),
+  ]);
 
-  localStorage.removeItem(storageKey);
+  storageKeys.forEach((storageKey) => {
+    if (storageKey) {
+      localStorage.removeItem(storageKey);
+    }
+  });
 }
 
 function parseAleoInteger(value) {
@@ -470,7 +881,7 @@ function inferAuctionCurrency(metadata) {
   }
 }
 
-function normalizeAuctionMetadata(metadata) {
+function normalizeAuctionMetadata(metadata, source = 'shared') {
   if (!metadata) {
     return null;
   }
@@ -478,10 +889,19 @@ function normalizeAuctionMetadata(metadata) {
   return {
     ...metadata,
     id: metadata.id != null ? Number(metadata.id) : metadata.id,
+    programId: resolveAuctionProgramId(metadata),
+    version: resolveAuctionVersion(resolveAuctionProgramId(metadata), metadata),
+    explicitVersion: getExplicitAuctionVersion(metadata),
     title: metadata.title || null,
     description: metadata.description || null,
     creator: metadata.creator || metadata.seller || null,
     currency: inferAuctionCurrency(metadata),
+    hasLocalMetadata: source === 'local',
+    hasSharedReadModel: source === 'shared',
+    hasSharedSnapshot: source === 'shared',
+    sharedReadModelSourceLabel: metadata.sharedReadModelSourceLabel || null,
+    createdAtMs: parseAuctionTimestampMs(metadata.createdAt),
+    updatedAtMs: parseAuctionTimestampMs(metadata.updatedAt),
     sellerVerification: metadata.sellerVerification || (
       metadata.verificationStatus
         ? { status: metadata.verificationStatus }
@@ -493,8 +913,8 @@ function normalizeAuctionMetadata(metadata) {
 }
 
 function mergeAuctionMetadata(localMetadata, sharedMetadata) {
-  const normalizedLocal = normalizeAuctionMetadata(localMetadata);
-  const normalizedShared = normalizeAuctionMetadata(sharedMetadata);
+  const normalizedLocal = normalizeAuctionMetadata(localMetadata, 'local');
+  const normalizedShared = normalizeAuctionMetadata(sharedMetadata, 'shared');
 
   if (!normalizedLocal) {
     return normalizedShared;
@@ -507,14 +927,84 @@ function mergeAuctionMetadata(localMetadata, sharedMetadata) {
   return {
     ...normalizedShared,
     ...normalizedLocal,
+    programId: normalizedLocal.programId || normalizedShared.programId || ACTIVE_PROGRAM_ID,
+    version: normalizedLocal.version
+      || normalizedShared.version
+      || normalizeAuctionVersionLabel(inferVersionFromProgramId(normalizedLocal.programId || normalizedShared.programId))
+      || ACTIVE_CONTRACT_VERSION,
     title: normalizedLocal.title || normalizedShared.title || null,
     description: normalizedLocal.description || normalizedShared.description || null,
     creator: normalizedLocal.creator || normalizedShared.creator || normalizedShared.seller || null,
     currency: normalizedLocal.currency || normalizedShared.currency || 'ALEO',
+    explicitVersion: normalizedLocal.explicitVersion || normalizedShared.explicitVersion || null,
+    hasLocalMetadata: Boolean(normalizedLocal.hasLocalMetadata || normalizedShared.hasLocalMetadata),
+    hasSharedReadModel: Boolean(
+      normalizedLocal.hasSharedReadModel
+      || normalizedLocal.hasSharedSnapshot
+      || normalizedShared.hasSharedReadModel
+      || normalizedShared.hasSharedSnapshot
+    ),
+    hasSharedSnapshot: Boolean(
+      normalizedLocal.hasSharedReadModel
+      || normalizedLocal.hasSharedSnapshot
+      || normalizedShared.hasSharedReadModel
+      || normalizedShared.hasSharedSnapshot
+    ),
+    sharedReadModelSourceLabel: normalizedLocal.sharedReadModelSourceLabel
+      || normalizedShared.sharedReadModelSourceLabel
+      || null,
+    createdAtMs: normalizedLocal.createdAtMs || normalizedShared.createdAtMs || null,
+    updatedAtMs: normalizedLocal.updatedAtMs || normalizedShared.updatedAtMs || null,
     sellerVerification: normalizedLocal.sellerVerification || normalizedShared.sellerVerification || null,
     proofFiles: normalizedLocal.proofFiles.length > 0 ? normalizedLocal.proofFiles : normalizedShared.proofFiles,
     itemPhotos: normalizedLocal.itemPhotos.length > 0 ? normalizedLocal.itemPhotos : normalizedShared.itemPhotos,
   };
+}
+
+function getLayerStatusStyles(tone = 'neutral') {
+  switch (tone) {
+    case 'success':
+      return {
+        surface: 'border-green-500/30 bg-green-500/10',
+        accent: 'text-green-400',
+        badge: 'border-green-500/20 bg-green-500/10 text-green-300',
+        body: 'text-green-100/80',
+      };
+    case 'warning':
+      return {
+        surface: 'border-amber-500/30 bg-amber-500/10',
+        accent: 'text-amber-400',
+        badge: 'border-amber-500/20 bg-amber-500/10 text-amber-200',
+        body: 'text-amber-100/80',
+      };
+    case 'info':
+      return {
+        surface: 'border-cyan-500/30 bg-cyan-500/10',
+        accent: 'text-cyan-400',
+        badge: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-200',
+        body: 'text-cyan-100/80',
+      };
+    default:
+      return {
+        surface: 'border-white/10 bg-white/5',
+        accent: 'text-white/60',
+        badge: 'border-white/10 bg-white/5 text-white/70',
+        body: 'text-white/60',
+      };
+  }
+}
+
+function getDiagnosticToneClass(tone = 'neutral') {
+  switch (tone) {
+    case 'success':
+      return 'text-green-300';
+    case 'warning':
+      return 'text-amber-200';
+    case 'info':
+      return 'text-cyan-300';
+    default:
+      return 'text-white/70';
+  }
 }
 
 function mergeSellerVerification(primary, fallback) {
@@ -571,6 +1061,199 @@ function mergeAuctionProofBundle(primary, fallback) {
   };
 }
 
+function isMeaningfulAuctionTitle(value, auctionId) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return false;
+  }
+
+  return value.trim().toLowerCase() !== `auction #${auctionId}`.toLowerCase();
+}
+
+function isMeaningfulAuctionDescription(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return false;
+  }
+
+  return value.trim().toLowerCase() !== 'no description available';
+}
+
+function getAttachmentCount(items, explicitCount) {
+  if (Array.isArray(items) && items.length > 0) {
+    return items.length;
+  }
+
+  const parsedCount = Number(explicitCount);
+  return Number.isFinite(parsedCount) && parsedCount >= 0 ? parsedCount : 0;
+}
+
+function mergeLocalAuctionCacheEntry(existingAuction, incomingAuction) {
+  const existingProofFiles = Array.isArray(existingAuction?.proofFiles) ? existingAuction.proofFiles : [];
+  const existingItemPhotos = Array.isArray(existingAuction?.itemPhotos) ? existingAuction.itemPhotos : [];
+  const incomingProofFiles = Array.isArray(incomingAuction?.proofFiles) ? incomingAuction.proofFiles : [];
+  const incomingItemPhotos = Array.isArray(incomingAuction?.itemPhotos) ? incomingAuction.itemPhotos : [];
+  const resolvedProgramId = resolveAuctionProgramId(incomingAuction, existingAuction);
+  const resolvedVersion = resolveAuctionVersion(resolvedProgramId, incomingAuction, existingAuction);
+
+  return {
+    ...(existingAuction || {}),
+    ...incomingAuction,
+    id: Number(incomingAuction.id),
+    programId: resolvedProgramId,
+    version: resolvedVersion,
+    explicitVersion: getExplicitAuctionVersion(incomingAuction)
+      || getExplicitAuctionVersion(existingAuction)
+      || resolvedVersion,
+    title: isMeaningfulAuctionTitle(incomingAuction.title, incomingAuction.id)
+      ? incomingAuction.title
+      : existingAuction?.title || incomingAuction.title || null,
+    description: isMeaningfulAuctionDescription(incomingAuction.description)
+      ? incomingAuction.description
+      : existingAuction?.description || incomingAuction.description || null,
+    currency: incomingAuction.currency
+      || incomingAuction.token
+      || existingAuction?.currency
+      || existingAuction?.token
+      || 'ALEO',
+    token: incomingAuction.token
+      || incomingAuction.currency
+      || existingAuction?.token
+      || existingAuction?.currency
+      || 'ALEO',
+    creator: incomingAuction.creator || existingAuction?.creator || incomingAuction.seller || existingAuction?.seller || null,
+    seller: incomingAuction.seller || existingAuction?.seller || incomingAuction.creator || existingAuction?.creator || null,
+    sellerDisplayName: incomingAuction.sellerDisplayName || existingAuction?.sellerDisplayName || null,
+    sellerVerification: mergeSellerVerification(incomingAuction.sellerVerification, existingAuction?.sellerVerification),
+    assetProof: mergeAuctionProofBundle(incomingAuction.assetProof, existingAuction?.assetProof),
+    proofFiles: incomingProofFiles.length > 0 ? incomingProofFiles : existingProofFiles,
+    itemPhotos: incomingItemPhotos.length > 0 ? incomingItemPhotos : existingItemPhotos,
+    proofFilesCount: getAttachmentCount(
+      incomingProofFiles.length > 0 ? incomingProofFiles : existingProofFiles,
+      incomingAuction.proofFilesCount ?? existingAuction?.proofFilesCount
+    ),
+    itemPhotosCount: getAttachmentCount(
+      incomingItemPhotos.length > 0 ? incomingItemPhotos : existingItemPhotos,
+      incomingAuction.itemPhotosCount ?? existingAuction?.itemPhotosCount
+    ),
+    hasSharedReadModel: Boolean(
+      incomingAuction.hasSharedReadModel
+      || incomingAuction.hasSharedSnapshot
+      || existingAuction?.hasSharedReadModel
+      || existingAuction?.hasSharedSnapshot
+    ),
+    hasSharedSnapshot: Boolean(
+      incomingAuction.hasSharedReadModel
+      || incomingAuction.hasSharedSnapshot
+      || existingAuction?.hasSharedReadModel
+      || existingAuction?.hasSharedSnapshot
+    ),
+    sharedReadModelSourceLabel: incomingAuction.sharedReadModelSourceLabel
+      || existingAuction?.sharedReadModelSourceLabel
+      || null,
+    createdAt: existingAuction?.createdAt ?? incomingAuction.createdAt ?? Date.now(),
+    updatedAt: Date.now(),
+  };
+}
+
+function persistAuctionLocally(auction, { sellerVerification = null, auctionProofBundle = null } = {}) {
+  if (typeof window === 'undefined' || !auction?.id) {
+    return;
+  }
+
+  try {
+    const storedAuctions = JSON.parse(localStorage.getItem('myAuctions') || '[]');
+    const nextStoredAuctions = Array.isArray(storedAuctions) ? [...storedAuctions] : [];
+    const resolvedProgramId = resolveAuctionProgramId(auction);
+    const mergedVerification = mergeSellerVerification(sellerVerification, auction.sellerVerification);
+    const mergedProofBundle = mergeAuctionProofBundle(auctionProofBundle, auction.assetProof);
+    const proofFiles = Array.isArray(mergedProofBundle?.proofFiles)
+      ? mergedProofBundle.proofFiles
+      : Array.isArray(auction.proofFiles)
+        ? auction.proofFiles
+        : [];
+    const itemPhotos = Array.isArray(mergedProofBundle?.itemPhotos)
+      ? mergedProofBundle.itemPhotos
+      : Array.isArray(auction.itemPhotos)
+        ? auction.itemPhotos
+        : [];
+    const cachedAuction = {
+      ...auction,
+      id: Number(auction.id),
+      programId: resolvedProgramId,
+      version: resolveAuctionVersion(resolvedProgramId, auction),
+      explicitVersion: getExplicitAuctionVersion(auction) || resolveAuctionVersion(resolvedProgramId, auction),
+      currency: auction.currency || auction.token || inferAuctionCurrency(auction),
+      token: auction.token || auction.currency || inferAuctionCurrency(auction),
+      creator: auction.creator || auction.seller || null,
+      seller: auction.seller || auction.creator || null,
+      sellerDisplayName: mergedVerification?.sellerDisplayName || auction.sellerDisplayName || null,
+      sellerVerification: mergedVerification,
+      assetProof: mergedProofBundle,
+      proofFiles,
+      itemPhotos,
+      proofFilesCount: getAttachmentCount(proofFiles, mergedProofBundle?.proofFilesCount ?? auction.proofFilesCount),
+      itemPhotosCount: getAttachmentCount(itemPhotos, mergedProofBundle?.itemPhotosCount ?? auction.itemPhotosCount),
+      hasSharedReadModel: Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot),
+      hasSharedSnapshot: Boolean(auction.hasSharedReadModel || auction.hasSharedSnapshot),
+      sharedReadModelSourceLabel: auction.sharedReadModelSourceLabel || null,
+      lastSeenOnChainAt: auction.hasOnChainData ? new Date().toISOString() : auction.lastSeenOnChainAt || null,
+      createdAt: auction.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+    };
+    const existingIndex = nextStoredAuctions.findIndex((storedAuction) => (
+      Number(storedAuction?.id) === Number(cachedAuction.id)
+        && resolveAuctionProgramId(storedAuction) === resolvedProgramId
+    ));
+    const mergedAuction = mergeLocalAuctionCacheEntry(
+      existingIndex >= 0 ? nextStoredAuctions[existingIndex] : null,
+      cachedAuction
+    );
+
+    if (existingIndex >= 0) {
+      nextStoredAuctions[existingIndex] = mergedAuction;
+    } else {
+      nextStoredAuctions.unshift(mergedAuction);
+    }
+
+    localStorage.setItem('myAuctions', JSON.stringify(nextStoredAuctions));
+  } catch (error) {
+    console.error('[PremiumAuctionDetail] Failed to cache auction locally:', error);
+  }
+}
+
+function normalizeReputation(reputation) {
+  if (!reputation || typeof reputation !== 'object') {
+    return null;
+  }
+
+  const seller = reputation.seller && typeof reputation.seller === 'object'
+    ? reputation.seller
+    : {};
+  const bidder = reputation.bidder && typeof reputation.bidder === 'object'
+    ? reputation.bidder
+    : {};
+
+  return {
+    ...reputation,
+    seller: {
+      auctionsCreated: 0,
+      auctionsSettled: 0,
+      auctionsCancelled: 0,
+      successRate: 0,
+      averageSettlementHours: null,
+      disputeRatio: 0,
+      ...seller,
+    },
+    bidder: {
+      participations: 0,
+      wins: 0,
+      winRate: 0,
+      offersSubmitted: 0,
+      disputesOpened: 0,
+      ...bidder,
+    },
+  };
+}
+
 function hasSubmittedTransaction(commitmentData) {
   return Boolean(
     commitmentData &&
@@ -596,6 +1279,51 @@ function hasPendingTransaction(commitmentData) {
     commitmentData.status !== 'rejected' &&
     commitmentData.status !== 'local-only'
   );
+}
+
+function getNormalizedRevealStatus(commitmentData) {
+  if (!commitmentData || typeof commitmentData !== 'object') {
+    return null;
+  }
+
+  if (commitmentData.revealed === true) {
+    return 'confirmed';
+  }
+
+  const revealedAt = Number(commitmentData.revealedAt || commitmentData.revealConfirmedAt || 0);
+  if (Number.isFinite(revealedAt) && revealedAt > 0) {
+    return 'confirmed';
+  }
+
+  const rawStatus = typeof commitmentData.revealStatus === 'string'
+    ? commitmentData.revealStatus.trim().toLowerCase()
+    : '';
+
+  if (!rawStatus) {
+    return null;
+  }
+
+  if (rawStatus === 'confirmed' || rawStatus === 'revealed') {
+    return 'confirmed';
+  }
+
+  if (rawStatus.includes('reject') || rawStatus.includes('fail') || rawStatus.includes('error')) {
+    return 'rejected';
+  }
+
+  if (rawStatus.includes('pending') || rawStatus.includes('submitted') || rawStatus.includes('checking')) {
+    return 'pending-confirmation';
+  }
+
+  return rawStatus;
+}
+
+function hasConfirmedReveal(commitmentData) {
+  return getNormalizedRevealStatus(commitmentData) === 'confirmed';
+}
+
+function hasPendingReveal(commitmentData) {
+  return getNormalizedRevealStatus(commitmentData) === 'pending-confirmation';
 }
 
 function looksLikeOnChainTransactionId(transactionId) {
@@ -672,12 +1400,82 @@ function formatAddressPreview(value, start = 10, end = 6) {
   return `${value.slice(0, start)}...${value.slice(-end)}`;
 }
 
+function buildBidPathLabel(auction, usePrivateBid) {
+  if (auction?.currencyType !== 1) {
+    return auction?.token === 'USAD' ? 'commit_bid_usad' : 'commit_bid';
+  }
+
+  return usePrivateBid ? 'commit_bid_aleo_private' : 'commit_bid_aleo';
+}
+
+function buildBidPreflightMessage({
+  auction,
+  bidderAddress,
+  usePrivateBid,
+}) {
+  return [
+    `Bid path: ${buildBidPathLabel(auction, usePrivateBid)}`,
+    `Bid wallet: ${bidderAddress || 'Unavailable'}`,
+    `Seller wallet: ${auction?.seller || 'Unavailable'}`,
+    `Auction currency: ${auction?.token || 'Unknown'}`,
+  ].join('\n');
+}
+
+function formatAuctionFieldId(value) {
+  if (typeof value === 'string' && value.trim()) {
+    return value.endsWith('field') ? value : `${value}field`;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}field`;
+  }
+
+  return '<auction_id>';
+}
+
+function buildPrivateBidDraftPreview({
+  programId,
+  auctionId,
+  amountCredits,
+}) {
+  const resolvedProgramId = normalizeProgramId(programId) || ACTIVE_PROGRAM_ID;
+  const amountLabel = Number.isFinite(amountCredits)
+    ? `${amountCredits}u64`
+    : '<enter bid amount>';
+
+  return [
+    'Submitting private bid transaction.',
+    `- Program: ${resolvedProgramId}`,
+    '- Function: commit_bid_aleo_private',
+    '- Inputs:',
+    `1. auction_id: ${formatAuctionFieldId(auctionId)}`,
+    '2. nonce: generated-at-submit',
+    '3. private_credits: Object',
+    `4. amount_credits: ${amountLabel}`,
+  ].join('\n');
+}
+
+function isWalletUserCancellation(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+
+  return [
+    'operation was cancelled by the user',
+    'operation was canceled by the user',
+    'cancelled by the user',
+    'canceled by the user',
+    'user rejected',
+    'rejected by user',
+    'transaction was rejected by wallet',
+  ].some((pattern) => message.includes(pattern));
+}
+
 function normalizeWalletAddress(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
 export default function PremiumAuctionDetail() {
   const { auctionId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const {
     connected,
@@ -687,6 +1485,7 @@ export default function PremiumAuctionDetail() {
     requestRecords,
     decrypt,
   } = useWallet();
+  const requestedProgramId = normalizeProgramId(searchParams.get('programId'));
   const [bidAmount, setBidAmount] = useState('');
   const [showBidForm, setShowBidForm] = useState(false);
   const [aleoStep, setAleoStep] = useState(1);
@@ -694,8 +1493,9 @@ export default function PremiumAuctionDetail() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClosePending, setIsClosePending] = useState(false);
+  const [currentUnixTime, setCurrentUnixTime] = useState(() => Math.floor(Date.now() / 1000));
   const [isClaimingFee, setIsClaimingFee] = useState(false);
-  const [isCancellingReserve, setIsCancellingReserve] = useState(false);
+  const [isCancellingReserve, _setIsCancellingReserve] = useState(false);
   const [bidSyncState, setBidSyncState] = useState('idle');
   const [usePrivateBid, setUsePrivateBid] = useState(false); // NEW: Private bid toggle
   const [sellerVerification, setSellerVerification] = useState(null);
@@ -703,6 +1503,7 @@ export default function PremiumAuctionDetail() {
   const [onChainSellerProfile, setOnChainSellerProfile] = useState(null);
   const [onChainProofRoot, setOnChainProofRoot] = useState(null);
   const [onChainDisputeRoot, setOnChainDisputeRoot] = useState(null);
+  const [auctionEngagement, setAuctionEngagement] = useState(null);
   const [reputation, setReputation] = useState(null);
   const [offers, setOffers] = useState([]);
   const [disputes, setDisputes] = useState([]);
@@ -726,11 +1527,25 @@ export default function PremiumAuctionDetail() {
     inFlight: false,
     lastRunAt: new Map(),
   });
+  const recoveryBundleReminderRef = useRef(new Set());
+  const recoveryBundleInputRef = useRef(null);
   const [, setCommitmentSyncVersion] = useState(0);
+  const [, setRecoveryBundleAckVersion] = useState(0);
+  const activeAuctionProgramId = resolveAuctionProgramId(requestedProgramId, auction);
+  const auctionTxOptions = {
+    programId: activeAuctionProgramId,
+  };
   const storedCommitmentData = address ? getCommitmentData(auctionId, address) : null;
   const submittedCommitmentData = hasSubmittedTransaction(storedCommitmentData) ? storedCommitmentData : null;
   const pendingCommitmentData = hasPendingTransaction(storedCommitmentData) ? storedCommitmentData : null;
   const activeCommitmentData = submittedCommitmentData || pendingCommitmentData;
+  const hasSubmittedCommitment = Boolean(submittedCommitmentData);
+  const hasRevealedBid = hasConfirmedReveal(storedCommitmentData);
+  const isRevealPending = hasPendingReveal(storedCommitmentData);
+  const submittedRevealTransactionId = submittedCommitmentData?.revealTransactionId || null;
+  const submittedRevealWalletTransactionId = submittedCommitmentData?.revealWalletTransactionId || null;
+  const submittedRevealExplorerTransactionId = submittedCommitmentData?.revealExplorerTransactionId || null;
+  const submittedRevealConfirmedAt = submittedCommitmentData?.revealedAt || null;
   const hasStaleLocalBid = Boolean(
     storedCommitmentData &&
     !submittedCommitmentData &&
@@ -740,6 +1555,18 @@ export default function PremiumAuctionDetail() {
   const refreshStoredCommitment = () => {
     setCommitmentSyncVersion((value) => value + 1);
   };
+
+  const refreshRecoveryBundleAck = () => {
+    setRecoveryBundleAckVersion((value) => value + 1);
+  };
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCurrentUnixTime(Math.floor(Date.now() / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const resolveTransactionStatus = async (transactionId, explorerTransactionId = null) => {
     let resolvedExplorerId = looksLikeOnChainTransactionId(explorerTransactionId)
@@ -833,7 +1660,7 @@ export default function PremiumAuctionDetail() {
   useEffect(() => {
     // V2.18 is now default
     loadAuctionData();
-  }, [auctionId]);
+  }, [auctionId, requestedProgramId]);
 
   useEffect(() => {
     if (!address || !pendingCommitmentData?.transactionId) {
@@ -908,16 +1735,189 @@ export default function PremiumAuctionDetail() {
   ]);
 
   useEffect(() => {
-    setIsClosePending(Boolean(getPendingCloseAuction(auctionId, address)));
-  }, [address, auctionId]);
+    if (
+      !address ||
+      !hasSubmittedCommitment ||
+      !isRevealPending ||
+      !submittedRevealTransactionId
+    ) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const syncPendingReveal = async () => {
+      try {
+        const txResult = await resolveTransactionStatus(
+          submittedRevealWalletTransactionId || submittedRevealTransactionId,
+          submittedRevealExplorerTransactionId || submittedRevealTransactionId
+        );
+
+        if (isCancelled) {
+          return;
+        }
+
+        if (txResult.status === 'confirmed') {
+          updateCommitmentData(auctionId, address, {
+            revealed: true,
+            revealStatus: 'confirmed',
+            revealedAt: submittedRevealConfirmedAt || Date.now(),
+            revealConfirmedAt: Date.now(),
+            revealTransactionId: txResult.explorerTransactionId || submittedRevealTransactionId,
+            revealExplorerTransactionId: txResult.explorerTransactionId || submittedRevealExplorerTransactionId || null,
+            revealLastCheckedAt: Date.now(),
+            revealError: null,
+          });
+          refreshStoredCommitment();
+          await loadAuctionData();
+          return;
+        }
+
+        if (txResult.status === 'rejected') {
+          updateCommitmentData(auctionId, address, {
+            revealed: false,
+            revealStatus: 'rejected',
+            revealLastCheckedAt: Date.now(),
+            revealError: txResult.error || 'Reveal transaction was rejected after submission.',
+          });
+          refreshStoredCommitment();
+          return;
+        }
+
+        updateCommitmentData(auctionId, address, {
+          revealStatus: 'pending-confirmation',
+          revealLastCheckedAt: Date.now(),
+          revealExplorerTransactionId: txResult.explorerTransactionId || submittedRevealExplorerTransactionId || null,
+          revealError: null,
+        });
+        refreshStoredCommitment();
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+
+        updateCommitmentData(auctionId, address, {
+          revealStatus: 'pending-confirmation',
+          revealLastCheckedAt: Date.now(),
+        });
+        refreshStoredCommitment();
+      }
+    };
+
+    syncPendingReveal();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    address,
+    auctionId,
+    hasSubmittedCommitment,
+    isRevealPending,
+    submittedCommitmentData?.revealStatus,
+    submittedRevealConfirmedAt,
+    submittedRevealExplorerTransactionId,
+    submittedRevealTransactionId,
+    submittedRevealWalletTransactionId,
+  ]);
+
+  const activeRecoveryBundleReference = activeCommitmentData?.transactionId
+    || activeCommitmentData?.walletTransactionId
+    || activeCommitmentData?.timestamp
+    || null;
+  const recoveryBundleAck = address ? getRecoveryBundleAck(auctionId, address) : null;
+  const hasAcknowledgedRecoveryBundle = Boolean(
+    recoveryBundleAck &&
+    activeRecoveryBundleReference &&
+    recoveryBundleAck.reference === String(activeRecoveryBundleReference)
+  );
+  const shouldRecommendRecoveryBundleSave = Boolean(
+    address &&
+    (submittedCommitmentData || pendingCommitmentData) &&
+    !hasAcknowledgedRecoveryBundle
+  );
+  const shouldRequireRecoveryBundleSave = Boolean(
+    address &&
+    submittedCommitmentData &&
+    !hasAcknowledgedRecoveryBundle
+  );
+  const recoveryBundleMethodLabel = recoveryBundleAck?.method === 'download'
+    ? 'Downloaded'
+    : recoveryBundleAck?.method === 'copy'
+      ? 'Copied'
+      : recoveryBundleAck?.method === 'import'
+        ? 'Imported'
+        : 'Saved';
+  const recoveryBundleSavedAtLabel = Number.isFinite(Number(recoveryBundleAck?.savedAt))
+    ? new Date(Number(recoveryBundleAck.savedAt)).toLocaleString()
+    : null;
+
+  useEffect(() => {
+    if (!shouldRequireRecoveryBundleSave || !activeRecoveryBundleReference) {
+      return undefined;
+    }
+
+    const reminderKey = `${address || 'wallet'}:${auctionId}:${activeRecoveryBundleReference}`;
+    if (recoveryBundleReminderRef.current.has(reminderKey)) {
+      return undefined;
+    }
+
+    recoveryBundleReminderRef.current.add(reminderKey);
+    showLifecycleNotice(
+      '⚠️ Save the recovery bundle before leaving this page. It will be needed later for reveal or refund if this browser-local data is lost.',
+      { auto: true, tone: 'info' }
+    );
+
+    return undefined;
+  }, [activeRecoveryBundleReference, address, auctionId, shouldRequireRecoveryBundleSave]);
+
+  useEffect(() => {
+    if (!shouldRequireRecoveryBundleSave) {
+      return undefined;
+    }
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [shouldRequireRecoveryBundleSave]);
+
+  useEffect(() => {
+    setIsClosePending(Boolean(getPendingCloseAuction(auctionId, address, activeAuctionProgramId)));
+  }, [activeAuctionProgramId, address, auctionId]);
 
   const loadAuctionData = async () => {
     setLoading(true);
     try {
-      const myAuctions = JSON.parse(localStorage.getItem('myAuctions') || '[]');
-      const localMetadata = myAuctions.find((auction) => auction.id === parseInt(auctionId, 10));
-      const sharedMetadata = await getAuctionSnapshot(auctionId);
+      const opsDebugInfo = getOpsApiDebugInfo();
+      const storedAuctions = JSON.parse(localStorage.getItem('myAuctions') || '[]');
+      const myAuctions = storedAuctions.filter((savedAuction) => !isLegacyAuctionMetadata(savedAuction));
+      if (myAuctions.length !== storedAuctions.length) {
+        localStorage.setItem('myAuctions', JSON.stringify(myAuctions));
+      }
+      const localMetadata = myAuctions.find((auction) => (
+        Number(auction?.id) === parseInt(auctionId, 10)
+          && (!requestedProgramId || resolveAuctionProgramId(auction) === requestedProgramId)
+      )) || null;
+      const sharedReadModelEntry = await getSharedAuctionReadModelEntry(auctionId);
+      const sharedMetadata = requestedProgramId && sharedReadModelEntry && resolveAuctionProgramId(sharedReadModelEntry) !== requestedProgramId
+        ? null
+        : sharedReadModelEntry;
       const auctionMetadata = mergeAuctionMetadata(localMetadata, sharedMetadata);
+      const auctionProgramId = resolveAuctionProgramId(requestedProgramId, auctionMetadata);
+      const auctionVersion = resolveAuctionVersion(auctionProgramId, auctionMetadata);
+
+      if (!isSupportedAuctionMetadata(auctionMetadata, requestedProgramId || auctionProgramId)) {
+        setAuction(null);
+        setLoading(false);
+        return;
+      }
 
       // Get on-chain data - try multiple times if needed
       let onChainData = null;
@@ -928,11 +1928,17 @@ export default function PremiumAuctionDetail() {
         if (retries > 0) {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        onChainData = await getAuctionInfo(auctionId);
+        onChainData = await getAuctionInfo(auctionId, auctionProgramId);
         retries++;
       }
       
       if (!auctionMetadata && !onChainData) {
+        setAuction(null);
+        setLoading(false);
+        return;
+      }
+
+      if (!onChainData && !shouldRetainLocalOnlyAuction(auctionMetadata, { isLocalTarget: opsDebugInfo.isLocalTarget })) {
         setAuction(null);
         setLoading(false);
         return;
@@ -957,6 +1963,7 @@ export default function PremiumAuctionDetail() {
       const assetType = parseAleoInteger(onChainData?.asset_type) ?? Number(auctionMetadata?.assetType || 0);
       const state = parseAleoInteger(onChainData?.state) ?? 0;
       const status = CONTRACT_STATUS_BY_STATE[state] || 'open';
+      const supportsDirectNoBidCancel = isVersionAtLeast(auctionVersion, 'v2.23');
       const itemReceived = parseAleoBoolean(onChainData?.item_received) ?? false;
       const paymentClaimed = parseAleoBoolean(onChainData?.payment_claimed) ?? false;
       const itemReceivedAt = parseAleoInteger(onChainData?.item_received_at) ?? 0;
@@ -975,6 +1982,8 @@ export default function PremiumAuctionDetail() {
         ?? 0;
       const confirmationTimeout = parseAleoInteger(onChainData?.confirmation_timeout) ?? getAssetTypeTimeout(assetType) * 24 * 3600;
       const totalEscrowedMicro = parseAleoInteger(onChainData?.total_escrowed) ?? 0;
+      const commitmentCount = parseAleoInteger(onChainData?.commitment_count) ?? (totalEscrowedMicro > 0 ? 1 : 0);
+      const revealedCount = parseAleoInteger(onChainData?.revealed_count) ?? 0;
       const settledAt = parseAleoInteger(onChainData?.settled_at) ?? 0;
       const claimableAt = parseAleoInteger(onChainData?.claimable_at) ?? 0;
       const platformFeeClaimed = parseAleoBoolean(onChainData?.platform_fee_claimed) ?? false;
@@ -1016,7 +2025,7 @@ export default function PremiumAuctionDetail() {
       // This handles cases where API doesn't return full struct data
       if (!winnerAddress) {
         try {
-          const winnerData = await getHighestBidder(auctionId);
+          const winnerData = await getHighestBidder(auctionId, auctionProgramId);
           if (winnerData && typeof winnerData === 'string' && winnerData.startsWith('aleo1')) {
             winnerAddress = winnerData;
           }
@@ -1027,7 +2036,7 @@ export default function PremiumAuctionDetail() {
       
       if (!winningBid) {
         try {
-          const bidData = await getHighestBid(auctionId);
+          const bidData = await getHighestBid(auctionId, auctionProgramId);
           const highestBid = parseAleoInteger(bidData);
           const highestBidRaw = parseAleoUnsignedIntegerString(bidData);
 
@@ -1056,6 +2065,21 @@ export default function PremiumAuctionDetail() {
               : null
           ))
         : null;
+      const cancelReasonCodeFromChain = parseAleoInteger(onChainData?.cancel_reason) ?? 0;
+      const cancelReasonCode = cancelReasonCodeFromChain > 0
+        ? cancelReasonCodeFromChain
+        : status === 'cancelled'
+          ? totalEscrowedMicro === 0
+            ? supportsDirectNoBidCancel
+              ? 2
+              : 1
+            : revealedCount === 0
+              ? 3
+              : reserveMet === false
+                ? 4
+                : 0
+          : 0;
+      const cancelReasonInfo = resolveCancelReasonInfo(cancelReasonCode);
       const reservePrice = reservePriceMicro / 1_000_000;
       const platformFee = microToDisplayAmount(platformFeeMicro);
       const sellerNetAmount = microToDisplayAmount(sellerNetAmountMicro);
@@ -1066,6 +2090,14 @@ export default function PremiumAuctionDetail() {
       
       const auctionData = {
         id: auctionId,
+        programId: auctionProgramId,
+        version: auctionVersion,
+        hasOnChainData: Boolean(onChainData),
+        hasLocalMetadata: Boolean(auctionMetadata?.hasLocalMetadata),
+        hasSharedReadModel: Boolean(auctionMetadata?.hasSharedReadModel || auctionMetadata?.hasSharedSnapshot),
+        hasSharedSnapshot: Boolean(auctionMetadata?.hasSharedReadModel || auctionMetadata?.hasSharedSnapshot),
+        sharedReadModelSourceLabel: getSharedReadModelSourceLabel(opsDebugInfo.isLocalTarget),
+        opsApiSourceLabel: getSharedReadModelSourceLabel(opsDebugInfo.isLocalTarget),
         title: auctionMetadata?.title || `Auction #${auctionId}`,
         description: auctionMetadata?.description || 'No description available',
         format: 'Sealed-Bid',
@@ -1090,12 +2122,19 @@ export default function PremiumAuctionDetail() {
         totalEscrowed: totalEscrowedMicro / 1_000_000,
         totalEscrowedMicro,
         hasEscrow: totalEscrowedMicro > 0,
+        hasCommittedBids: commitmentCount > 0 || totalEscrowedMicro > 0,
+        commitmentCount,
+        revealedCount,
         settledAt,
         claimableAt,
         claimableAtReached: claimableAt > 0 ? now >= claimableAt : false,
         reservePrice,
         reservePriceMicro,
         reserveMet,
+        cancelReasonCode,
+        cancelReason: cancelReasonInfo.key,
+        cancelReasonLabel: cancelReasonInfo.label,
+        supportsDirectNoBidCancel,
         platformFee,
         platformFeeMicro,
         platformFeePercent: 2.5,
@@ -1109,7 +2148,7 @@ export default function PremiumAuctionDetail() {
         paymentClaimedAt,
         confirmationTimeout,
         confirmationTimeoutDays: Math.max(1, Math.round(confirmationTimeout / 86400)),
-        contractVersion: 'V2.22',
+        contractVersion: auctionVersion.toUpperCase(),
         sellerDisplayName: auctionMetadata?.sellerDisplayName || null,
         itemPhotos: Array.isArray(auctionMetadata?.itemPhotos) ? auctionMetadata.itemPhotos : [],
         sellerVerification: auctionMetadata?.sellerVerification || null,
@@ -1172,13 +2211,14 @@ export default function PremiumAuctionDetail() {
       setReputation(null);
       setOffers([]);
       setDisputes([]);
+      setAuctionEngagement(null);
       return undefined;
     }
 
     let isCancelled = false;
 
     const loadOpsMarketData = async () => {
-      const [reputationResponse, offersResponse, disputesResponse, watchlistResponse] = await Promise.all([
+      const [reputationResponse, offersResponse, disputesResponse, watchlistResponse, engagementResponse] = await Promise.all([
         getReputation(auction.seller),
         getOffers({ auctionId }),
         getDisputes({ auctionId }),
@@ -1187,6 +2227,7 @@ export default function PremiumAuctionDetail() {
           sellers: [],
           categories: [],
         }),
+        address ? getAuctionEngagement(address, auctionId) : Promise.resolve(null),
       ]);
 
       if (isCancelled) {
@@ -1217,10 +2258,11 @@ export default function PremiumAuctionDetail() {
           }
         : null;
 
-      setReputation(reputationResponse || fallbackReputation);
+      setReputation(normalizeReputation(reputationResponse || fallbackReputation));
       setOffers(Array.isArray(offersResponse) && offersResponse.length > 0 ? offersResponse : (auction.offers || []));
       setDisputes(Array.isArray(disputesResponse) && disputesResponse.length > 0 ? disputesResponse : (auction.disputes || []));
       setWatchlist(watchlistResponse);
+      setAuctionEngagement(engagementResponse);
     };
 
     loadOpsMarketData();
@@ -1248,13 +2290,18 @@ export default function PremiumAuctionDetail() {
       roles.push('bidder');
     }
 
+    persistAuctionLocally(auction, {
+      sellerVerification: mergeSellerVerification(sellerVerification, auction.sellerVerification),
+      auctionProofBundle: mergeAuctionProofBundle(auctionProofBundle, auction.assetProof),
+    });
+
     const syncSnapshot = async () => {
       const opsDebugInfo = getOpsApiDebugInfo();
       if (auction.isFixture && !opsDebugInfo.isLocalTarget) {
         return;
       }
 
-      await syncAuctionSnapshot({
+      await syncSharedAuctionReadModelEntry({
         ...auction,
         creator: auction.creator || auction.seller,
         sellerDisplayName: mergeSellerVerification(sellerVerification, auction.sellerVerification)?.sellerDisplayName
@@ -1313,14 +2360,15 @@ export default function PremiumAuctionDetail() {
     const attempts = options.attempts ?? 10;
     const intervalMs = options.intervalMs ?? 2000;
     const expectedStatuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    const programId = resolveAuctionProgramId(options.programId, activeAuctionProgramId);
 
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const onChainData = await getAuctionInfo(auctionId);
+      const onChainData = await getAuctionInfo(auctionId, programId);
       const state = parseAleoInteger(onChainData?.state);
       const currentStatus = state === null ? null : CONTRACT_STATUS_BY_STATE[state];
 
       if (currentStatus && expectedStatuses.includes(currentStatus)) {
-        return true;
+        return currentStatus;
       }
 
       if (attempt < attempts - 1) {
@@ -1328,11 +2376,10 @@ export default function PremiumAuctionDetail() {
       }
     }
 
-    return false;
+    return null;
   };
 
-  const waitForLifecycleTransaction = async (result, successMessage, pendingMessage, options = {}) => {
-    const { auto = false } = options;
+  const extractLifecycleTransactionIds = (result) => {
     const transactionId =
       typeof result?.walletTransactionId === 'string' && result.walletTransactionId.trim()
         ? result.walletTransactionId
@@ -1346,10 +2393,27 @@ export default function PremiumAuctionDetail() {
         ? result.explorerTransactionId
         : null;
 
+    return {
+      transactionId,
+      explorerTransactionId,
+    };
+  };
+
+  const waitForLifecycleTransaction = async (result, successMessage, pendingMessage, options = {}) => {
+    const { auto = false } = options;
+    const {
+      transactionId,
+      explorerTransactionId,
+    } = extractLifecycleTransactionIds(result);
+
     if (!transactionId) {
       showLifecycleNotice(successMessage, { auto, tone: 'success' });
       await loadAuctionData();
-      return;
+      return {
+        status: 'confirmed',
+        transactionId: null,
+        explorerTransactionId: null,
+      };
     }
 
     const confirmation = await resolveTransactionStatus(transactionId, explorerTransactionId);
@@ -1365,6 +2429,10 @@ export default function PremiumAuctionDetail() {
     }
 
     await loadAuctionData();
+    return {
+      ...confirmation,
+      transactionId,
+    };
   };
 
   const waitForLifecycleState = async ({
@@ -1376,26 +2444,67 @@ export default function PremiumAuctionDetail() {
     statePendingMessage,
     auto = false,
   }) => {
-    await waitForLifecycleTransaction(result, successMessage, pendingMessage, { auto });
-
     const expected = expectedStatuses || expectedStatus;
+    const {
+      transactionId,
+      explorerTransactionId,
+    } = extractLifecycleTransactionIds(result);
+    let confirmation = {
+      status: transactionId ? 'pending' : 'unknown',
+      explorerTransactionId,
+    };
+
+    if (transactionId) {
+      confirmation = await resolveTransactionStatus(transactionId, explorerTransactionId);
+
+      if (confirmation.status === 'rejected') {
+        throw new Error(confirmation.error || 'Transaction was rejected by the network after submission');
+      }
+    }
 
     if (!expected) {
+      if (confirmation.status === 'confirmed' || !transactionId) {
+        showLifecycleNotice(
+          typeof successMessage === 'function' ? successMessage(null) : successMessage,
+          { auto, tone: 'success' }
+        );
+      } else if (pendingMessage) {
+        showLifecycleNotice(`${pendingMessage}\n\nTransaction ID: ${transactionId}`, { auto, tone: 'info' });
+      }
       return true;
     }
 
     const stateReached = await waitForAuctionState(expected, {
       attempts: 8,
       intervalMs: 2000,
+      programId: activeAuctionProgramId,
     });
 
     await loadAuctionData();
 
-    if (!stateReached && statePendingMessage) {
-      showLifecycleNotice(statePendingMessage, { auto, tone: 'info' });
+    if (stateReached) {
+      showLifecycleNotice(
+        typeof successMessage === 'function' ? successMessage(stateReached) : successMessage,
+        { auto, tone: 'success' }
+      );
+      return stateReached;
     }
 
-    return stateReached;
+    if (confirmation?.status === 'confirmed' && statePendingMessage) {
+      showLifecycleNotice(statePendingMessage, { auto, tone: 'info' });
+      return false;
+    }
+
+    if (pendingMessage) {
+      showLifecycleNotice(
+        transactionId
+          ? `${pendingMessage}\n\nTransaction ID: ${transactionId}`
+          : pendingMessage,
+        { auto, tone: 'info' }
+      );
+    }
+
+    return false;
   };
 
   useEffect(() => {
@@ -1405,12 +2514,12 @@ export default function PremiumAuctionDetail() {
     }
 
     if (auction?.status && auction.status !== 'open') {
-      clearPendingCloseAuction(auctionId, address);
+      clearPendingCloseAuction(auctionId, address, activeAuctionProgramId);
       setIsClosePending(false);
       return undefined;
     }
 
-    const pendingCloseAuction = getPendingCloseAuction(auctionId, address);
+    const pendingCloseAuction = getPendingCloseAuction(auctionId, address, activeAuctionProgramId);
     if (!pendingCloseAuction?.transactionId) {
       setIsClosePending(false);
       return undefined;
@@ -1431,14 +2540,18 @@ export default function PremiumAuctionDetail() {
         }
 
         if (txResult.status === 'rejected') {
-          clearPendingCloseAuction(auctionId, address);
+          clearPendingCloseAuction(auctionId, address, pendingCloseAuction.programId || activeAuctionProgramId);
           setIsClosePending(false);
           return;
         }
 
-        const stateReached = await waitForAuctionState('closed', {
+        const expectedStatuses = Array.isArray(pendingCloseAuction.expectedStatuses) && pendingCloseAuction.expectedStatuses.length > 0
+          ? pendingCloseAuction.expectedStatuses
+          : ['closed'];
+        const stateReached = await waitForAuctionState(expectedStatuses, {
           attempts: 4,
           intervalMs: 2000,
+          programId: pendingCloseAuction.programId || activeAuctionProgramId,
         });
 
         if (isCancelled) {
@@ -1446,13 +2559,13 @@ export default function PremiumAuctionDetail() {
         }
 
         if (stateReached) {
-          clearPendingCloseAuction(auctionId, address);
+          clearPendingCloseAuction(auctionId, address, pendingCloseAuction.programId || activeAuctionProgramId);
           setIsClosePending(false);
           await loadAuctionData();
           return;
         }
 
-        savePendingCloseAuction(auctionId, address, {
+        savePendingCloseAuction(auctionId, address, pendingCloseAuction.programId || activeAuctionProgramId, {
           ...pendingCloseAuction,
           transactionId: txResult.explorerTransactionId || pendingCloseAuction.transactionId,
           explorerTransactionId: txResult.explorerTransactionId || pendingCloseAuction.explorerTransactionId || null,
@@ -1472,7 +2585,7 @@ export default function PremiumAuctionDetail() {
     return () => {
       isCancelled = true;
     };
-  }, [address, auction?.status, auctionId]);
+  }, [activeAuctionProgramId, address, auction?.status, auctionId]);
 
   const persistBidSubmission = async ({
     commitment,
@@ -1510,6 +2623,103 @@ export default function PremiumAuctionDetail() {
     refreshStoredCommitment();
 
     return commitmentStatus;
+  };
+
+  const buildCurrentRecoveryBundle = () => {
+    const bundle = buildBidRecoveryBundle(auctionId, address, {
+      programId: activeAuctionProgramId,
+      commitmentData: activeCommitmentData || storedCommitmentData,
+      currency: auction?.token?.toLowerCase(),
+    });
+
+    if (!bundle) {
+      throw new Error('Recovery bundle is not available yet. Make sure this wallet has a saved nonce and confirmed bid data first.');
+    }
+
+    return bundle;
+  };
+
+  const handleDownloadRecoveryBundle = async () => {
+    try {
+      const bundle = buildCurrentRecoveryBundle();
+      const serializedBundle = serializeBidRecoveryBundle(bundle);
+      const blob = new Blob([serializedBundle], { type: 'application/json' });
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `shadowbid-recovery-auction-${auctionId}-${address?.slice(0, 10) || 'wallet'}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(objectUrl);
+      saveRecoveryBundleAck(auctionId, address, {
+        method: 'download',
+        reference: bundle.transactionId || bundle.walletTransactionId || bundle.timestamp || null,
+      });
+      refreshRecoveryBundleAck();
+
+      showLifecycleNotice(
+        '✅ Recovery bundle downloaded.\n\nKeep this file safe. It can restore the browser-local nonce and bid data needed for reveal and refund on another browser or device.',
+        { tone: 'success' }
+      );
+    } catch (error) {
+      showLifecycleNotice(`❌ Failed to download recovery bundle:\n\n${error.message || error}`, { tone: 'error' });
+    }
+  };
+
+  const handleCopyRecoveryBundle = async () => {
+    try {
+      const bundle = buildCurrentRecoveryBundle();
+      const serializedBundle = serializeBidRecoveryBundle(bundle);
+      await navigator.clipboard.writeText(serializedBundle);
+      saveRecoveryBundleAck(auctionId, address, {
+        method: 'copy',
+        reference: bundle.transactionId || bundle.walletTransactionId || bundle.timestamp || null,
+      });
+      refreshRecoveryBundleAck();
+
+      showLifecycleNotice(
+        '✅ Recovery bundle copied.\n\nStore it somewhere safe so this wallet can recover browser-local reveal and refund access later.',
+        { tone: 'success' }
+      );
+    } catch (error) {
+      showLifecycleNotice(`❌ Failed to copy recovery bundle:\n\n${error.message || error}`, { tone: 'error' });
+    }
+  };
+
+  const handleOpenRecoveryBundlePicker = () => {
+    recoveryBundleInputRef.current?.click();
+  };
+
+  const handleImportRecoveryBundle = async (event) => {
+    const selectedFile = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!selectedFile) {
+      return;
+    }
+
+    try {
+      const bundleText = await selectedFile.text();
+      restoreBidRecoveryBundle(bundleText, {
+        auctionId,
+        walletAddress: address,
+      });
+      const parsedBundle = JSON.parse(bundleText);
+      saveRecoveryBundleAck(auctionId, address, {
+        method: 'import',
+        reference: parsedBundle?.transactionId || parsedBundle?.walletTransactionId || parsedBundle?.timestamp || null,
+      });
+      refreshRecoveryBundleAck();
+      refreshStoredCommitment();
+      await loadAuctionData();
+      showLifecycleNotice(
+        '✅ Recovery bundle restored.\n\nThis wallet can now use the restored browser-local nonce and bid data for reveal and refund on this auction.',
+        { tone: 'success' }
+      );
+    } catch (error) {
+      showLifecycleNotice(`❌ Failed to import recovery bundle:\n\n${error.message || error}`, { tone: 'error' });
+    }
   };
 
   const handleStartTransfer = async () => {
@@ -1578,11 +2788,9 @@ export default function PremiumAuctionDetail() {
       }
       
       // CRITICAL: credits.aleo/transfer_public requires ACCOUNT ADDRESS, not program name
-      // Program name: shadowbid_marketplace_v2_22.aleo
-      // Program account: Need to query or compute from program ID
+      // Program account resolution still depends on current wallet behavior, so we pass the active program ID here.
       
-      // Temporary: Try with program name (may not work for all wallets)
-      const programId = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_22.aleo';
+      const programId = activeAuctionProgramId;
       
       const transferInputs = [
         programId,  // Try program name - wallet may resolve to address
@@ -1662,6 +2870,23 @@ export default function PremiumAuctionDetail() {
       return;
     }
 
+    if (auction.currencyType !== 1) {
+      alert(`This auction is denominated in ${auction.token}, so the ALEO commitment path is not available.`);
+      return;
+    }
+
+    if (auction.seller?.toLowerCase() === address?.toLowerCase()) {
+      alert(
+        '❌ Seller wallet cannot place a bid on its own auction.\n\n'
+        + buildBidPreflightMessage({
+          auction,
+          bidderAddress: address,
+          usePrivateBid: false,
+        })
+      );
+      return;
+    }
+
     if (auction.status !== 'open') {
       alert('Commitment submission is only available while the contract state is OPEN.');
       return;
@@ -1697,7 +2922,8 @@ export default function PremiumAuctionDetail() {
         executeTransaction,
         parseInt(auctionId),
         nonce,
-        bidAmountMicro
+        bidAmountMicro,
+        auctionTxOptions
       );
       
       // CRITICAL: Verify transaction was accepted
@@ -1789,6 +3015,23 @@ export default function PremiumAuctionDetail() {
   const handlePrivateBid = async () => {
     if (!connected) {
       alert('Please connect your wallet first');
+      return;
+    }
+
+    if (auction.currencyType !== 1) {
+      alert(`This auction is denominated in ${auction.token}, so private ALEO bidding is not available.`);
+      return;
+    }
+
+    if (auction.seller?.toLowerCase() === address?.toLowerCase()) {
+      alert(
+        '❌ Seller wallet cannot place a bid on its own auction.\n\n'
+        + buildBidPreflightMessage({
+          auction,
+          bidderAddress: address,
+          usePrivateBid: true,
+        })
+      );
       return;
     }
 
@@ -1893,6 +3136,21 @@ export default function PremiumAuctionDetail() {
       const selectedRecord = validRecords[0].record;
       selectedRecordIdentity = validRecords[0].identity;
       lockPrivateRecord(address, selectedRecordIdentity);
+
+      const submissionPreview = buildPrivateBidAleoSubmissionPreview({
+        programId: activeAuctionProgramId,
+        auctionId: parseInt(auctionId, 10),
+        nonce,
+        privateRecord: selectedRecord,
+        amountCredits: bidAmountMicro,
+      });
+      const proceedWithPrivateBid = window.confirm(
+        `${submissionPreview}\n\nContinue to Shield?`
+      );
+
+      if (!proceedWithPrivateBid) {
+        return;
+      }
       
       if (!executeTransaction) {
         throw new Error('Wallet does not support transactions');
@@ -1903,7 +3161,8 @@ export default function PremiumAuctionDetail() {
         parseInt(auctionId, 10),
         nonce,
         selectedRecord,
-        bidAmountMicro
+        bidAmountMicro,
+        auctionTxOptions
       );
       
       // CRITICAL: Verify transaction was actually accepted by wallet
@@ -2013,6 +3272,18 @@ export default function PremiumAuctionDetail() {
   };
 
   const handlePlaceBid = async () => {
+    if (auction.seller?.toLowerCase() === address?.toLowerCase()) {
+      alert(
+        '❌ Seller wallet cannot place a bid on its own auction.\n\n'
+        + buildBidPreflightMessage({
+          auction,
+          bidderAddress: address,
+          usePrivateBid: false,
+        })
+      );
+      return;
+    }
+
     if (auction.status !== 'open') {
       alert('Bidding is only available while the contract state is OPEN.');
       return;
@@ -2070,8 +3341,8 @@ export default function PremiumAuctionDetail() {
         }
         
         const result = isUsadBid
-          ? await commitBidUSAD(executeTransaction, parseInt(auctionId, 10), nonce, bidAmountMicro)
-          : await commitBid(executeTransaction, parseInt(auctionId, 10), nonce, bidAmountMicro);
+          ? await commitBidUSAD(executeTransaction, parseInt(auctionId, 10), nonce, bidAmountMicro, auctionTxOptions)
+          : await commitBid(executeTransaction, parseInt(auctionId, 10), nonce, bidAmountMicro, auctionTxOptions);
         
         // Verify transaction was accepted
         if (!result || result.status === 'REJECTED' || !result.transactionId) {
@@ -2104,7 +3375,7 @@ export default function PremiumAuctionDetail() {
           alert(
             '❌ Duplicate Bid Detected!\n\n' +
             'You already have a bid for this auction on the blockchain.\n\n' +
-            '⚠️ If you just placed a bid and got a localStorage error,\n' +
+            '⚠️ If you just placed a bid and got a browser-local storage error,\n' +
             'please refresh the page. Your bid is safe on-chain.'
           );
         } else if (errorStr.toLowerCase().includes('already exists in the ledger') ||
@@ -2135,10 +3406,35 @@ export default function PremiumAuctionDetail() {
     try {
       // Get saved nonce and commitment
       const nonce = getNonce(auctionId, address);
-      const commitmentData = submittedCommitmentData;
+      const commitmentData = revealCommitmentData;
       
       if (!nonce || !commitmentData) {
-        showLifecycleNotice('❌ No bid found for this auction.\n\nYou need to place a bid first before revealing.', { auto, tone: 'error' });
+        showLifecycleNotice(
+          revealRecoveryRequired
+            ? '❌ Reveal window is open for this wallet, but this browser is missing the browser-local recovery data needed to reveal.\n\nImport a recovery bundle from the original browser or device, then try again.'
+            : submittedCommitmentData && !nonce
+              ? '❌ Reveal needs the saved nonce for this wallet.\n\nImport a recovery bundle from the original browser or device, then try again.'
+              : '❌ No eligible bidder record was found for this wallet on this browser.\n\nPlace a bid first or import the correct recovery bundle before revealing.',
+          { auto, tone: 'error' }
+        );
+        return;
+      }
+
+      if (hasConfirmedReveal(commitmentData)) {
+        showLifecycleNotice(
+          'ℹ️ This bid is already revealed on-chain.\n\nThe auction will stay CLOSED until the seller settles it after the reveal deadline.',
+          { auto, tone: 'info' }
+        );
+        await loadAuctionData();
+        return;
+      }
+
+      if (hasPendingReveal(commitmentData)) {
+        showLifecycleNotice(
+          '⏳ Reveal already submitted and still waiting for explorer confirmation.\n\nThis page keeps the reveal action locked so it does not resubmit duplicates.',
+          { auto, tone: 'info' }
+        );
+        await loadAuctionData();
         return;
       }
       
@@ -2150,19 +3446,105 @@ export default function PremiumAuctionDetail() {
         executeTransaction,
         parseInt(auctionId),
         commitmentData.amount,
-        nonce
+        nonce,
+        null,
+        auctionTxOptions
       );
 
-      await waitForLifecycleTransaction(
+      const revealTransactionId = result?.transactionId;
+      const revealExplorerTransactionId = looksLikeOnChainTransactionId(result?.explorerTransactionId)
+        ? result.explorerTransactionId
+        : looksLikeOnChainTransactionId(revealTransactionId)
+          ? revealTransactionId
+          : null;
+
+      if (revealTransactionId && address) {
+        updateCommitmentData(auctionId, address, {
+          revealed: false,
+          revealStatus: 'pending-confirmation',
+          revealSubmittedAt: Date.now(),
+          revealLastCheckedAt: Date.now(),
+          revealTransactionId: revealExplorerTransactionId || revealTransactionId,
+          revealWalletTransactionId: revealTransactionId,
+          revealExplorerTransactionId,
+          revealError: null,
+        });
+        refreshStoredCommitment();
+      }
+
+      const confirmation = await waitForLifecycleTransaction(
         result,
-        '✅ Bid Revealed Successfully!\n\nYour bid is now visible on-chain.',
-        '⏳ Reveal submitted, but explorer confirmation is still pending. Refresh the auction after the transaction is confirmed to unlock the next state.',
+        '✅ Bid Revealed Successfully!\n\nYour revealed amount is now visible on-chain.',
+        '⏳ Reveal submitted, but explorer confirmation is still pending. This page will keep the reveal action locked until the transaction is confirmed.',
         { auto }
       );
+
+      if (address) {
+        if (confirmation?.status === 'confirmed') {
+          updateCommitmentData(auctionId, address, {
+            revealed: true,
+            revealStatus: 'confirmed',
+            revealedAt: Date.now(),
+            revealConfirmedAt: Date.now(),
+            revealTransactionId: confirmation.explorerTransactionId || revealExplorerTransactionId || revealTransactionId || null,
+            revealExplorerTransactionId: confirmation.explorerTransactionId || revealExplorerTransactionId || null,
+            revealLastCheckedAt: Date.now(),
+            revealError: null,
+          });
+        } else {
+          updateCommitmentData(auctionId, address, {
+            revealed: false,
+            revealStatus: 'pending-confirmation',
+            revealTransactionId: revealExplorerTransactionId || revealTransactionId || null,
+            revealExplorerTransactionId: confirmation?.explorerTransactionId || revealExplorerTransactionId || null,
+            revealLastCheckedAt: Date.now(),
+            revealError: null,
+          });
+        }
+        refreshStoredCommitment();
+      }
       
     } catch (error) {
       console.error('❌ Error revealing bid:', error);
-      showLifecycleNotice(`❌ Failed to reveal bid:\n\n${error.message || error}`, { auto, tone: 'error' });
+      const revealErrorMessage = String(error?.message || error || '');
+      const normalizedRevealError = revealErrorMessage.toLowerCase();
+
+      if (
+        address &&
+        storedCommitmentData &&
+        (
+          normalizedRevealError.includes('already revealed')
+          || normalizedRevealError.includes('is_revealed')
+          || normalizedRevealError.includes('commitment.is_revealed')
+        )
+      ) {
+        updateCommitmentData(auctionId, address, {
+          revealed: true,
+          revealStatus: 'confirmed',
+          revealedAt: Date.now(),
+          revealConfirmedAt: Date.now(),
+          revealLastCheckedAt: Date.now(),
+          revealError: null,
+        });
+        refreshStoredCommitment();
+        await loadAuctionData();
+        showLifecycleNotice(
+          'ℹ️ This wallet already revealed its bid on-chain. The page has been updated so reveal stays locked.',
+          { auto, tone: 'info' }
+        );
+        return;
+      }
+
+      if (address && storedCommitmentData) {
+        updateCommitmentData(auctionId, address, {
+          revealed: false,
+          revealStatus: 'rejected',
+          revealLastCheckedAt: Date.now(),
+          revealError: revealErrorMessage,
+        });
+        refreshStoredCommitment();
+      }
+      showLifecycleNotice(`❌ Failed to reveal bid:\n\n${revealErrorMessage}`, { auto, tone: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -2186,7 +3568,10 @@ export default function PremiumAuctionDetail() {
     }
 
     if (isClosePending) {
-      showLifecycleNotice('⏳ Close Auction already submitted.\n\nWait for the contract state to update to CLOSED before trying again.', { auto, tone: 'info' });
+      showLifecycleNotice(
+        `⏳ Close Auction already submitted.\n\nWait for the contract state to update to ${isNoBidAuction && auction?.supportsDirectNoBidCancel ? 'CANCELLED' : 'CLOSED'} before trying again.`,
+        { auto, tone: 'info' }
+      );
       return;
     }
 
@@ -2206,44 +3591,63 @@ export default function PremiumAuctionDetail() {
         throw new Error('Wallet does not support transactions');
       }
       
-      const result = await closeAuction(executeTransaction, parseInt(auctionId));
+      const result = await closeAuction(executeTransaction, parseInt(auctionId), null, auctionTxOptions);
       const transactionId = result?.transactionId;
       const explorerTransactionId = looksLikeOnChainTransactionId(result?.explorerTransactionId)
         ? result.explorerTransactionId
         : looksLikeOnChainTransactionId(transactionId)
           ? transactionId
           : null;
+      const expectsDirectCancel = Boolean(isNoBidAuction && auction?.supportsDirectNoBidCancel);
+      const expectedStatuses = expectsDirectCancel ? ['cancelled'] : ['closed'];
 
       if (transactionId && address) {
-        savePendingCloseAuction(auctionId, address, {
+        savePendingCloseAuction(auctionId, address, activeAuctionProgramId, {
           transactionId,
           walletTransactionId: transactionId,
           explorerTransactionId,
+          expectedStatuses,
           status: 'pending',
           createdAt: Date.now(),
+          programId: activeAuctionProgramId,
         });
         setIsClosePending(true);
       }
 
       const stateReached = await waitForLifecycleState({
         result,
-        expectedStatus: 'closed',
-        successMessage: '✅ Auction Closed Successfully!\n\nBidders can now reveal their bids.',
-        pendingMessage: '⏳ Close auction submitted, but explorer confirmation is still pending. The contract may still appear OPEN until the network confirms the transaction.',
-        statePendingMessage: '⏳ Close transaction is confirmed, but the auction mapping still has not updated to CLOSED yet. Use Refresh in a few seconds and check the On-Chain State card again.',
+        expectedStatuses,
+        successMessage: (reachedStatus) => (
+          reachedStatus === 'cancelled'
+            ? '✅ Auction Closed Successfully!\n\nNo bids were committed, so the contract cancelled this auction directly with no winner.'
+            : '✅ Auction Closed Successfully!\n\nBidders can now reveal their bids.'
+        ),
+        pendingMessage: '⏳ Close auction submitted.\n\nTransaction has been sent. Status will update after blockchain confirmation.',
+        statePendingMessage: expectsDirectCancel
+          ? '⏳ Close transaction is confirmed, but the auction mapping has not updated to CANCELLED yet. Refresh again in a few seconds.'
+          : '⏳ Close transaction is confirmed, but the auction mapping has not updated to CLOSED yet. Refresh again in a few seconds.',
         auto,
       });
 
       if (stateReached && address) {
-        clearPendingCloseAuction(auctionId, address);
+        clearPendingCloseAuction(auctionId, address, activeAuctionProgramId);
         setIsClosePending(false);
       }
       
     } catch (error) {
       if (address) {
-        clearPendingCloseAuction(auctionId, address);
+        clearPendingCloseAuction(auctionId, address, activeAuctionProgramId);
       }
       setIsClosePending(false);
+      if (isWalletUserCancellation(error)) {
+        console.warn('Close auction was cancelled in wallet:', error);
+        showLifecycleNotice(
+          'Close auction was dismissed in Shield.\n\nNo transaction was submitted, so the auction remains unchanged.',
+          { auto, tone: 'info' }
+        );
+        return;
+      }
+
       console.error('❌ Error closing auction:', error);
       showLifecycleNotice(`❌ Failed to close auction:\n\n${error.message || error}`, { auto, tone: 'error' });
     } finally {
@@ -2261,15 +3665,23 @@ export default function PremiumAuctionDetail() {
     setIsSubmitting(true);
     
     try {
-      const commitmentData = submittedCommitmentData;
+      const commitmentData = refundCommitmentData;
       
       if (!commitmentData) {
-        showLifecycleNotice('❌ No bid found for this auction', { auto, tone: 'error' });
+        showLifecycleNotice(
+          refundRecoveryRequired
+            ? '❌ Refund is available for this wallet, but this browser is missing the browser-local recovery data needed to refund.\n\nImport a recovery bundle from the original browser or device before retrying.'
+            : '❌ No refundable bidder record was found for this wallet on this browser.',
+          { auto, tone: 'error' }
+        );
         return;
       }
 
       if (!storedNonce) {
-        showLifecycleNotice('❌ Refund needs the saved nonce for this wallet. Restore the original browser data before retrying.', { auto, tone: 'error' });
+        showLifecycleNotice(
+          '❌ Refund needs the saved nonce for this wallet.\n\nImport a recovery bundle from the original browser or device before retrying.',
+          { auto, tone: 'error' }
+        );
         return;
       }
       
@@ -2284,7 +3696,8 @@ export default function PremiumAuctionDetail() {
           executeTransaction,
           parseInt(auctionId),
           storedNonce,
-          commitmentData.amount
+          commitmentData.amount,
+          auctionTxOptions
         );
         showLifecycleNotice('✅ Refund Claimed Successfully!\n\nYour USDCx has been returned.', { auto, tone: 'success' });
       } else if (auction.currencyType === 2) {
@@ -2293,7 +3706,8 @@ export default function PremiumAuctionDetail() {
           executeTransaction,
           parseInt(auctionId),
           storedNonce,
-          commitmentData.amount
+          commitmentData.amount,
+          auctionTxOptions
         );
         showLifecycleNotice('✅ Refund Claimed Successfully!\n\nYour USAD has been returned.', { auto, tone: 'success' });
       } else {
@@ -2303,14 +3717,16 @@ export default function PremiumAuctionDetail() {
               executeTransaction,
               parseInt(auctionId, 10),
               storedNonce,
-              commitmentData.amount
+              commitmentData.amount,
+              auctionTxOptions
             );
         } else {
           await claimRefundAleo(
               executeTransaction,
               parseInt(auctionId, 10),
               storedNonce,
-              commitmentData.amount
+              commitmentData.amount,
+              auctionTxOptions
             );
         }
         showLifecycleNotice(
@@ -2359,7 +3775,12 @@ export default function PremiumAuctionDetail() {
         throw new Error('Wallet does not support transactions');
       }
       
-      const result = await settleAfterRevealTimeout(executeTransaction, parseInt(auctionId, 10), getCurrentTimestamp());
+      const result = await settleAfterRevealTimeout(
+        executeTransaction,
+        parseInt(auctionId, 10),
+        getCurrentTimestamp(),
+        auctionTxOptions
+      );
 
       await waitForLifecycleState({
         result,
@@ -2419,7 +3840,12 @@ export default function PremiumAuctionDetail() {
         throw new Error('Reserve price is not met. Cancel the auction instead of finalizing the winner.');
       }
 
-      const result = await finalizeWinner(executeTransaction, parseInt(auctionId, 10), getCurrentTimestamp());
+      const result = await finalizeWinner(
+        executeTransaction,
+        parseInt(auctionId, 10),
+        getCurrentTimestamp(),
+        auctionTxOptions
+      );
 
       await waitForLifecycleState({
         result,
@@ -2469,7 +3895,7 @@ export default function PremiumAuctionDetail() {
         throw new Error('Wallet does not support transactions');
       }
       
-      await confirmReceipt(executeTransaction, parseInt(auctionId, 10));
+      await confirmReceipt(executeTransaction, parseInt(auctionId, 10), auctionTxOptions);
       
       alert('✅ Receipt Confirmed!\n\nThank you. The seller can now claim payment.');
       
@@ -2514,11 +3940,11 @@ export default function PremiumAuctionDetail() {
       }
       
       if (auction.currencyType === 1) {
-        await claimWinningAleo(executeTransaction, parseInt(auctionId, 10), sellerNetAmountMicro, auction.seller, timestamp);
+        await claimWinningAleo(executeTransaction, parseInt(auctionId, 10), sellerNetAmountMicro, auction.seller, timestamp, auctionTxOptions);
       } else if (auction.currencyType === 2) {
-        await claimWinningUSAD(executeTransaction, parseInt(auctionId, 10), sellerNetAmountMicro, auction.seller, timestamp);
+        await claimWinningUSAD(executeTransaction, parseInt(auctionId, 10), sellerNetAmountMicro, auction.seller, timestamp, auctionTxOptions);
       } else {
-        await claimWinningUSDCx(executeTransaction, parseInt(auctionId, 10), sellerNetAmountMicro, auction.seller, timestamp);
+        await claimWinningUSDCx(executeTransaction, parseInt(auctionId, 10), sellerNetAmountMicro, auction.seller, timestamp, auctionTxOptions);
       }
       
       showLifecycleNotice(`✅ Payment Claimed Successfully!\n\nYou received ${auction.sellerNetAmount || auction.winningBid || auction.minBid} ${auction.token}`, { auto, tone: 'success' });
@@ -2557,14 +3983,14 @@ export default function PremiumAuctionDetail() {
     if (auction.hasEscrow) {
       alert(
         '❌ Cancel Unavailable\n\n' +
-        'Contract V2.22 only allows canceling an auction while total escrow is still 0.'
+        `Contract ${auctionContractVersionLabel} only allows canceling an auction while total escrow is still 0.`
       );
       return;
     }
 
     const confirmCancel = window.confirm(
       'Cancel this auction?\n\n' +
-      'This action follows the V2.22 contract and is only available before any escrowed bids exist.'
+      `This action follows the ${auctionContractVersionLabel} contract and is only available before any escrowed bids exist.`
     );
     if (!confirmCancel) return;
     
@@ -2575,13 +4001,16 @@ export default function PremiumAuctionDetail() {
         throw new Error('Wallet does not support transactions');
       }
 
-      await cancelAuction(executeTransaction, parseInt(auctionId, 10));
+      await cancelAuction(executeTransaction, parseInt(auctionId, 10), auctionTxOptions);
       
-      alert('✅ Auction Canceled Successfully!\n\nAll bidders will be automatically refunded.');
+      alert('✅ Auction Canceled Successfully!\n\nThe contract is now cancelled. Any bidder with refundable escrow can claim a refund from their own wallet.');
       
       // Remove from localStorage
       const myAuctions = JSON.parse(localStorage.getItem('myAuctions') || '[]');
-      const updatedAuctions = myAuctions.filter(a => a.id !== parseInt(auctionId));
+      const updatedAuctions = myAuctions.filter((savedAuction) => !(
+        Number(savedAuction?.id) === parseInt(auctionId, 10)
+          && resolveAuctionProgramId(savedAuction) === activeAuctionProgramId
+      ));
       localStorage.setItem('myAuctions', JSON.stringify(updatedAuctions));
       
       // Navigate back to auction list
@@ -2620,11 +4049,11 @@ export default function PremiumAuctionDetail() {
       }
 
       if (auction.currencyType === 1) {
-        await claimPlatformFeeAleo(executeTransaction, parseInt(auctionId, 10), auction.platformFeeMicro);
+        await claimPlatformFeeAleo(executeTransaction, parseInt(auctionId, 10), auction.platformFeeMicro, null, auctionTxOptions);
       } else if (auction.currencyType === 2) {
-        await claimPlatformFeeUsad(executeTransaction, parseInt(auctionId, 10), auction.platformFeeMicro);
+        await claimPlatformFeeUsad(executeTransaction, parseInt(auctionId, 10), auction.platformFeeMicro, null, auctionTxOptions);
       } else {
-        await claimPlatformFeeUsdcx(executeTransaction, parseInt(auctionId, 10), auction.platformFeeMicro);
+        await claimPlatformFeeUsdcx(executeTransaction, parseInt(auctionId, 10), auction.platformFeeMicro, null, auctionTxOptions);
       }
 
       showLifecycleNotice(`✅ Platform Fee Claimed!\n\nReceived ${auction.platformFee || 0} ${auction.token}.`, { auto, tone: 'success' });
@@ -2637,10 +4066,10 @@ export default function PremiumAuctionDetail() {
     }
   };
 
-  const handleCancelReserveNotMet = async (options = {}) => {
+  const _handleCancelReserveNotMet = async (options = {}) => {
     const { auto = false } = options;
     showLifecycleNotice(
-      'ℹ️ In V2.22, reserve-miss handling is part of Settle After Reveal Timeout.\n\nUse the closed-state settlement action after the reveal deadline passes.',
+      `ℹ️ In ${auctionContractVersionLabel}, reserve-miss handling is part of Settle After Reveal Timeout.\n\nUse the closed-state settlement action after the reveal deadline passes.`,
       { auto, tone: 'info' }
     );
   };
@@ -2715,7 +4144,7 @@ export default function PremiumAuctionDetail() {
   };
 
   const handleShareAuction = async () => {
-    const targetUrl = `${window.location.origin}/premium-auction/${auctionId}`;
+    const targetUrl = buildAuctionDetailUrl(window.location.origin, auctionId, activeAuctionProgramId);
 
     try {
       if (navigator.share) {
@@ -2833,7 +4262,8 @@ export default function PremiumAuctionDetail() {
           executeTransaction,
           Number.parseInt(auctionId, 10),
           disputeRoot,
-          getCurrentTimestamp()
+          getCurrentTimestamp(),
+          auctionTxOptions
         );
 
         const timelineEntry = {
@@ -2841,7 +4271,7 @@ export default function PremiumAuctionDetail() {
           label: 'Anchored on-chain',
           note: result?.transactionId
             ? `Transaction submitted: ${result.transactionId}`
-            : 'Dispute root submitted to the V2.22 contract.',
+            : `Dispute root submitted to the ${auctionContractVersionLabel} contract.`,
         };
 
         const updatedDispute = await updateDispute(createdDispute.id, {
@@ -2863,10 +4293,10 @@ export default function PremiumAuctionDetail() {
           : 'Local case saved and dispute root submitted on-chain.';
       } catch (error) {
         console.error('⚠️ Failed to open dispute on-chain:', error);
-        onChainResultMessage = `Saved locally, but V2.22 dispute anchoring failed.\n\n${error.message || error}`;
+        onChainResultMessage = `Saved locally, but ${auctionContractVersionLabel} dispute anchoring failed.\n\n${error.message || error}`;
       }
     } else if (!canOpenOnChainDispute) {
-      onChainResultMessage = 'Saved locally. V2.22 dispute opening is only available once the auction reaches challenge or settled state.';
+      onChainResultMessage = `Saved locally. ${auctionContractVersionLabel} dispute opening is only available once the auction reaches challenge or settled state.`;
     } else if (!executeTransaction) {
       onChainResultMessage = 'Saved locally. Reconnect a wallet with transaction support to also open the dispute on-chain.';
     }
@@ -2881,6 +4311,8 @@ export default function PremiumAuctionDetail() {
   };
 
   const normalizedAddress = address?.toLowerCase() || '';
+  const auctionEngagementRoles = new Set(Array.isArray(auctionEngagement?.roles) ? auctionEngagement.roles : []);
+  const hasLocallyTrackedBid = Boolean(submittedCommitmentData || pendingCommitmentData);
   const isSellerView = Boolean(
     auction?.seller &&
     normalizedAddress &&
@@ -2898,44 +4330,297 @@ export default function PremiumAuctionDetail() {
     auction.winner.toLowerCase() === normalizedAddress &&
     !isReserveFailureFlow
   );
+  const isKnownBidderForAuction = Boolean(
+    normalizedAddress &&
+    !isSellerView &&
+    (auctionEngagementRoles.has('bidder') || auctionEngagementRoles.has('winner') || isWinnerView || hasLocallyTrackedBid)
+  );
   const isBidderParticipantView = Boolean(
     normalizedAddress &&
     !isSellerView &&
     !isPlatformOwnerView &&
-    (submittedCommitmentData || pendingCommitmentData || storedCommitmentData)
+    (submittedCommitmentData || pendingCommitmentData || storedCommitmentData || isKnownBidderForAuction)
   );
+  const hasOnChainData = Boolean(auction?.hasOnChainData);
   const auctionCountdownEnded = Boolean(
     auction?.endTimestamp &&
-    Math.floor(Date.now() / 1000) >= auction.endTimestamp
+    currentUnixTime >= auction.endTimestamp
   );
   const revealTimeoutWindowEnded = Boolean(
     auction?.status === 'closed' &&
     auction?.revealDeadline &&
-    Math.floor(Date.now() / 1000) >= auction.revealDeadline
+    currentUnixTime >= auction.revealDeadline
   );
   const disputeWindowEnded = Boolean(
     auction?.status === 'challenge' &&
     auction?.disputeDeadline &&
-    Math.floor(Date.now() / 1000) >= auction.disputeDeadline
+    currentUnixTime >= auction.disputeDeadline
   );
   const hasRevealedBidCandidate = Boolean(
     auction?.winningAmountMicro &&
     auction.winningAmountMicro !== '0'
   );
-  const storedNonce = getNonce(auctionId, address);
-  const canRevealBid = Boolean(
-    auction?.status === 'closed' &&
-    (!auction?.revealDeadline || Math.floor(Date.now() / 1000) <= auction.revealDeadline) &&
-    submittedCommitmentData &&
-    storedNonce
+  const hasCommittedBids = Boolean(
+    (auction?.commitmentCount ?? 0) > 0 ||
+    auction?.hasCommittedBids ||
+    auction?.hasEscrow
   );
-  const canClaimRefund = Boolean(
-    submittedCommitmentData &&
+  const isNoBidAuction = Boolean(auction && !hasCommittedBids);
+  const cancelReasonInfo = resolveCancelReasonInfo(auction?.cancelReasonCode ?? 0);
+  const auctionContractVersionLabel = auction?.contractVersion || ACTIVE_CONTRACT_VERSION_LABEL;
+  const storedNonce = getNonce(auctionId, address);
+  const revealCommitmentData = submittedCommitmentData
+    || (
+      isKnownBidderForAuction
+        ? pendingCommitmentData || (storedCommitmentData?.transactionId ? storedCommitmentData : null)
+        : null
+    );
+  const canRevealBid = Boolean(
+    hasOnChainData &&
+    auction?.status === 'closed' &&
+    (!auction?.revealDeadline || currentUnixTime <= auction.revealDeadline) &&
+    revealCommitmentData &&
+    storedNonce &&
+    !hasRevealedBid &&
+    !isRevealPending &&
+    !isSellerView
+  );
+  const revealRecoveryRequired = Boolean(
+    hasOnChainData &&
+    auction?.status === 'closed' &&
+    (!auction?.revealDeadline || currentUnixTime <= auction.revealDeadline) &&
+    isKnownBidderForAuction &&
+    !hasRevealedBid &&
+    !isRevealPending &&
+    (!revealCommitmentData || !storedNonce)
+  );
+  const isRefundableAuction = Boolean(
+    hasOnChainData &&
     (
       auction?.status === 'cancelled' ||
       (auction?.status === 'settled' && !isWinnerView)
     )
   );
+  const refundCommitmentData = submittedCommitmentData
+    || (
+      isKnownBidderForAuction
+        ? pendingCommitmentData || (storedCommitmentData?.transactionId ? storedCommitmentData : null)
+        : null
+    );
+  const refundRecoveryRequired = Boolean(
+    isRefundableAuction &&
+    isKnownBidderForAuction &&
+    (!refundCommitmentData || !storedNonce)
+  );
+  const canClaimRefund = Boolean(
+    isRefundableAuction &&
+    refundCommitmentData &&
+    storedNonce &&
+    !isWinnerView
+  );
+  const hasAnySavedBidData = Boolean(storedCommitmentData || storedNonce);
+  const hasExportableRecoveryBundle = Boolean(
+    address &&
+    storedNonce &&
+    (activeCommitmentData || storedCommitmentData) &&
+    Number((activeCommitmentData || storedCommitmentData)?.amount ?? 0) > 0
+  );
+  const bidderRecordDiagnostic = submittedCommitmentData
+    ? {
+        label: 'Bid Record',
+        value: 'Confirmed in this browser',
+        tone: 'success',
+      }
+    : pendingCommitmentData
+      ? {
+          label: 'Bid Record',
+          value: 'Pending chain confirmation',
+          tone: 'info',
+        }
+      : hasStaleLocalBid
+        ? {
+            label: 'Bid Record',
+            value: 'Local draft only',
+            tone: 'warning',
+          }
+        : isKnownBidderForAuction
+          ? {
+              label: 'Bid Record',
+              value: 'Wallet tracked as bidder',
+              tone: 'info',
+            }
+          : {
+              label: 'Bid Record',
+              value: 'No local bidder data',
+              tone: 'neutral',
+            };
+  const nonceDiagnostic = storedNonce
+    ? {
+        label: 'Saved Nonce',
+        value: 'Ready in this browser',
+        tone: 'success',
+      }
+    : isKnownBidderForAuction
+      ? {
+          label: 'Saved Nonce',
+          value: 'Missing',
+          tone: 'warning',
+        }
+      : {
+          label: 'Saved Nonce',
+          value: 'Not needed yet',
+          tone: 'neutral',
+        };
+  const recoveryBundleDiagnostic = hasAcknowledgedRecoveryBundle
+    ? {
+        label: 'Recovery Bundle',
+        value: recoveryBundleSavedAtLabel
+          ? `${recoveryBundleMethodLabel} on ${recoveryBundleSavedAtLabel}`
+          : recoveryBundleMethodLabel,
+        tone: 'success',
+      }
+    : hasExportableRecoveryBundle
+      ? {
+          label: 'Recovery Bundle',
+          value: shouldRequireRecoveryBundleSave ? 'Export before leaving' : 'Ready to export',
+          tone: shouldRequireRecoveryBundleSave ? 'warning' : 'info',
+        }
+      : hasAnySavedBidData
+        ? {
+            label: 'Recovery Bundle',
+            value: 'Local data incomplete',
+            tone: 'warning',
+          }
+        : {
+            label: 'Recovery Bundle',
+            value: 'Not available yet',
+            tone: 'neutral',
+          };
+  const revealDiagnostic = !hasOnChainData
+    ? {
+        label: 'Reveal',
+        value: 'Waiting for live contract state',
+        tone: 'warning',
+      }
+    : hasRevealedBid
+      ? {
+          label: 'Reveal',
+          value: 'Already revealed',
+          tone: 'success',
+        }
+      : isRevealPending
+        ? {
+            label: 'Reveal',
+            value: 'Submitted, awaiting confirmation',
+            tone: 'info',
+          }
+        : canRevealBid
+          ? {
+              label: 'Reveal',
+              value: 'Ready now',
+              tone: 'success',
+            }
+          : revealRecoveryRequired
+            ? {
+                label: 'Reveal',
+                value: 'Import recovery bundle first',
+                tone: 'warning',
+              }
+            : auction?.status === 'open' && auctionCountdownEnded
+              ? {
+                  label: 'Reveal',
+                  value: 'Waiting for seller to close',
+                  tone: 'info',
+                }
+              : auction?.status === 'open'
+                ? {
+                    label: 'Reveal',
+                    value: 'Auction still open',
+                    tone: 'neutral',
+                  }
+                : auction?.status === 'closed' && auction?.revealDeadline && currentUnixTime > auction.revealDeadline
+                  ? {
+                      label: 'Reveal',
+                      value: 'Reveal window ended',
+                      tone: 'warning',
+                    }
+                  : isKnownBidderForAuction
+                    ? {
+                        label: 'Reveal',
+                        value: 'Waiting for contract phase',
+                        tone: 'neutral',
+                      }
+                    : {
+                        label: 'Reveal',
+                        value: 'No bidder path detected',
+                        tone: 'neutral',
+                      };
+  const refundDiagnostic = !hasOnChainData
+    ? {
+        label: 'Refund',
+        value: 'Waiting for live contract state',
+        tone: 'warning',
+      }
+    : isWinnerView
+      ? {
+          label: 'Refund',
+          value: 'Winner path cannot refund',
+          tone: 'neutral',
+        }
+      : canClaimRefund
+        ? {
+            label: 'Refund',
+            value: 'Ready now',
+            tone: 'success',
+          }
+        : refundRecoveryRequired
+          ? {
+              label: 'Refund',
+              value: 'Import recovery bundle first',
+              tone: 'warning',
+            }
+          : isRefundableAuction && isKnownBidderForAuction
+            ? {
+                label: 'Refund',
+                value: 'Waiting for local bid data',
+                tone: 'warning',
+              }
+            : isRefundableAuction
+              ? {
+                  label: 'Refund',
+                  value: 'Not available on this wallet',
+                  tone: 'neutral',
+                }
+              : {
+                  label: 'Refund',
+                  value: 'Not refundable yet',
+                  tone: 'neutral',
+                };
+  const shouldShowBidderDiagnostics = Boolean(
+    !isSellerView &&
+    (
+      isBidderParticipantView ||
+      hasStaleLocalBid ||
+      hasAcknowledgedRecoveryBundle ||
+      shouldRecommendRecoveryBundleSave ||
+      revealRecoveryRequired ||
+      refundRecoveryRequired
+    )
+  );
+  const bidderDiagnosticsItems = [
+    bidderRecordDiagnostic,
+    nonceDiagnostic,
+    recoveryBundleDiagnostic,
+    revealDiagnostic,
+    refundDiagnostic,
+  ];
+  const bidderDiagnosticsMessage = revealRecoveryRequired || refundRecoveryRequired
+    ? 'This wallet should import a recovery bundle on this browser before reveal or refund can proceed.'
+    : shouldRequireRecoveryBundleSave
+      ? 'Save the recovery bundle before leaving this page so this wallet can recover reveal and refund later.'
+      : hasAcknowledgedRecoveryBundle
+        ? 'Recovery data has been acknowledged for this wallet. Keep the exported bundle somewhere safe.'
+        : null;
   const receiptConfirmedAtLabel = formatUnixTimestamp(auction?.itemReceivedAt);
   const paymentClaimedAtLabel = formatUnixTimestamp(auction?.paymentClaimedAt);
   const settledAtLabel = formatUnixTimestamp(auction?.settledAt);
@@ -2952,6 +4637,7 @@ export default function PremiumAuctionDetail() {
     : null;
   const resolvedSellerVerification = mergeSellerVerification(sellerVerification, auction?.sellerVerification);
   const resolvedProofBundle = mergeAuctionProofBundle(auctionProofBundle, auction?.assetProof);
+  const normalizedReputation = normalizeReputation(reputation);
   const proofFiles = Array.isArray(resolvedProofBundle?.proofFiles)
     ? resolvedProofBundle.proofFiles
     : Array.isArray(auction?.proofFiles)
@@ -2964,6 +4650,16 @@ export default function PremiumAuctionDetail() {
       : [];
   const sellerDisplayName = auction?.sellerDisplayName || resolvedSellerVerification?.sellerDisplayName || null;
   const sellerAddressPreview = formatAddressPreview(auction?.seller);
+  const bidderAddressPreview = formatAddressPreview(address);
+  const bidPathLabel = buildBidPathLabel(auction, usePrivateBid);
+  const privateBidAmountMicroPreview = bidAmount && Number.isFinite(parseFloat(bidAmount))
+    ? Math.floor(parseFloat(bidAmount) * 1_000_000)
+    : null;
+  const privateBidDraftPreview = buildPrivateBidDraftPreview({
+    programId: activeAuctionProgramId,
+    auctionId,
+    amountCredits: privateBidAmountMicroPreview,
+  });
   const verificationStatus = resolvedSellerVerification?.status || 'pending';
   const verificationTone = verificationStatus === 'verified'
     ? 'text-green-300 border-green-500/30 bg-green-500/10'
@@ -2983,20 +4679,233 @@ export default function PremiumAuctionDetail() {
   );
   const canOpenOnChainDispute = auction?.status === 'challenge' || auction?.status === 'settled';
   const canClaimPlatformFeeAction = Boolean(
+    hasOnChainData &&
     isPlatformOwnerView &&
     auction?.status === 'settled' &&
     auction?.paymentClaimed &&
     !auction?.platformFeeClaimed
   );
-  const canAutoSellerClaim = Boolean(
+  const sellerClaimReady = Boolean(
+    hasOnChainData &&
     isSellerView &&
     auction?.status === 'settled' &&
     !auction?.paymentClaimed &&
     (
       auction?.itemReceived ||
       auction?.claimableAtReached
+    ) &&
+    (auction?.sellerNetAmountMicro || auction?.winningAmountMicro)
+  );
+  const canAutoSellerClaim = Boolean(
+    sellerClaimReady
+  );
+  const closeActionLabel = isSubmitting
+    ? 'Closing...'
+    : isClosePending
+      ? 'Close Pending...'
+      : auctionCountdownEnded
+        ? isNoBidAuction
+          ? auction?.supportsDirectNoBidCancel
+            ? '1️⃣ Close and Cancel Auction'
+            : '1️⃣ Close Auction (No Bids)'
+          : '1️⃣ Close Auction Now'
+        : '1️⃣ Close Auction After End';
+  const noBidOpenStateMessage = auctionCountdownEnded
+    ? auction?.supportsDirectNoBidCancel
+      ? 'No bids were committed before the end time. One close transaction will move this auction directly from OPEN to CANCELLED.'
+      : 'No bids were committed before the end time. One close transaction is still needed to move the contract out of OPEN.'
+    : 'No bids are committed yet. If that stays true until the end time, one close transaction will finish the auction with no winner.';
+  const noBidAutoCloseMessage = isSellerView && connected && executeTransaction
+    ? auction?.supportsDirectNoBidCancel
+      ? 'If this seller page stays open with your wallet connected, ShadowBid will also try to trigger that direct cancel automatically once the timer ends.'
+      : 'If this seller page stays open with your wallet connected, ShadowBid will also try to trigger that close automatically once the timer ends.'
+    : null;
+  const sellerPanelStatusMessage = !hasOnChainData
+    ? 'Live contract state is unavailable right now, so seller actions stay read-only until the on-chain view loads again.'
+    : auction?.status === 'cancelled'
+      ? 'This auction is already cancelled. You can still review the outcome and full auction history from this page.'
+      : auction?.status === 'settled'
+        ? 'This auction is already settled. Review the payout state and post-settlement details from the seller controls below.'
+        : auction?.status === 'challenge'
+          ? 'A valid winner path exists, but seller-side finalization is still handled from the action panel below.'
+          : auction?.status === 'closed'
+            ? 'The bidding window is over. Seller-side settlement stays available from the action panel below.'
+            : 'You can still review the listing here, then use the seller controls below when the contract state is ready.';
+  const bidPanelTitle = isSellerView ? 'Seller View' : 'Place Your Bid';
+  const onChainLayerStatus = hasOnChainData
+    ? {
+        title: 'On-Chain',
+        label: 'Live',
+        tone: 'success',
+        description: `Lifecycle, deadlines, and funds are loaded from the live ${auctionContractVersionLabel} contract state.`,
+        icon: CheckCircle,
+      }
+    : {
+        title: 'On-Chain',
+        label: 'Unavailable',
+        tone: 'warning',
+        description: 'Live contract state could not be loaded, so the page is falling back to retained metadata only.',
+        icon: AlertCircle,
+      };
+  const hasSavedBidContext = Boolean(
+    storedNonce && (
+      revealCommitmentData ||
+      refundCommitmentData ||
+      submittedCommitmentData ||
+      pendingCommitmentData ||
+      storedCommitmentData
     )
   );
+  const localRecoveryLayerStatus = isSellerView || isPlatformOwnerView
+    ? {
+        title: 'Local Recovery',
+        label: 'Not Required',
+        tone: 'neutral',
+        description: 'Seller and platform actions use live contract state and do not depend on bidder-local nonce storage.',
+        icon: Info,
+      }
+    : revealRecoveryRequired || refundRecoveryRequired
+      ? {
+          title: 'Local Recovery',
+          label: 'Missing',
+          tone: 'warning',
+          description: 'This browser is missing the saved nonce or bid bundle needed for reveal or refund.',
+          icon: AlertCircle,
+        }
+      : hasSavedBidContext
+        ? {
+            title: 'Local Recovery',
+            label: 'Ready',
+            tone: 'success',
+            description: 'Saved nonce and bid bundle are present in this browser for the current bidder flow.',
+            icon: CheckCircle,
+          }
+        : isBidderParticipantView
+          ? {
+              title: 'Local Recovery',
+              label: 'Tracked',
+              tone: 'info',
+              description: 'This wallet is known as a bidder, but reveal or refund is not unlocked yet.',
+              icon: Clock,
+            }
+          : {
+              title: 'Local Recovery',
+              label: 'Not Needed Yet',
+              tone: 'neutral',
+              description: 'Browser-local nonce storage becomes important only after this wallet commits a bid.',
+              icon: Info,
+            };
+  const opsLayerStatus = (auction?.hasSharedReadModel || auction?.hasSharedSnapshot)
+    ? {
+        title: 'Shared Read Model',
+        label: auction?.hasLocalMetadata ? 'Synced + Cached' : 'Synced',
+        tone: 'success',
+        description: `${auction?.sharedReadModelSourceLabel || 'Shared Read Model'} is available for this auction, so list and detail can share the same chain-mirror state.`,
+        icon: CheckCircle,
+      }
+    : auction?.hasLocalMetadata
+      ? {
+          title: 'Shared Read Model',
+          label: 'Local Cache Only',
+          tone: 'info',
+          description: `Using browser-local cache only. ${auction?.sharedReadModelSourceLabel || 'Shared Read Model'} has not provided a shared chain mirror for this auction yet.`,
+          icon: Clock,
+        }
+      : {
+          title: 'Shared Read Model',
+          label: 'Unavailable',
+          tone: 'neutral',
+          description: `No shared chain mirror is loaded from ${auction?.sharedReadModelSourceLabel || 'Shared Read Model'}, but lifecycle still comes from the contract when on-chain data is available.`,
+          icon: Info,
+        };
+  const dataLayerStatuses = [
+    onChainLayerStatus,
+    localRecoveryLayerStatus,
+    opsLayerStatus,
+  ];
+  const cancelActionState = {
+    visible: Boolean(isSellerView && auction?.status === 'open' && !auction?.hasEscrow),
+    disabled: Boolean(isSubmitting || isClosePending || !hasOnChainData),
+    label: isSubmitting ? 'Canceling...' : '🚫 Cancel Auction',
+    blockedReason: !hasOnChainData
+      ? 'Refresh once live contract state is available before submitting seller actions.'
+      : isClosePending
+        ? 'A close transaction is already pending, so cancel stays locked to avoid conflicting actions.'
+        : null,
+  };
+  const closeActionState = {
+    visible: Boolean(isSellerView && auction?.status === 'open'),
+    disabled: Boolean(isSubmitting || isClosePending || !auctionCountdownEnded || !hasOnChainData),
+    label: closeActionLabel,
+    blockedReason: !hasOnChainData
+      ? 'Live contract state is unavailable, so close stays locked until the page reloads on-chain data.'
+      : isClosePending
+        ? 'Close is already pending on-chain. Wait for the state to move to CLOSED or CANCELLED.'
+        : !auctionCountdownEnded
+          ? `Close unlocks after ${formatUnixTimestamp(auction?.endTimestamp)}.`
+          : null,
+  };
+  const settleActionState = {
+    visible: Boolean(isSellerView && auction?.status === 'closed'),
+    disabled: Boolean(isSubmitting || !revealTimeoutWindowEnded || !hasOnChainData),
+    label: isSubmitting
+      ? 'Processing...'
+      : !revealTimeoutWindowEnded
+        ? '2️⃣ Waiting for Reveal Deadline'
+        : hasRevealedBidCandidate
+          ? '2️⃣ Settle After Reveal Timeout'
+          : '2️⃣ Settle and Cancel if Needed',
+    blockedReason: !hasOnChainData
+      ? 'Reload the live contract state before running timeout settlement.'
+      : !revealTimeoutWindowEnded
+        ? `Settlement stays locked until ${revealWindowEndsAtLabel}, even if one or more bidders already revealed.`
+        : null,
+  };
+  const finalizeActionState = {
+    visible: Boolean(isSellerView && auction?.status === 'challenge'),
+    disabled: Boolean(isSubmitting || !disputeWindowEnded || hasActiveOnChainDispute || auction?.reserveMet === false || !hasOnChainData),
+    label: isSubmitting
+      ? 'Finalizing...'
+      : hasActiveOnChainDispute
+        ? '3️⃣ Resolve Dispute First'
+        : auction?.reserveMet === false
+          ? '3️⃣ Reserve Not Met'
+          : !disputeWindowEnded
+            ? '3️⃣ Waiting for Dispute Window'
+            : '3️⃣ Finalize Winner',
+    blockedReason: !hasOnChainData
+      ? 'Reload the live contract state before finalizing the winner.'
+      : hasActiveOnChainDispute
+        ? 'Resolve the active on-chain dispute before finalizing the auction.'
+        : auction?.reserveMet === false
+          ? 'Reserve is not met, so this path should cancel and refund instead of finalizing a winner.'
+          : !disputeWindowEnded
+            ? `Finalization unlocks after ${challengeWindowEndsAtLabel}.`
+            : null,
+  };
+  const sellerClaimActionState = {
+    visible: Boolean(isSellerView && auction?.status === 'settled' && !auction?.paymentClaimed),
+    disabled: Boolean(isSubmitting || !sellerClaimReady),
+    label: isSubmitting
+      ? 'Claiming...'
+      : !auction?.itemReceived && !auction?.claimableAtReached
+        ? '4️⃣ Waiting for Receipt or Timeout'
+        : `4️⃣ 💰 Claim Seller Net${auction?.sellerNetAmount ? ` (${auction.sellerNetAmount} ${auction.token})` : ''}`,
+    blockedReason: !hasOnChainData
+      ? 'Live contract state is unavailable, so seller payout stays locked until the page reloads.'
+      : !auction?.sellerNetAmountMicro && !auction?.winningAmountMicro
+        ? 'Seller net amount is not available yet. Refresh the auction state and try again.'
+        : !auction?.itemReceived && !auction?.claimableAtReached
+          ? `Seller payout unlocks after ${claimableAtLabel} unless the winner confirms receipt earlier.`
+          : null,
+  };
+  const blockedSellerActionMessage = [
+    cancelActionState,
+    closeActionState,
+    settleActionState,
+    finalizeActionState,
+    sellerClaimActionState,
+  ].find((actionState) => actionState.visible && actionState.disabled && actionState.blockedReason)?.blockedReason || null;
 
   const runAutoLifecycleAction = async (actionKey, actionRunner) => {
     const now = Date.now();
@@ -3031,42 +4940,37 @@ export default function PremiumAuctionDetail() {
     }
 
     const lifecycleAction =
-      isSellerView && auction.status === 'open' && auctionCountdownEnded && !isClosePending
+      closeActionState.visible && !closeActionState.disabled
         ? {
             key: `close_${auction.id}_${address}`,
             run: () => handleCloseAuction({ auto: true }),
           }
-        : canRevealBid
+        : settleActionState.visible && !settleActionState.disabled
           ? {
-              key: `reveal_${auction.id}_${address}`,
-              run: () => handleRevealBid({ auto: true }),
+              key: `settle_reveal_timeout_${auction.id}_${address}`,
+              run: () => handleSettleAfterRevealTimeout({ auto: true }),
             }
-          : isSellerView && auction.status === 'closed' && revealTimeoutWindowEnded
+          : finalizeActionState.visible && !finalizeActionState.disabled
             ? {
-                key: `settle_reveal_timeout_${auction.id}_${address}`,
-                run: () => handleSettleAfterRevealTimeout({ auto: true }),
+                key: `finalize_${auction.id}_${address}`,
+                run: () => handleFinalizeWinner({ auto: true }),
               }
-            : isSellerView && auction.status === 'challenge' && disputeWindowEnded && !hasActiveOnChainDispute
+            : canClaimRefund
+              ? {
+                  key: `refund_${auction.id}_${address}`,
+                  run: () => handleClaimRefund({ auto: true }),
+                }
+              : canAutoSellerClaim
                 ? {
-                    key: `finalize_${auction.id}_${address}`,
-                    run: () => handleFinalizeWinner({ auto: true }),
+                    key: `seller_claim_${auction.id}_${address}`,
+                    run: () => handleClaimWinning({ auto: true }),
                   }
-                : canClaimRefund
+                : canClaimPlatformFeeAction
                   ? {
-                      key: `refund_${auction.id}_${address}`,
-                      run: () => handleClaimRefund({ auto: true }),
+                      key: `platform_fee_${auction.id}_${address}`,
+                      run: () => handleClaimPlatformFee({ auto: true }),
                     }
-                  : canAutoSellerClaim
-                    ? {
-                        key: `seller_claim_${auction.id}_${address}`,
-                        run: () => handleClaimWinning({ auto: true }),
-                      }
-                    : canClaimPlatformFeeAction
-                      ? {
-                          key: `platform_fee_${auction.id}_${address}`,
-                          run: () => handleClaimPlatformFee({ auto: true }),
-                        }
-                      : null;
+                  : null;
 
     if (!lifecycleAction) {
       return undefined;
@@ -3084,10 +4988,13 @@ export default function PremiumAuctionDetail() {
     canAutoSellerClaim,
     canClaimPlatformFeeAction,
     canClaimRefund,
-    canRevealBid,
+    closeActionState.disabled,
+    closeActionState.visible,
     connected,
     disputeWindowEnded,
     executeTransaction,
+    finalizeActionState.disabled,
+    finalizeActionState.visible,
     hasActiveOnChainDispute,
     isCancellingReserve,
     isClaimingFee,
@@ -3096,12 +5003,21 @@ export default function PremiumAuctionDetail() {
     isSubmitting,
     loading,
     revealTimeoutWindowEnded,
+    settleActionState.disabled,
+    settleActionState.visible,
   ]);
 
   return (
     <div className="min-h-screen bg-void-900 text-white">
       {/* Header */}
       <PremiumNav />
+      <input
+        ref={recoveryBundleInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={handleImportRecoveryBundle}
+      />
       
       <div className="border-b border-white/5 backdrop-blur-xl">
         <div className="max-w-[1400px] mx-auto px-8 py-6">
@@ -3134,7 +5050,7 @@ export default function PremiumAuctionDetail() {
               <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
               <h3 className="text-xl font-display font-bold mb-2">Auction Not Found</h3>
               <p className="text-white/60 mb-6">
-                The auction you're looking for doesn't exist or has been removed.
+                This page could not load a live on-chain record or any saved auction metadata for this auction.
               </p>
               <PremiumButton onClick={() => navigate('/premium-auctions')}>
                 Back to Auctions
@@ -3301,7 +5217,7 @@ export default function PremiumAuctionDetail() {
                     <span className="text-lg">{getAssetTypeIcon(auction.assetType)}</span>
                     <span className="font-mono text-gold-500">{getAssetTypeName(auction.assetType)}</span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/40 rounded text-xs font-mono text-green-400">
-                      V2.22
+                      {auctionContractVersionLabel}
                     </span>
                     <button
                       type="button"
@@ -3473,7 +5389,7 @@ export default function PremiumAuctionDetail() {
                   </div>
 
                   <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-                    <div className="text-xs font-mono uppercase tracking-[0.18em] text-cyan-300">V2.22 On-Chain Anchors</div>
+                    <div className="text-xs font-mono uppercase tracking-[0.18em] text-cyan-300">{auctionContractVersionLabel} On-Chain Anchors</div>
                     <div className="mt-4 space-y-3 text-sm">
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-white/45">Seller profile</div>
@@ -3594,27 +5510,27 @@ export default function PremiumAuctionDetail() {
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                         <div className="text-xs text-white/45">Success rate</div>
                         <div className="mt-2 text-2xl font-display font-bold text-white">
-                          {reputation ? `${(reputation.seller.successRate * 100).toFixed(0)}%` : '0%'}
+                          {normalizedReputation ? `${(normalizedReputation.seller.successRate * 100).toFixed(0)}%` : '0%'}
                         </div>
                       </div>
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                         <div className="text-xs text-white/45">Avg. settlement</div>
                         <div className="mt-2 text-2xl font-display font-bold text-white">
-                          {reputation?.seller.averageSettlementHours != null
-                            ? `${reputation.seller.averageSettlementHours.toFixed(1)}h`
+                          {normalizedReputation?.seller.averageSettlementHours != null
+                            ? `${normalizedReputation.seller.averageSettlementHours.toFixed(1)}h`
                             : 'N/A'}
                         </div>
                       </div>
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                         <div className="text-xs text-white/45">Dispute ratio</div>
                         <div className="mt-2 text-2xl font-display font-bold text-white">
-                          {reputation ? `${(reputation.seller.disputeRatio * 100).toFixed(0)}%` : '0%'}
+                          {normalizedReputation ? `${(normalizedReputation.seller.disputeRatio * 100).toFixed(0)}%` : '0%'}
                         </div>
                       </div>
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                         <div className="text-xs text-white/45">Bidder wins</div>
                         <div className="mt-2 text-2xl font-display font-bold text-white">
-                          {reputation?.bidder.wins ?? 0}
+                          {normalizedReputation?.bidder.wins ?? 0}
                         </div>
                       </div>
                     </div>
@@ -3798,7 +5714,7 @@ export default function PremiumAuctionDetail() {
                     </div>
                     <div className="mt-2 text-xs text-white/45">
                       {canOpenOnChainDispute
-                        ? 'This auction can anchor a dispute directly to the V2.22 contract from this page.'
+                        ? `This auction can anchor a dispute directly to the ${auctionContractVersionLabel} contract from this page.`
                         : 'Dispute anchoring becomes available after the auction reaches challenge or settled state.'}
                     </div>
                   </div>
@@ -3900,7 +5816,7 @@ export default function PremiumAuctionDetail() {
                         Commit-Reveal Auction
                       </div>
                       <div className="text-xs text-white/60">
-                        The live V2.22 deployment no longer stores per-bid escrow amounts in mapping state, but public funding transactions can still expose bid amounts before reveal.
+                        The live {auctionContractVersionLabel} deployment derives commitments in-contract and omits per-bid amounts from escrow mappings, but public funding transactions can still expose bid amounts before reveal.
                       </div>
                     </div>
                   </div>
@@ -3908,10 +5824,10 @@ export default function PremiumAuctionDetail() {
 
               <div className="space-y-3">
                 <div className="p-4 bg-void-800 rounded-xl border border-white/5">
-                  <div className="text-xs font-mono text-white/40 mb-2">Visible From Contract</div>
+                  <div className="text-xs font-mono text-white/40 mb-2">Visible On-Chain</div>
                   <div className="space-y-2 text-sm text-white/60">
                     <div>• Auction state: {auction.contractState}</div>
-                    <div>• Stored commitment roots and aggregate escrow totals in the live V2.22 deployment</div>
+                    <div>• Stored commitment roots and aggregate escrow totals in the live {auctionContractVersionLabel} deployment</div>
                     <div>• Seller settlement account exists on-chain, even when the marketplace masks it in the main UI</div>
                     <div>• Escrowed total: {auction.totalEscrowed.toFixed(2)} {auction.token}</div>
                     <div>• Winner address and winning amount after settlement steps</div>
@@ -3919,10 +5835,18 @@ export default function PremiumAuctionDetail() {
                   </div>
                 </div>
                 <div className="p-4 bg-void-800 rounded-xl border border-white/5">
-                  <div className="text-xs font-mono text-white/40 mb-2">Still Hidden Off-Chain</div>
+                  <div className="text-xs font-mono text-white/40 mb-2">Browser-Local Recovery Data</div>
                   <div className="space-y-2 text-sm text-white/60">
-                    <div>• Bidder-local nonce and reveal helpers saved in this browser</div>
-                    <div>• Private ALEO transfer details when private credits are used</div>
+                    <div>• Bidder nonce and recovery bundle saved in this browser</div>
+                    <div>• Reveal and refund access depends on that browser-local data unless you import a recovery bundle</div>
+                    <div>• Private ALEO source record details when private credits are used</div>
+                  </div>
+                </div>
+                <div className="p-4 bg-void-800 rounded-xl border border-white/5">
+                  <div className="text-xs font-mono text-white/40 mb-2">Shared Ops Metadata</div>
+                  <div className="space-y-2 text-sm text-white/60">
+                    <div>• Watchlists, seller verification, disputes, offers, and notifications live outside the contract</div>
+                    <div>• This shared Ops layer improves UX, but it is not the source of truth for auction funds or lifecycle state</div>
                   </div>
                 </div>
               </div>
@@ -3932,17 +5856,84 @@ export default function PremiumAuctionDetail() {
           {/* Right Column - Floating Bid Panel */}
           <div className="col-span-12 lg:col-span-4">
             <div className="sticky top-24 space-y-6">
-              {/* Place Bid Card - Only for non-sellers */}
-              {auction.seller?.toLowerCase() !== address?.toLowerCase() && (
+              <GlassCard className="p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-bold">State Layers</div>
+                    <div className="text-[11px] text-white/45">
+                      Which data source is currently driving this page
+                    </div>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-white/55">
+                    {auction.contractState}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {dataLayerStatuses.map((statusItem) => {
+                    const Icon = statusItem.icon;
+                    const styles = getLayerStatusStyles(statusItem.tone);
+
+                    return (
+                      <div
+                        key={statusItem.title}
+                        className={`rounded-xl border p-4 ${styles.surface}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${styles.accent}`} />
+                            <div className={`text-xs font-mono uppercase tracking-[0.18em] ${styles.accent}`}>
+                              {statusItem.title}
+                            </div>
+                          </div>
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.18em] ${styles.badge}`}>
+                            {statusItem.label}
+                          </span>
+                        </div>
+                        <div className={`mt-2 text-xs leading-relaxed ${styles.body}`}>
+                          {statusItem.description}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </GlassCard>
+
               <GlassCard className="p-6 relative overflow-hidden">
                 {/* Glow Effect */}
                 <div className="absolute inset-0 bg-gradient-to-br from-gold-500/10 to-cyan-500/10 opacity-50" />
                 
                 <div className="relative z-10">
-                  <h3 className="text-xl font-display font-bold mb-6">Place Your Bid</h3>
+                  <h3 className="text-xl font-display font-bold mb-6">{bidPanelTitle}</h3>
                   
-                  {/* Check if user already has a bid */}
-                  {submittedCommitmentData && !showBidForm ? (
+                  {isSellerView ? (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-void-800 rounded-xl border border-white/5">
+                        <div className="text-xs font-mono text-white/40 uppercase tracking-wider mb-2">
+                          Minimum Bid
+                        </div>
+                        <div className="text-2xl font-display font-bold text-gold-500">
+                          {auction.minBid} <span className="text-sm text-cyan-400">{auction.token}</span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                        <div className="flex items-center gap-2 mb-2">
+                          <AlertCircle className="w-5 h-5 text-amber-400" />
+                          <div className="font-mono text-sm text-amber-400">You Can't Bid As Seller</div>
+                        </div>
+                        <div className="text-xs text-white/60 leading-relaxed">
+                          You are connected with the seller wallet, so bidding is disabled for this account on this auction.
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-xs text-white/65">
+                        <div className="font-mono text-cyan-400 mb-2">Seller Access</div>
+                        <div>
+                          {sellerPanelStatusMessage}
+                        </div>
+                      </div>
+                    </div>
+                  ) : submittedCommitmentData && !showBidForm ? (
                     <div className="space-y-4">
                       <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
                         <div className="flex items-center gap-2 mb-2">
@@ -3957,7 +5948,7 @@ export default function PremiumAuctionDetail() {
                         <div className="text-xs text-white/60 mb-3">
                           Your bid has been committed to the blockchain.
                           {isPrivateCommitment(submittedCommitmentData) && (
-                            <span className="text-gold-400"> Funding came from a private ALEO record, and V2.22 no longer stores your per-bid amount in the escrow mapping.</span>
+                            <span className="text-gold-400"> Funding came from a private ALEO record, and {auctionContractVersionLabel} keeps your per-bid amount out of the escrow mapping.</span>
                           )}
                         </div>
                         <div className="p-3 bg-void-800 rounded-lg">
@@ -3995,6 +5986,55 @@ export default function PremiumAuctionDetail() {
                           </div>
                         </div>
                       )}
+
+                      {shouldRequireRecoveryBundleSave ? (
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5" />
+                            <div>
+                              <div className="font-mono text-sm text-amber-400 mb-2">
+                                Required Before Leaving
+                              </div>
+                              <div className="text-xs text-white/60 leading-relaxed">
+                                Download or copy the recovery bundle now. It will be needed later for reveal or refund if this browser-local data is lost.
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : hasAcknowledgedRecoveryBundle ? (
+                        <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+                          <div className="flex items-start gap-3">
+                            <CheckCircle className="w-5 h-5 text-green-400 mt-0.5" />
+                            <div>
+                              <div className="font-mono text-sm text-green-400 mb-2">
+                                Recovery Bundle {recoveryBundleMethodLabel}
+                              </div>
+                              <div className="text-xs text-white/60 leading-relaxed">
+                                {recoveryBundleSavedAtLabel
+                                  ? `Saved on ${recoveryBundleSavedAtLabel}. Keep that bundle somewhere safe for future reveal or refund recovery.`
+                                  : 'This wallet already acknowledged the recovery bundle. Keep it somewhere safe for future reveal or refund recovery.'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <PremiumButton
+                          className="w-full"
+                          onClick={handleDownloadRecoveryBundle}
+                          variant="ghost"
+                        >
+                          {hasAcknowledgedRecoveryBundle ? 'Download Bundle Again' : 'Download Recovery Bundle'}
+                        </PremiumButton>
+                        <PremiumButton
+                          className="w-full"
+                          onClick={handleCopyRecoveryBundle}
+                          variant="ghost"
+                        >
+                          {hasAcknowledgedRecoveryBundle ? 'Copy Bundle Again' : 'Copy Recovery Bundle'}
+                        </PremiumButton>
+                      </div>
                     </div>
                   ) : pendingCommitmentData && !showBidForm ? (
                     <div className="space-y-4">
@@ -4035,6 +6075,55 @@ export default function PremiumAuctionDetail() {
                             : 'We will keep this bid in pending state until the chain confirms it. If the transaction is rejected, this card will disappear so you can bid again.'}
                         </div>
                       </div>
+
+                      {shouldRecommendRecoveryBundleSave ? (
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5" />
+                            <div>
+                              <div className="font-mono text-sm text-amber-400 mb-2">
+                                Save Recovery Bundle Soon
+                              </div>
+                              <div className="text-xs text-white/60 leading-relaxed">
+                                The wallet already returned a transaction ID. Saving the recovery bundle now is recommended in case this bid confirms and this browser-local data is lost later.
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : hasAcknowledgedRecoveryBundle ? (
+                        <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+                          <div className="flex items-start gap-3">
+                            <CheckCircle className="w-5 h-5 text-green-400 mt-0.5" />
+                            <div>
+                              <div className="font-mono text-sm text-green-400 mb-2">
+                                Recovery Bundle {recoveryBundleMethodLabel}
+                              </div>
+                              <div className="text-xs text-white/60 leading-relaxed">
+                                {recoveryBundleSavedAtLabel
+                                  ? `Saved on ${recoveryBundleSavedAtLabel}. Keep that bundle somewhere safe while the bid waits for chain confirmation.`
+                                  : 'This wallet already acknowledged the recovery bundle. Keep it somewhere safe while the bid waits for chain confirmation.'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <PremiumButton
+                          className="w-full"
+                          onClick={handleDownloadRecoveryBundle}
+                          variant="ghost"
+                        >
+                          {hasAcknowledgedRecoveryBundle ? 'Download Bundle Again' : 'Download Recovery Bundle'}
+                        </PremiumButton>
+                        <PremiumButton
+                          className="w-full"
+                          onClick={handleCopyRecoveryBundle}
+                          variant="ghost"
+                        >
+                          {hasAcknowledgedRecoveryBundle ? 'Copy Bundle Again' : 'Copy Recovery Bundle'}
+                        </PremiumButton>
+                      </div>
                     </div>
                   ) : hasStaleLocalBid && !showBidForm ? (
                     <div className="space-y-4">
@@ -4044,7 +6133,7 @@ export default function PremiumAuctionDetail() {
                           <div className="font-mono text-sm text-amber-400">Previous Bid Was Not Submitted</div>
                         </div>
                         <div className="text-xs text-white/60">
-                          We found a local bid draft without a confirmed transaction ID. It will not be treated as a successful bid, and you can safely submit again.
+                          We found browser-local bid data without a confirmed transaction ID. It will not be treated as a successful bid, and you can safely submit again.
                         </div>
                       </div>
                       
@@ -4105,7 +6194,7 @@ export default function PremiumAuctionDetail() {
                               <Shield className="w-4 h-4 text-gold-500" />
                               <span className="text-sm font-mono text-white">Use Private Credits</span>
                               <span className="px-2 py-0.5 bg-gold-500/20 border border-gold-500/40 rounded text-xs font-mono text-gold-400">
-                                V2.22
+                                {auctionContractVersionLabel}
                               </span>
                             </div>
                             <button
@@ -4122,7 +6211,7 @@ export default function PremiumAuctionDetail() {
                           </div>
                           <div className="text-xs text-white/60">
                             {usePrivateBid 
-                              ? 'Paid from a private ALEO record. The source record stays private, and V2.22 no longer stores a per-bid amount in the escrow mapping.'
+                              ? `Paid from a private ALEO record. The source record stays private, and ${auctionContractVersionLabel} no longer stores a per-bid amount in the escrow mapping.`
                               : 'Visible on-chain. Usually faster and simpler for testing.'
                             }
                           </div>
@@ -4158,6 +6247,37 @@ export default function PremiumAuctionDetail() {
                         suffix={auction.token}
                         type="number"
                       />
+
+                      <div className="rounded-xl border border-white/10 bg-void-800/60 p-4">
+                        <div className="mb-3 text-xs font-mono uppercase tracking-[0.18em] text-cyan-400">
+                          Bid Preflight
+                        </div>
+                        <div className="space-y-2 text-xs text-white/65">
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Execution Path</span>
+                            <span className="font-mono text-gold-400">{bidPathLabel}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Bid Wallet</span>
+                            <span className="font-mono text-cyan-300">{bidderAddressPreview}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Seller Wallet</span>
+                            <span className="font-mono text-white">{sellerAddressPreview}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Role Check</span>
+                            <span className={`font-mono ${isSellerView ? 'text-amber-300' : 'text-green-300'}`}>
+                              {isSellerView ? 'Seller wallet detected' : 'Bidder wallet detected'}
+                            </span>
+                          </div>
+                        </div>
+                        {isSellerView && (
+                          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                            Switch to a different wallet before bidding. Seller actions and bidder actions should not share the same wallet in this UI.
+                          </div>
+                        )}
+                      </div>
                       
                       {/* Two-Step Process for Aleo (Public Bid) */}
                       {auction.currencyType === 1 && !usePrivateBid && (
@@ -4169,7 +6289,7 @@ export default function PremiumAuctionDetail() {
                                 Two-Step Process for Aleo Credits
                               </div>
                               <div className="text-xs text-white/60 mb-3">
-                                Contract V2.22 public ALEO flow uses transfer first, then commitment
+                                Contract {auctionContractVersionLabel} public ALEO flow uses transfer first, then commitment
                               </div>
                             </div>
                           </div>
@@ -4255,11 +6375,22 @@ export default function PremiumAuctionDetail() {
                                 🔒 Fund With Private Credits
                               </div>
                               <div className="text-xs text-white/60">
-                                Uses one private wallet record for funding, while V2.22 keeps per-bid amounts out of the escrow mapping
+                                Uses one private wallet record for funding, while {auctionContractVersionLabel} keeps per-bid amounts out of the escrow mapping
                               </div>
                             </div>
                           </div>
-                          <PremiumButton 
+                          <div className="mb-3 rounded-lg border border-white/10 bg-void-900/80 p-3">
+                            <div className="mb-2 text-[11px] font-mono uppercase tracking-wider text-cyan-400">
+                              Record Code Private Aleo
+                            </div>
+                            <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-white/75">
+                              {privateBidDraftPreview}
+                            </pre>
+                            <div className="mt-2 text-[11px] text-white/45">
+                              Input ke-2 adalah `nonce`. Commitment final dihitung di dalam kontrak `{auction?.version || ACTIVE_CONTRACT_VERSION}`.
+                            </div>
+                          </div>
+                          <PremiumButton
                             className="w-full"
                             onClick={handlePrivateBid}
                             disabled={!bidAmount || parseFloat(bidAmount) < parseFloat(auction.minBid) || isSubmitting}
@@ -4281,7 +6412,7 @@ export default function PremiumAuctionDetail() {
                           Cancel
                         </PremiumButton>
                         {(auction.currencyType === 0 || auction.currencyType === 2) && (
-                          <PremiumButton 
+                          <PremiumButton
                             className="flex-1"
                             onClick={handlePlaceBid}
                             disabled={!bidAmount || parseFloat(bidAmount) < parseFloat(auction.minBid) || isSubmitting}
@@ -4294,40 +6425,6 @@ export default function PremiumAuctionDetail() {
                   )}
                 </div>
               </GlassCard>
-              )}
-
-              {/* Seller Info Card - Only for sellers */}
-              {isSellerView && (
-              <GlassCard className="p-6 relative overflow-hidden">
-                {/* Glow Effect */}
-                <div className="absolute inset-0 bg-gradient-to-br from-gold-500/10 to-cyan-500/10 opacity-50" />
-                
-                <div className="relative z-10">
-                  <h3 className="text-xl font-display font-bold mb-6">Your Auction</h3>
-                  
-                  <div className="space-y-4">
-                    <div className="p-4 bg-void-800 rounded-xl border border-white/5">
-                      <div className="text-xs font-mono text-white/40 uppercase tracking-wider mb-2">
-                        Minimum Bid
-                      </div>
-                      <div className="text-2xl font-display font-bold text-gold-500">
-                        {auction.minBid} <span className="text-sm text-cyan-400">{auction.token}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="p-4 bg-gold-500/10 border border-gold-500/30 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Shield className="w-5 h-5 text-gold-400" />
-                        <div className="font-mono text-sm text-gold-400">You are the Seller</div>
-                      </div>
-                      <div className="text-xs text-white/60">
-                        You cannot bid on your own auction. Use the controls below to manage your auction.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </GlassCard>
-              )}
 
               {/* Auction Actions */}
               <GlassCard className="p-6">
@@ -4577,8 +6674,14 @@ export default function PremiumAuctionDetail() {
                             {revealTimeoutWindowEnded
                               ? hasRevealedBidCandidate
                                 ? 'The reveal window is over. Settle the auction to move into challenge if the reserve is met.'
-                                : 'The reveal window is over. Settle the auction and the contract will cancel it if no valid reveal is recorded.'
-                              : `Bids can still be revealed until ${revealWindowEndsAtLabel}. Settlement unlocks after that deadline.`}
+                                : isNoBidAuction
+                                  ? 'No bids were committed. Settle now and the contract will cancel the auction with no winner.'
+                                  : 'The reveal window is over. Settle the auction and the contract will cancel it if no valid reveal is recorded.'
+                              : isNoBidAuction
+                                ? auction.supportsDirectNoBidCancel
+                                  ? 'No bids were committed before close. Newer contract versions can cancel this path directly at close, but this auction is already waiting in CLOSED.'
+                                  : `No bids were committed before close. The seller can settle this auction into CANCELLED after ${revealWindowEndsAtLabel}.`
+                                : `Bids can still be revealed until ${revealWindowEndsAtLabel}. Even if a bidder already revealed, settlement still unlocks only after that deadline.`}
                           </div>
                         </div>
                       ) : null}
@@ -4594,96 +6697,114 @@ export default function PremiumAuctionDetail() {
                           </div>
                         </div>
                       )}
+
+                      {auction.status === 'open' && isNoBidAuction && (
+                        <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Info className="w-5 h-5 text-cyan-400" />
+                            <div className="font-mono text-sm text-cyan-400">No Bid Yet</div>
+                          </div>
+                          <div className="text-xs text-white/60 space-y-2">
+                            <div>{noBidOpenStateMessage}</div>
+                            {auction.supportsDirectNoBidCancel ? (
+                              <div>
+                                After the close transaction confirms, this contract can complete the auction immediately as `CANCELLED`.
+                              </div>
+                            ) : (
+                              <div>
+                                After the close transaction confirms, the contract will enter `CLOSED` first. Once the reveal deadline passes, the seller can settle it into `CANCELLED`.
+                              </div>
+                            )}
+                            {noBidAutoCloseMessage ? (
+                              <div>{noBidAutoCloseMessage}</div>
+                            ) : null}
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Cancel Auction - Only when OPEN and no escrow */}
-                      {auction.status === 'open' && !auction.hasEscrow && (
+                      {cancelActionState.visible && (
                         <PremiumButton 
                           className="w-full"
                           onClick={handleCancelAuction}
-                          disabled={isSubmitting || isClosePending}
+                          disabled={cancelActionState.disabled}
                           variant="ghost"
                         >
-                          {isSubmitting ? 'Canceling...' : '🚫 Cancel Auction'}
+                          {cancelActionState.label}
                         </PremiumButton>
                       )}
                       
                       {/* Step 1: Close Auction */}
-                      {auction.status === 'open' && (
+                      {closeActionState.visible && (
                         <PremiumButton 
                           className="w-full"
                           onClick={handleCloseAuction}
-                          disabled={isSubmitting || isClosePending || !auctionCountdownEnded}
+                          disabled={closeActionState.disabled}
                           variant="cyan"
                         >
-                          {isSubmitting ? 'Closing...' : isClosePending ? 'Close Pending...' : auctionCountdownEnded ? '1️⃣ Close Auction Now' : '1️⃣ Close Auction After End'}
+                          {closeActionState.label}
                         </PremiumButton>
                       )}
                       
                       {/* Step 2: Settle After Reveal Timeout */}
-                      {auction.status === 'closed' && (
+                      {settleActionState.visible && (
                         <PremiumButton 
                           className="w-full"
                           onClick={handleSettleAfterRevealTimeout}
-                          disabled={isSubmitting || !revealTimeoutWindowEnded}
+                          disabled={settleActionState.disabled}
                         >
-                          {isSubmitting
-                            ? 'Processing...'
-                            : !revealTimeoutWindowEnded
-                              ? '2️⃣ Waiting for Reveal Window'
-                              : hasRevealedBidCandidate
-                                ? '2️⃣ Settle After Reveal Timeout'
-                                : '2️⃣ Settle and Cancel if Needed'}
+                          {settleActionState.label}
                         </PremiumButton>
                       )}
                       
                       {/* Step 3: Finalize Winner */}
-                      {auction.status === 'challenge' && (
+                      {finalizeActionState.visible && (
                         <PremiumButton 
                           className="w-full"
                           onClick={handleFinalizeWinner}
-                          disabled={isSubmitting || !disputeWindowEnded || hasActiveOnChainDispute}
+                          disabled={finalizeActionState.disabled}
                           variant="secondary"
                         >
-                          {isSubmitting
-                            ? 'Finalizing...'
-                            : hasActiveOnChainDispute
-                              ? '3️⃣ Resolve Dispute First'
-                              : !disputeWindowEnded
-                                ? '3️⃣ Waiting for Dispute Window'
-                                : '3️⃣ Finalize Winner'}
+                          {finalizeActionState.label}
                         </PremiumButton>
                       )}
                       
                       {/* Step 4: Claim Winning Bid */}
-                      {auction.status === 'settled' && !auction.paymentClaimed && (
+                      {sellerClaimActionState.visible && (
                         <PremiumButton 
                           className="w-full"
                           onClick={handleClaimWinning}
-                          disabled={isSubmitting}
+                          disabled={sellerClaimActionState.disabled}
                           variant="gold"
                         >
-                          {isSubmitting ? 'Claiming...' : `4️⃣ 💰 Claim Seller Net${auction.sellerNetAmount ? ` (${auction.sellerNetAmount} ${auction.token})` : ''}`}
+                          {sellerClaimActionState.label}
                         </PremiumButton>
                       )}
+
+                      {blockedSellerActionMessage ? (
+                        <div className="rounded-xl border border-white/10 bg-void-800 p-4 text-xs leading-relaxed text-white/60">
+                          {blockedSellerActionMessage}
+                        </div>
+                      ) : null}
 
                       {/* Workflow guide */}
                       <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                         <div className="text-xs text-white/60">
-                          <div className="font-mono text-cyan-400 mb-2">Seller Workflow (V2.22):</div>
+                          <div className="font-mono text-cyan-400 mb-2">Seller Workflow ({auctionContractVersionLabel}):</div>
                           <div className="space-y-1">
-                            <div className={auction.status === 'open' && !auction.hasEscrow ? 'text-gold-400' : 'text-white/40'}>
+                            <div className={cancelActionState.visible && !cancelActionState.disabled ? 'text-gold-400' : cancelActionState.visible ? 'text-white/70' : 'text-white/40'}>
                               🚫 Cancel auction while escrow is still 0
                             </div>
-                            <div className={auction.status === 'open' ? 'text-gold-400' : 'text-white/40'}>
+                            <div className={closeActionState.visible && !closeActionState.disabled ? 'text-gold-400' : closeActionState.visible ? 'text-white/70' : 'text-white/40'}>
                               1️⃣ Close auction
                             </div>
-                            <div className={auction.status === 'closed' ? 'text-gold-400' : 'text-white/40'}>
+                            <div className={settleActionState.visible && !settleActionState.disabled ? 'text-gold-400' : settleActionState.visible ? 'text-white/70' : 'text-white/40'}>
                               2️⃣ Settle after reveal timeout
                             </div>
-                            <div className={auction.status === 'challenge' ? 'text-gold-400' : 'text-white/40'}>
+                            <div className={finalizeActionState.visible && !finalizeActionState.disabled ? 'text-gold-400' : finalizeActionState.visible ? 'text-white/70' : 'text-white/40'}>
                               3️⃣ Finalize winner after dispute window
                             </div>
-                            <div className={auction.status === 'settled' && !auction.paymentClaimed ? 'text-gold-400' : 'text-white/40'}>
+                            <div className={sellerClaimActionState.visible && !sellerClaimActionState.disabled ? 'text-gold-400' : sellerClaimActionState.visible ? 'text-white/70' : 'text-white/40'}>
                               4️⃣ Claim seller net after receipt or timeout
                             </div>
                             <div className={isPlatformOwnerView && auction.paymentClaimed && !auction.platformFeeClaimed ? 'text-gold-400' : 'text-white/40'}>
@@ -4768,12 +6889,50 @@ export default function PremiumAuctionDetail() {
                         <div className="text-xs font-mono text-purple-400 mb-1">🎯 Bidder Actions</div>
                         <div className="text-xs text-white/60">
                           {submittedCommitmentData
-                            ? 'You have a confirmed bid on-chain'
+                            ? hasRevealedBid
+                              ? 'Your bid has already been revealed on-chain'
+                              : isRevealPending
+                                ? 'Your reveal is awaiting chain confirmation'
+                                : 'You have a confirmed bidder record on this browser'
                             : pendingCommitmentData
                               ? 'Your bid is awaiting chain confirmation'
-                          : 'You have not bid yet'}
+                              : isKnownBidderForAuction
+                                ? 'This wallet is recognized as a bidder, but this browser may be missing some browser-local recovery data'
+                                : 'You have not bid yet'}
                         </div>
                       </div>
+
+                      {shouldShowBidderDiagnostics && (
+                        <div className="rounded-xl border border-white/10 bg-void-800 p-4">
+                          <div className="font-mono text-sm text-white mb-3">Bidder Recovery Diagnostics</div>
+                          <div className="space-y-2">
+                            {bidderDiagnosticsItems.map((item) => (
+                              <div key={item.label} className="flex items-start justify-between gap-3 text-xs">
+                                <span className="text-white/40">{item.label}</span>
+                                <span className={`text-right ${getDiagnosticToneClass(item.tone)}`}>
+                                  {item.value}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          {bidderDiagnosticsMessage ? (
+                            <div className="mt-3 border-t border-white/10 pt-3 text-xs leading-relaxed text-white/60">
+                              {bidderDiagnosticsMessage}
+                            </div>
+                          ) : null}
+                          {(revealRecoveryRequired || refundRecoveryRequired) ? (
+                            <div className="mt-3">
+                              <PremiumButton
+                                className="w-full"
+                                onClick={handleOpenRecoveryBundlePicker}
+                                variant="ghost"
+                              >
+                                Import Recovery Bundle
+                              </PremiumButton>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
 
                       {auctionCountdownEnded && auction.status === 'open' && (
                         <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
@@ -4791,10 +6950,10 @@ export default function PremiumAuctionDetail() {
                         <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                           <div className="flex items-center gap-2 mb-2">
                             <AlertCircle className="w-5 h-5 text-amber-400" />
-                            <div className="font-mono text-sm text-amber-400">Auction Status: Cancelled</div>
+                            <div className="font-mono text-sm text-amber-400">Auction Status: Cancelled ({cancelReasonInfo.label})</div>
                           </div>
                           <div className="text-xs text-white/60">
-                            This auction was cancelled because the reserve price was not met. All bidders, including the highest bidder, can now claim refunds.
+                            {cancelReasonInfo.bidderSummary}
                           </div>
                         </div>
                       )}
@@ -4900,12 +7059,33 @@ export default function PremiumAuctionDetail() {
                         <div className="p-4 bg-void-800 rounded-xl border border-white/10">
                           <div className="font-mono text-sm text-white mb-2">Reveal Availability</div>
                           <div className="text-xs text-white/60 leading-relaxed">
-                            {!submittedCommitmentData
-                              ? 'Reveal only appears for wallets that already have a confirmed bid on-chain.'
+                            {!hasOnChainData
+                              ? 'Live contract state is unavailable right now. Reload the page before attempting reveal.'
+                              : !submittedCommitmentData
+                              ? revealRecoveryRequired
+                                ? 'Reveal window is already open for this wallet, but this browser is missing the browser-local bid data needed to reveal. Import the recovery bundle from the browser or device that placed the bid.'
+                                : 'Reveal only appears for wallets that already have a confirmed bidder path for this auction.'
+                              : hasRevealedBid
+                                ? 'This wallet already revealed its bid. The auction remains CLOSED until the seller settles it after the reveal deadline.'
+                                : isRevealPending
+                                  ? `Reveal is already submitted${storedCommitmentData?.revealTransactionId ? ` (${storedCommitmentData.revealTransactionId})` : ''} and still waiting for confirmation.`
+                              : revealRecoveryRequired
+                                ? 'Reveal is ready for this wallet, but the saved nonce or bid bundle is missing in this browser. Import the recovery bundle to unlock reveal.'
                               : !storedNonce
-                                ? 'Reveal needs the saved nonce for this wallet. If the bid was placed from another browser or the local data was cleared, the reveal button will stay hidden.'
+                                ? 'Reveal needs the saved nonce for this wallet. If the bid was placed from another browser or the local data was cleared, import a recovery bundle to unlock reveal.'
                                 : 'Reveal will appear once the contract is ready.'}
                           </div>
+                          {revealRecoveryRequired ? (
+                            <div className="mt-3">
+                              <PremiumButton
+                                className="w-full"
+                                onClick={handleOpenRecoveryBundlePicker}
+                                variant="ghost"
+                              >
+                                Import Recovery Bundle
+                              </PremiumButton>
+                            </div>
+                          ) : null}
                         </div>
                       )}
                       
@@ -4942,27 +7122,45 @@ export default function PremiumAuctionDetail() {
                       
                       {/* Claim Refund - ONLY for losers */}
                       {canClaimRefund && (
-                        <PremiumButton 
-                          className="w-full"
-                          onClick={handleClaimRefund}
-                          disabled={isSubmitting}
-                          variant="secondary"
-                        >
-                          {isSubmitting ? 'Claiming...' : '💰 Claim Refund'}
-                        </PremiumButton>
+                        <div className="space-y-3">
+                          <PremiumButton
+                            className="w-full"
+                            onClick={handleClaimRefund}
+                            disabled={isSubmitting}
+                            variant="secondary"
+                          >
+                            {isSubmitting ? 'Claiming...' : '💰 Claim Refund'}
+                          </PremiumButton>
+                        </div>
+                      )}
+
+                      {!canClaimRefund && refundRecoveryRequired && (
+                        <div className="space-y-3 rounded-xl border border-white/10 bg-void-800 p-4">
+                          <div className="font-mono text-sm text-white">Refund Availability</div>
+                          <div className="text-xs leading-relaxed text-white/60">
+                            This auction is already refundable for this wallet, but this browser is missing the browser-local nonce or bid bundle needed to submit the refund transaction.
+                          </div>
+                          <PremiumButton
+                            className="w-full"
+                            onClick={handleOpenRecoveryBundlePicker}
+                            variant="ghost"
+                          >
+                            Import Recovery Bundle
+                          </PremiumButton>
+                        </div>
                       )}
                       
                       {/* Bidder workflow guide */}
                       {submittedCommitmentData && (
                         <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                           <div className="text-xs text-white/60">
-                            <div className="font-mono text-cyan-400 mb-2">Bidder Workflow (V2.22):</div>
+                            <div className="font-mono text-cyan-400 mb-2">Bidder Workflow ({auctionContractVersionLabel}):</div>
                             <div className="space-y-1">
                               <div className={auction.status === 'open' ? 'text-gold-400' : 'text-white/40'}>
                                 ⏳ Wait for auction to close
                               </div>
-                              <div className={auction.status === 'closed' ? 'text-gold-400' : 'text-white/40'}>
-                                🔓 Reveal your bid
+                              <div className={canRevealBid ? 'text-gold-400' : revealRecoveryRequired || (auction.status === 'closed' && !hasRevealedBid) ? 'text-white/70' : hasRevealedBid ? 'text-green-400' : 'text-white/40'}>
+                                {hasRevealedBid ? '✅ Bid revealed on-chain' : '🔓 Reveal your bid'}
                               </div>
                               <div className={auction.status === 'challenge' ? 'text-gold-400' : 'text-white/40'}>
                                 ⏳ Wait while challenge state is active
@@ -4970,7 +7168,7 @@ export default function PremiumAuctionDetail() {
                               <div className={auction.winner?.toLowerCase() === address?.toLowerCase() && auction.status === 'settled' && !auction.itemReceived ? 'text-gold-400' : 'text-white/40'}>
                                 ✅ Confirm receipt if you won
                               </div>
-                              <div className={canClaimRefund ? 'text-gold-400' : 'text-white/40'}>
+                              <div className={canClaimRefund ? 'text-gold-400' : refundRecoveryRequired ? 'text-white/70' : 'text-white/40'}>
                                 💰 Claim refund if you lost or reserve was not met
                               </div>
                             </div>
@@ -4988,10 +7186,10 @@ export default function PremiumAuctionDetail() {
                   <Shield className="w-5 h-5 text-cyan-400 mt-1" />
                   <div>
                     <div className="font-mono text-sm text-white mb-2">
-                      Zero-Knowledge Privacy
+                      Commit-Reveal Privacy
                     </div>
                     <div className="text-xs text-white/60 leading-relaxed">
-                      Your bid amount is encrypted and hidden from all participants until the reveal phase.
+                      Commitments stay sealed at the contract level until reveal, but public funding transfers can still expose the amount earlier.
                     </div>
                   </div>
                 </div>
@@ -5005,7 +7203,7 @@ export default function PremiumAuctionDetail() {
                       Fair Competition
                     </div>
                     <div className="text-xs text-white/60 leading-relaxed">
-                      Sealed-bid format ensures no information leakage and prevents bid manipulation.
+                      Bidders cannot inspect each other's committed amounts from contract state during the bidding phase, even though funding transfers may still be public.
                     </div>
                   </div>
                 </div>
@@ -5019,7 +7217,7 @@ export default function PremiumAuctionDetail() {
                       Refund Policy
                     </div>
                     <div className="text-xs text-white/60 leading-relaxed">
-                      All losing bidders can claim full refunds once the contract reaches the settled state. Winner pays their bid amount to seller.
+                      Losing bidders can claim refunds after settlement, and all bidders can refund on cancelled auctions such as no-reveal or reserve-not-met outcomes.
                     </div>
                   </div>
                 </div>

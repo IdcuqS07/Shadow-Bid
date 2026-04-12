@@ -6,12 +6,19 @@ const inferredProductionApiBase = ['shadowbid.xyz', 'www.shadowbid.xyz'].include
 const OPS_API_BASE = configuredLocalApiBase || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : inferredProductionApiBase);
 
 function resolveOpsApiDebugInfo() {
+  const pageOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const pageHostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+  const isLocalPage = ['localhost', '127.0.0.1', '::1'].includes(pageHostname);
+
   if (!OPS_API_BASE) {
     return {
       configuredBaseUrl: '',
       baseUrl: '',
       hostname: '',
+      pageOrigin,
+      pageHostname,
       isConfigured: false,
+      isLocalPage,
       isLocalTarget: false,
     };
   }
@@ -25,7 +32,10 @@ function resolveOpsApiDebugInfo() {
       configuredBaseUrl: OPS_API_BASE,
       baseUrl: resolvedUrl.origin,
       hostname,
+      pageOrigin,
+      pageHostname,
       isConfigured: true,
+      isLocalPage,
       isLocalTarget: ['localhost', '127.0.0.1', '::1'].includes(hostname),
     };
   } catch {
@@ -33,7 +43,10 @@ function resolveOpsApiDebugInfo() {
       configuredBaseUrl: OPS_API_BASE,
       baseUrl: OPS_API_BASE,
       hostname: '',
+      pageOrigin,
+      pageHostname,
       isConfigured: true,
+      isLocalPage,
       isLocalTarget: false,
     };
   }
@@ -59,24 +72,52 @@ export function getOpsApiDebugInfo() {
   return resolveOpsApiDebugInfo();
 }
 
-export async function getLocalApiHealth() {
-  try {
-    return await request('/api/health');
-  } catch {
-    return null;
+export async function getLocalApiHealth(options = {}) {
+  const retries = Number.isInteger(options.retries) && options.retries >= 0 ? options.retries : 1;
+  const retryDelayMs = Number.isInteger(options.retryDelayMs) && options.retryDelayMs >= 0
+    ? options.retryDelayMs
+    : 250;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await request('/api/health');
+    } catch {
+      if (attempt === retries) {
+        return null;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, retryDelayMs * (attempt + 1));
+      });
+    }
   }
+
+  return null;
 }
 
 export async function getAuctionSnapshots() {
+  return getSharedAuctionReadModel();
+}
+
+export async function getSharedAuctionReadModel() {
   try {
     const response = await request('/api/auctions');
     return Array.isArray(response.auctions) ? response.auctions : [];
   } catch {
-    return [];
+    try {
+      const response = await request('/api/read-model/auctions');
+      return Array.isArray(response.auctions) ? response.auctions : [];
+    } catch {
+      return [];
+    }
   }
 }
 
 export async function getAuctionSnapshot(auctionId) {
+  return getSharedAuctionReadModelEntry(auctionId);
+}
+
+export async function getSharedAuctionReadModelEntry(auctionId) {
   if (!auctionId) {
     return null;
   }
@@ -85,11 +126,20 @@ export async function getAuctionSnapshot(auctionId) {
     const response = await request(`/api/auctions/${encodeURIComponent(auctionId)}`);
     return response.auction || null;
   } catch {
-    return null;
+    try {
+      const response = await request(`/api/read-model/auctions/${encodeURIComponent(auctionId)}`);
+      return response.auction || null;
+    } catch {
+      return null;
+    }
   }
 }
 
 export async function syncAuctionSnapshot(snapshot) {
+  return syncSharedAuctionReadModelEntry(snapshot);
+}
+
+export async function syncSharedAuctionReadModelEntry(snapshot) {
   try {
     const response = await request('/api/auctions/sync', {
       method: 'POST',
@@ -97,7 +147,15 @@ export async function syncAuctionSnapshot(snapshot) {
     });
     return response.auction || null;
   } catch {
-    return null;
+    try {
+      const response = await request('/api/read-model/auctions/sync', {
+        method: 'POST',
+        body: JSON.stringify(snapshot),
+      });
+      return response.auction || null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -115,6 +173,21 @@ export async function syncAuctionRole({ auctionId, wallet, roles }) {
         roles,
       }),
     });
+  } catch {
+    return null;
+  }
+}
+
+export async function getAuctionEngagement(wallet, auctionId) {
+  if (!wallet || !auctionId) {
+    return null;
+  }
+
+  try {
+    const response = await request(
+      `/api/engagements/${encodeURIComponent(wallet)}?auctionId=${encodeURIComponent(auctionId)}`
+    );
+    return response.engagement || null;
   } catch {
     return null;
   }

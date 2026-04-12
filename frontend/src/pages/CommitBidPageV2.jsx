@@ -85,6 +85,11 @@ export default function CommitBidPageV2() {
       return;
     }
 
+    if (auctionInfo.seller?.toLowerCase() === address?.toLowerCase()) {
+      toast.error('Seller wallet cannot place a bid on its own auction');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const auctionId = parseInt(form.auctionId);
@@ -111,7 +116,7 @@ export default function CommitBidPageV2() {
         toast.info('Step 1/2: Transferring Aleo credits...');
         toast.info('⚠️ Please approve the first transaction');
         
-        const contractAddress = import.meta.env.VITE_PROGRAM_ID || 'shadowbid_marketplace_v2_22.aleo';
+        const contractAddress = AleoServiceV2.PROGRAM_ID;
         
         console.log('[CommitBid] Step 1: Transfer params:', {
           to: contractAddress,

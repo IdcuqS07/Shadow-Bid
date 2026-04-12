@@ -1,47 +1,101 @@
 # ShadowBid
 
-ShadowBid ships commit-reveal auctions on Aleo with contract-verifiable settlement. The active remediated testnet program is now `shadowbid_marketplace_v2_22.aleo`, which closes the original code-level privacy flaws by replacing the additive commitment check with a contract-derived `BHP256` commitment and removing per-bid amounts from the escrow mapping.
+<img src="Logo.png" alt="ShadowBid logo" width="160" />
 
-## Overview
+ShadowBid is a commit-reveal auction marketplace on Aleo for sales that need better price discovery than a public live bid ladder. Sellers get contract-verifiable settlement, bidders get less anchoring during the commit phase, and operators get a shared Ops layer for disputes, verification, watchlists, analytics, and executor recommendations.
 
-ShadowBid combines a React marketplace frontend, the live `v2.22` Leo contract, and an operations layer for analytics, disputes, watchlists, and executor recommendations. The default user experience lives in the premium routes, while `/standard` remains available for legacy and compatibility testing.
+The active remediated testnet program is `shadowbid_marketplace_v2_24.aleo`. It closes the original code-level privacy flaws by replacing the additive commitment check with a contract-derived `BHP256` commitment and by removing per-bid amounts from the escrow mapping.
+
+## Why ShadowBid
+
+- reduce live bid anchoring with a commit -> reveal auction flow
+- keep lifecycle state and fund settlement anchored on-chain
+- support `ALEO`, `USDCx`, and `USAD` in one marketplace flow
+- pair the contract with a shared Ops layer that improves trust and coordination without becoming the source of truth for auction funds
+
+## Best-Fit Use Cases
+
+- premium digital assets or collectibles where visible bidding distorts behavior
+- curated marketplaces that want more trust and less manual settlement work
+- Aleo-native product experiments around sealed-bid or privacy-aware commerce
+
+## Status At A Glance
+
+| Area | Current Status |
+| --- | --- |
+| App | <https://www.shadowbid.xyz/> |
+| Network | `testnet` |
+| Active program | `shadowbid_marketplace_v2_24.aleo` |
+| Supported currencies | `ALEO`, `USDCx`, `USAD` |
+| Privacy claim | Fixes the original code-level privacy flaws, but is not yet full hidden-amount sealed-bid privacy |
+| Source of truth | On-chain for lifecycle and funds; shared Ops layer for metadata and coordination |
+| Frontend default | Premium routes at `/`, `/premium-auctions`, `/premium-create`, `/premium-auction/:auctionId` |
+
+## How It Works
+
+1. A seller creates an auction with an end time, reveal period, dispute period, reserve, and currency.
+2. Bidders commit bids before the auction ends.
+3. The seller closes the auction after `end_time`, which opens the reveal window.
+4. Bidders reveal before `reveal_deadline`.
+5. After reveal timeout, the seller settles and the contract determines whether the auction should proceed or cancel.
+6. After the dispute window, the winner is finalized and payout, fee, refund, or receipt flows can complete.
 
 ## Live URLs
 
 - App: <https://www.shadowbid.xyz/>
-- Contract explorer: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_22.aleo>
+- Contract explorer: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_24.aleo>
 
 ## Live Deployment
 
-- Program ID: `shadowbid_marketplace_v2_22.aleo`
+- Program ID: `shadowbid_marketplace_v2_24.aleo`
 - Network: `testnet`
-- Deployed on: `2026-04-03`
-- Deployment transaction: `at1puerrl94esarswkfgc0f97glpy6h03ke2zf2yzn5qtdme5rcqgysf85m38`
-- Fee transaction: `at15wnry665ddtac4al2y9nr3z5v992xxz7esvju4kpp7jpxuz2avzqlcvz7n`
+- Deployed on: `2026-04-10`
+- Deployment transaction: `at1vfh332s5la6ewm232xh92ecclkqwpec3lxqtd554zuhc3x3z65pq9glkrj`
+- Fee transaction: `at1qv6st7s7yvhy20sq540ahdv95hxs03s5vq45m944pakucddjlq8qscf3c4`
+- Historical rollout: `shadowbid_marketplace_v2_23.aleo` remains a previous testnet deployment
 
-## What Changed In V2.21
+## What Changed In V2.24
 
-- split the old single challenge window into `reveal_period` and `dispute_period`
-- store explicit `reveal_deadline` and `dispute_deadline`
-- move the seller lifecycle from `determine_winner` to `settle_after_reveal_timeout`
-- handle reserve misses inside timeout settlement instead of a separate seller cancel branch
-- keep dispute, receipt, seller payout, and platform-fee claims aligned with the upgraded flow
+- make ALEO refund identity consistent by deriving refund commitments from `self.signer`
+- keep the `v2.23` no-bid cancellation flow, seller-bid guard, and explicit `cancel_reason` tracking
+- preserve the remediated in-contract commitment checks and amount-free escrow mapping design
+- keep bidder-recovery-friendly state and frontend compatibility hooks aligned with the live ABI
+- retain dispute, receipt, seller payout, and platform-fee flows across `ALEO`, `USDCx`, and `USAD`
 
-## Privacy Status
+## Privacy And Trust Boundaries
 
-- Safe claim for `v2.22`: it closes the original code-level privacy flaws, but it does not yet provide full hidden-amount sealed-bid privacy.
-- Patched source in this repo: per-bid escrow mappings no longer store bid amounts, and commit/reveal/refund verification now derives commitments in-contract from `auction_id`, `bidder`, `amount`, and `nonce`.
-- Still visible on-chain after the patch: auction metadata, stored commitment roots, aggregate escrow totals, seller settlement account, dispute state, and the winner address plus winning amount once settlement completes.
-- Still not full hidden-amount sealed-bid privacy: the live public funding flows for `ALEO`, `USDCx`, and `USAD` expose transfer amounts at transaction time. A true sealed-bid rollout still needs a new private-record-backed escrow deployment plus a frontend config update.
+### Safe Claim For `v2.24`
 
-## Deployment Note
+- it closes the original code-level privacy flaws
+- it does not yet provide full hidden-amount sealed-bid privacy
 
-- The repo source and frontend helpers now target the live remediated ABI at `shadowbid_marketplace_v2_22.aleo`.
-- The legacy `shadowbid_marketplace_v2_21.aleo` testnet program remains the older public-escrow ABI and should be treated as historical.
+### Still Visible On-Chain
+
+- auction metadata
+- stored commitment roots
+- aggregate escrow totals
+- seller settlement account
+- dispute state
+- winner address and winning amount once settlement completes
+
+### Browser-Local Only
+
+- bidder nonce storage
+- saved commitment cache
+- recovery bundle handling used later for reveal and refund
+
+### Where Data Lives
+
+- On-chain: lifecycle state, escrow totals, reveal/refund eligibility, winner selection, seller payout, and platform fee state
+- Shared read model: VPS or local indexer mirror of on-chain auction state for shared list/detail reads
+- Browser-local: bidder nonce, saved commitment cache, and recovery bundle acknowledgements needed to recover reveal or refund on another browser
+- Ops API: shared metadata such as watchlists, verification, disputes, offers, notifications, and admin workflow state
+
+A true hidden-amount sealed-bid rollout still needs a new private-record-backed escrow deployment plus a frontend configuration update.
 
 ## Supported Currencies
 
-ShadowBid `v2.22` supports three auction currencies on Aleo testnet:
+ShadowBid `v2.24` supports three auction currencies on Aleo testnet:
 
 | Currency | Type | Program | Notes |
 | --- | --- | --- | --- |
@@ -50,22 +104,6 @@ ShadowBid `v2.22` supports three auction currencies on Aleo testnet:
 | `USAD` | ARC-21 stablecoin | `test_usad_stablecoin.aleo` | Supported by the active contract and frontend flow |
 
 At the contract level, the currency mapping is `0 = USDCx`, `1 = ALEO`, and `2 = USAD`. The frontend wallet provider is configured to request all three programs so users can create and settle auctions in the selected currency.
-
-## Contract Explorer
-
-- Active remediated testnet program: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_22.aleo>
-- Program ID: `shadowbid_marketplace_v2_22.aleo`
-
-## Repository Layout
-
-```text
-shadow-bid/
-├── frontend/          # React + Vite marketplace UI and live Ops Console API
-├── contracts/         # Active ShadowBid v2.22 Leo program
-├── docs/              # Frontend and contract guides
-├── package.json       # Root shortcuts for frontend and contract workflows
-└── README.md
-```
 
 ## Architecture
 
@@ -78,17 +116,23 @@ shadow-bid/
 └─────────┬──────────┘
           │
           ├────────────────────▶┌──────────────────────────┐
+          │                     │ Shared Auction Read Model│
+          │                     │ VPS or local indexer     │
+          │                     │ Chain-mirror list/detail │
+          │                     └──────────────────────────┘
+          │
+          ├────────────────────▶┌──────────────────────────┐
           │                     │ Shared Ops API           │
           │                     │ VPS or Vercel deployment │
-          │                     │ Analytics / disputes     │
+          │                     │ Metadata / disputes      │
           │                     │ watchlists / executor    │
           │                     └──────────────────────────┘
           │
           ▼
 ┌────────────────────┐
 │ contracts/         │
-│ Leo v2.22 program  │
-│ Split deadlines    │
+│ Leo v2.24 program  │
+│ No-bid cancel      │
 │ Timeout settlement │
 │ Dispute-aware flow │
 └────────────────────┘
@@ -96,55 +140,73 @@ shadow-bid/
 
 ## Quick Start
 
-### Frontend
+### Prerequisites
+
+- `Node.js` and `npm`
+- `Leo` CLI if you want to build the contract locally
+- an Aleo-compatible wallet if you want to exercise the live bidding flow
+
+### Run The Marketplace Locally
 
 ```bash
 npm run install:frontend
+cp frontend/.env.local.example frontend/.env.local
 npm run dev
 ```
 
-The marketplace runs on `http://localhost:3007`, with premium routes mounted at `/`, `/premium-auctions`, `/premium-create`, and `/premium-auction/:auctionId`.
+The marketplace runs on `http://localhost:3007`.
 
-### Ops API for local development
+### Run The Local Ops API
 
 ```bash
 npm run dev:ops
 ```
 
-The admin operations console is available at `/ops` when the platform owner wallet is connected.
+The admin operations console is available at `/ops` when the platform owner wallet is connected. The same Ops role can run on a VPS or Vercel deployment in shared environments.
 
-### Contract
+### Build The Contract
 
 ```bash
 npm run build:contracts
 ```
 
-## Key Paths
+### Helpful Routes
 
-- [frontend/README.md](frontend/README.md) explains the app and local workflow
-- [contracts/README.md](contracts/README.md) summarizes the active `v2.22` Leo program
-- [docs/README.md](docs/README.md) indexes the guides moved out of the app folder
-- [docs/frontend/ops-console.md](docs/frontend/ops-console.md) explains what `Ops Console` is, how it works, and how it is wired into the repo
-- [docs/frontend/wave-5-milestone.md](docs/frontend/wave-5-milestone.md) turns the Wave 5 trust, ops, and premium UX goal into a `must ship` backlog on top of `v2.22`
-- [docs/contracts/autonomous-lifecycle-design.md](docs/contracts/autonomous-lifecycle-design.md) proposes the next contract/protocol path for delegated reveal, encrypted reveal escrow, and non-reveal fallback
-- [docs/contracts/privacy-remediation-roadmap.md](docs/contracts/privacy-remediation-roadmap.md) captures the concrete follow-up needed to make bid amounts actually private on-chain
-- [docs/contracts/v2.23-private-escrow-proposal.md](docs/contracts/v2.23-private-escrow-proposal.md) preserves the paused `USDCx`-private-first design as a reference proposal for a possible future reopen
-- [docs/contracts/v2.23-phase-1-feasibility-spike.md](docs/contracts/v2.23-phase-1-feasibility-spike.md) defines the benchmark-first execution phase that must pass before the `v2.23` ABI is frozen
-- [docs/contracts/v2.23-implementation-checklist.md](docs/contracts/v2.23-implementation-checklist.md) breaks `v2.23` into decision gates, benchmark work, contract work, frontend changes, and launch criteria
-- [docs/contracts/v2.23-custody-decision.md](docs/contracts/v2.23-custody-decision.md) records the blocking escrow custody choices that must be resolved before the `v2.23` ABI is frozen
-- [docs/contracts/v2.23-benchmark-findings.md](docs/contracts/v2.23-benchmark-findings.md) records the current pause / no-go decision for the `USDCx` private-first feasibility spike
-- [docs/contracts/v2.23-usdcx-private-primitives.md](docs/contracts/v2.23-usdcx-private-primitives.md) maps the imported `test_usdcx_stablecoin.aleo` private rail and explains why its current proof source is still blocked
-- [docs/contracts/v2.23-usdcx-preconditions.md](docs/contracts/v2.23-usdcx-preconditions.md) captures the live testnet state and the current proof-source blocker for private `USDCx`
-- [docs/contracts/v2.23-usdcx-funding-paths.md](docs/contracts/v2.23-usdcx-funding-paths.md) records why the candidate private funding routes are currently paused
-- [docs/contracts/v2.23-usdcx-spike-runbook.md](docs/contracts/v2.23-usdcx-spike-runbook.md) preserves the old command-level spike runbook as historical reference only
-- [docs/contracts/v2.21-technical-spec.md](docs/contracts/v2.21-technical-spec.md) turns the `v2.21` path into an implementation-oriented contract draft
-- [docs/contracts/v2.21-implementation-checklist.md](docs/contracts/v2.21-implementation-checklist.md) breaks the `v2.21` rollout into contract, frontend, ops, and deployment tasks
+- `/`
+- `/premium-auctions`
+- `/premium-create`
+- `/premium-auction/:auctionId`
+- `/ops`
+- `/dev/test-fixtures`
+- `/standard/*` for compatibility and legacy testing
 
-## Deployment Notes
+## Repository Layout
 
-- The live web bundle is built from `frontend/`
-- The shared Ops backend can run through the Vercel entrypoint or the VPS/Node server
-- Contract rollout references and historical deployment notes are collected under `docs/contracts/`
+```text
+shadow-bid/
+├── frontend/          # React + Vite marketplace UI and Ops API entrypoints
+├── contracts/         # Active ShadowBid v2.24 Leo program
+├── docs/              # Product, frontend, and contract guides
+├── package.json       # Root shortcuts for frontend and contract workflows
+└── README.md
+```
+
+## Read Next
+
+- [frontend/README.md](frontend/README.md) for frontend setup, routes, and environment
+- [contracts/README.md](contracts/README.md) for the active `v2.24` contract summary
+- [docs/frontend/quick-start.md](docs/frontend/quick-start.md) for the fastest route through the premium flow
+- [docs/frontend/user-guide.md](docs/frontend/user-guide.md) for seller, bidder, winner, and platform-owner walkthroughs
+- [docs/frontend/ops-console.md](docs/frontend/ops-console.md) for the admin-facing Ops workspace
+- [docs/contracts/privacy-remediation-roadmap.md](docs/contracts/privacy-remediation-roadmap.md) for the concrete path to stronger privacy
+- [docs/contracts/autonomous-lifecycle-design.md](docs/contracts/autonomous-lifecycle-design.md) for the next contract and protocol direction
+- [docs/README.md](docs/README.md) for the broader documentation index
+
+## Roadmap Direction
+
+- Live now: remediated `v2.24` commit-reveal marketplace on testnet
+- Next: stronger delegated reveal and recovery-friendly lifecycle tooling
+- Research track: private-record-backed escrow for actual hidden-amount sealed-bid privacy
 
 ## References
 

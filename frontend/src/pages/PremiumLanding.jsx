@@ -4,6 +4,9 @@ import PremiumButton from '@/components/premium/PremiumButton';
 import GlassCard from '@/components/premium/GlassCard';
 import PremiumNav from '@/components/premium/PremiumNav';
 import { Shield, Zap, Lock, CheckCircle, DollarSign, Package } from 'lucide-react';
+import { PROGRAM_ID, inferContractVersionFromProgramId } from '@/services/aleoServiceV2';
+
+const ACTIVE_VERSION_LABEL = (inferContractVersionFromProgramId(PROGRAM_ID) || 'current').toUpperCase();
 
 export default function PremiumLanding() {
   const navigate = useNavigate();
@@ -22,25 +25,25 @@ export default function PremiumLanding() {
       icon: Shield,
       title: 'Zero-Knowledge Proofs',
       description: 'Aleo proofs back contract execution, while bidder-local reveal secrets stay off-chain until reveal.',
-      version: 'V2.22',
+      version: ACTIVE_VERSION_LABEL,
     },
     {
       icon: Lock,
       title: 'Commit-Reveal Auctions',
-      description: 'V2.22 derives commitments in-contract and no longer stores per-bid amounts in the escrow mapping.',
-      version: 'V2.22',
+      description: `${ACTIVE_VERSION_LABEL} derives commitments in-contract and no longer stores per-bid amounts in the escrow mapping.`,
+      version: ACTIVE_VERSION_LABEL,
     },
     {
       icon: DollarSign,
       title: '3 Payment Currencies',
-      description: 'Create auctions in ALEO, USDCx, or USAD with the active V2.22 contract flow.',
-      version: 'V2.22',
+      description: `Create auctions in ALEO, USDCx, or USAD with the active ${ACTIVE_VERSION_LABEL} contract flow.`,
+      version: ACTIVE_VERSION_LABEL,
     },
     {
       icon: Package,
       title: 'Reserve + Fee Controls',
-      description: 'V2.22 keeps split deadlines, dispute resolution, and keeper-ready lifecycle controls for real-world items.',
-      version: 'V2.22',
+      description: `${ACTIVE_VERSION_LABEL} keeps split deadlines, dispute resolution, no-bid cancellation, and keeper-ready lifecycle controls for real-world items.`,
+      version: ACTIVE_VERSION_LABEL,
     },
   ];
 
@@ -101,7 +104,7 @@ export default function PremiumLanding() {
 
             {/* Subheadline */}
             <p className="text-xl text-white/60 max-w-2xl mx-auto leading-relaxed">
-              V2.22 uses commit-reveal bidding with contract-verifiable settlement. Bidder-local reveal secrets stay off-chain,
+              {ACTIVE_VERSION_LABEL} uses commit-reveal bidding with contract-verifiable settlement. Bidder-local reveal secrets stay off-chain,
               while public funding transactions can still expose amounts until fully private escrow ships.
             </p>
 

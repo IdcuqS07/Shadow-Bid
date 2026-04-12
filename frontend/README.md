@@ -2,9 +2,9 @@
 
 React + Vite marketplace UI for ShadowBid, including the admin-facing Ops Console and the shared Ops backend integration used by premium lifecycle flows.
 
-The active frontend targets `shadowbid_marketplace_v2_22.aleo` by default.
+The active frontend targets `shadowbid_marketplace_v2_24.aleo` by default.
 
-Safe privacy claim for the current frontend target: `v2.22` fixes the original code-level privacy flaws, but it is still not a fully hidden-amount sealed-bid deployment because the live funding paths remain public-amount flows.
+Safe privacy claim for the current frontend target: `v2.24` fixes the original code-level privacy flaws, but it is still not a fully hidden-amount sealed-bid deployment because the live funding paths remain public-amount flows.
 
 ## What Lives Here
 
@@ -43,7 +43,7 @@ npm run dev:api
 
 ```env
 VITE_ALEO_NETWORK=testnet
-VITE_PROGRAM_ID=shadowbid_marketplace_v2_22.aleo
+VITE_PROGRAM_ID=shadowbid_marketplace_v2_24.aleo
 VITE_REVEAL_PERIOD_SECONDS=900
 VITE_DISPUTE_PERIOD_SECONDS=900
 VITE_AUCTIONEER_ADDRESS=aleo1lne9r7laz8r9pwmulkseuvfyem7h9f2hcelgm0me4a708h3avv8qz8ggz8
@@ -56,7 +56,7 @@ Optional:
 VITE_LOCAL_API_URL=http://127.0.0.1:8787
 ```
 
-## V2.21 Flow Notes
+## Lifecycle Flow Notes
 
 - Auction creation now sends `reveal_period` and `dispute_period` instead of one shared challenge window.
 - Seller flow is `close_auction` -> `settle_after_reveal_timeout` -> `finalize_winner`.

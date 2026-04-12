@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { toast } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,18 +16,18 @@ export default function RevealBidPageV2() {
   const [commitmentData, setCommitmentData] = useState(null);
   const [auctionInfo, setAuctionInfo] = useState(null);
   const [isLoadingAuction, setIsLoadingAuction] = useState(false);
+  const normalizedRevealStatus = typeof commitmentData?.revealStatus === 'string'
+    ? commitmentData.revealStatus.trim().toLowerCase()
+    : '';
+  const isRevealPending = normalizedRevealStatus.includes('pending')
+    || normalizedRevealStatus.includes('submitted')
+    || normalizedRevealStatus.includes('checking');
+  const isAlreadyRevealed = commitmentData?.revealed === true
+    || Number(commitmentData?.revealedAt || commitmentData?.revealConfirmedAt || 0) > 0
+    || normalizedRevealStatus === 'confirmed'
+    || normalizedRevealStatus === 'revealed';
 
-  useEffect(() => {
-    if (auctionId && address) {
-      const data = AleoServiceV2.getCommitmentData(parseInt(auctionId), address);
-      setCommitmentData(data?.status === 'confirmed' ? data : null);
-      
-      // Fetch auction state
-      loadAuctionInfo();
-    }
-  }, [auctionId, address]);
-  
-  const loadAuctionInfo = async () => {
+  const loadAuctionInfo = useCallback(async () => {
     if (!auctionId) return;
     
     setIsLoadingAuction(true);
@@ -48,7 +48,17 @@ export default function RevealBidPageV2() {
     } finally {
       setIsLoadingAuction(false);
     }
-  };
+  }, [auctionId]);
+
+  useEffect(() => {
+    if (auctionId && address) {
+      const data = AleoServiceV2.getCommitmentData(parseInt(auctionId), address);
+      setCommitmentData(data?.status === 'confirmed' ? data : null);
+      
+      // Fetch auction state
+      void loadAuctionInfo();
+    }
+  }, [auctionId, address, loadAuctionInfo]);
 
   const handleRevealBid = async () => {
     console.log('[RevealBid] Starting reveal bid (V2)');
@@ -89,6 +99,16 @@ export default function RevealBidPageV2() {
       return;
     }
 
+    if (isAlreadyRevealed) {
+      toast.info('This bid is already revealed on-chain.');
+      return;
+    }
+
+    if (isRevealPending) {
+      toast.info('Reveal is already submitted and still waiting for confirmation.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       console.log('[RevealBid] Reveal params:', {
@@ -108,8 +128,30 @@ export default function RevealBidPageV2() {
 
       console.log('[RevealBid] Transaction result:', result);
 
-      toast.success(`Bid revealed! TX: ${result?.transactionId?.slice(0, 12)}...`);
-      toast.success('Your bid is now visible on-chain');
+      const revealTransactionId = result?.transactionId || null;
+      const revealExplorerTransactionId = typeof result?.explorerTransactionId === 'string' && result.explorerTransactionId.startsWith('at1')
+        ? result.explorerTransactionId
+        : typeof revealTransactionId === 'string' && revealTransactionId.startsWith('at1')
+          ? revealTransactionId
+          : null;
+
+      if (revealTransactionId) {
+        AleoServiceV2.updateCommitmentData(auctionIdNum, address, {
+          revealed: false,
+          revealStatus: 'pending-confirmation',
+          revealSubmittedAt: Date.now(),
+          revealTransactionId: revealExplorerTransactionId || revealTransactionId,
+          revealWalletTransactionId: revealTransactionId,
+          revealExplorerTransactionId,
+          revealError: null,
+        });
+
+        const refreshedCommitment = AleoServiceV2.getCommitmentData(auctionIdNum, address);
+        setCommitmentData(refreshedCommitment?.status === 'confirmed' ? refreshedCommitment : null);
+      }
+
+      toast.success(`Reveal submitted${revealTransactionId ? `: ${revealTransactionId.slice(0, 12)}...` : ''}`);
+      toast.info('Explorer confirmation may still be pending. The reveal button will stay locked meanwhile.');
       
       // Reload auction info
       await loadAuctionInfo();
@@ -158,6 +200,7 @@ export default function RevealBidPageV2() {
               <div className="text-sm text-blue-100">
                 <p>Amount: {commitmentData.amountUsdx / 1_000_000} {commitmentData.currency ? AleoServiceV2.getCurrencyLabel(commitmentData.currency) : 'tokens'}</p>
                 <p>Committed: {new Date(commitmentData.timestamp).toLocaleString()}</p>
+                <p>Reveal: {isAlreadyRevealed ? 'confirmed' : isRevealPending ? 'pending confirmation' : 'not submitted'}</p>
               </div>
             </div>
           )}
@@ -196,10 +239,10 @@ export default function RevealBidPageV2() {
 
           <Button
             onClick={handleRevealBid}
-            disabled={isSubmitting || !connected || !commitmentData || !auctionInfo || auctionInfo.state !== 1}
+            disabled={isSubmitting || !connected || !commitmentData || !auctionInfo || auctionInfo.state !== 1 || isAlreadyRevealed || isRevealPending}
             className="w-full"
           >
-            {isSubmitting ? 'Revealing...' : 'Reveal Bid'}
+            {isSubmitting ? 'Revealing...' : isAlreadyRevealed ? 'Already Revealed' : isRevealPending ? 'Reveal Pending...' : 'Reveal Bid'}
           </Button>
         </CardContent>
       </Card>

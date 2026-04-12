@@ -4,6 +4,7 @@ import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { Bell, Bot, CheckCheck, Clock3, ExternalLink, ShieldCheck, Sparkles, Wallet, X } from 'lucide-react';
 import {
   dismissNotification,
+  getOpsApiDebugInfo,
   getLocalApiHealth,
   getNotifications,
   markNotificationsRead,
@@ -90,6 +91,7 @@ export default function PremiumNotificationCenter() {
     () => notifications.filter((notification) => !notification.read).map((notification) => notification.id),
     [notifications]
   );
+  const opsApiDebugInfo = getOpsApiDebugInfo();
 
   const refreshNotifications = async (walletAddress) => {
     if (!walletAddress) {
@@ -234,9 +236,18 @@ export default function PremiumNotificationCenter() {
 
             {!isApiAvailable && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-100">
-                {import.meta.env.DEV
-                  ? 'Start the ops API with `npm run dev:api` to enable notifications, executor insights, and analytics sync.'
-                  : 'Notifications and executor insights are temporarily unavailable while the ops backend reconnects.'}
+                {!connected || !address
+                  ? 'Connect a wallet to load address-aware notifications and executor insights.'
+                  : opsApiDebugInfo.isLocalTarget
+                    ? 'Start the ops API with `npm run dev:ops` from the repo root, or `npm run dev:api` inside `frontend`, to enable notifications, executor insights, and analytics sync.'
+                    : opsApiDebugInfo.isLocalPage
+                      ? 'Your local frontend is pointing at the shared ops backend, but that backend is not currently allowing this localhost origin.'
+                    : 'Notifications and executor insights are temporarily unavailable while the shared ops backend reconnects.'}
+                {connected && address && opsApiDebugInfo.baseUrl && (
+                  <div className="mt-2 font-mono uppercase tracking-[0.16em] text-amber-100/70">
+                    Target: {opsApiDebugInfo.baseUrl}
+                  </div>
+                )}
               </div>
             )}
 

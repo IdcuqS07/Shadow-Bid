@@ -24,6 +24,7 @@ import WalletDebugPage from "@/pages/WalletDebugPage";
 import PremiumOpsShell from "@/components/premium/PremiumOpsShell";
 import AdminOnlyRoute from "@/components/auth/AdminOnlyRoute";
 import WalletDiagnostics from "@/components/common/WalletDiagnostics";
+import RouteErrorBoundary from "@/components/common/RouteErrorBoundary";
 import { AleoWalletProvider } from '@provablehq/aleo-wallet-adaptor-react';
 import { WalletModalProvider } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { PuzzleWalletAdapter } from '@provablehq/aleo-wallet-adaptor-puzzle';
@@ -73,7 +74,14 @@ function App() {
               <Route path="/how-it-works" element={<PremiumHowItWorks />} />
               <Route path="/premium/how-it-works" element={<Navigate to="/how-it-works" replace />} />
               <Route path="/premium-auctions" element={<PremiumAuctionList />} />
-              <Route path="/premium-auction/:auctionId" element={<PremiumAuctionDetail />} />
+              <Route
+                path="/premium-auction/:auctionId"
+                element={(
+                  <RouteErrorBoundary>
+                    <PremiumAuctionDetail />
+                  </RouteErrorBoundary>
+                )}
+              />
               <Route path="/premium-create" element={<PremiumCreateAuction />} />
               <Route path="/dev/test-fixtures" element={<TestDataSeederPage />} />
               <Route path="/wallet-debug" element={<WalletDebugPage />} />

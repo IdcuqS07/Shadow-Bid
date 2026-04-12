@@ -1,11 +1,11 @@
 # Historical V2.20 Manual Deployment Instructions
 
-This file is retained for archived `v2.20` deployment reference. The active repo target is now `v2.22`.
+This file is retained for archived `v2.20` deployment reference. The active repo target is now `v2.24`.
 
 Active remediated testnet program:
 
-- <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_22.aleo>
-- Program ID: `shadowbid_marketplace_v2_22.aleo`
+- <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_24.aleo>
+- Program ID: `shadowbid_marketplace_v2_24.aleo`
 
 ## Prerequisites
 
@@ -55,15 +55,15 @@ leo deploy --network "${NETWORK}"
 Expected program:
 
 ```text
-shadowbid_marketplace_v2_22.aleo
+shadowbid_marketplace_v2_24.aleo
 ```
 
 ### Verify on an explorer
 
 - Testnet: <https://explorer.provable.com/testnet>
 - Mainnet: <https://explorer.provable.com/>
-- Active remediated program: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_22.aleo>
-- Confirmed deployment transaction: `at1puerrl94esarswkfgc0f97glpy6h03ke2zf2yzn5qtdme5rcqgysf85m38`
+- Active remediated program: <https://testnet.explorer.provable.com/program/shadowbid_marketplace_v2_24.aleo>
+- Confirmed deployment transaction: `at1vfh332s5la6ewm232xh92ecclkqwpec3lxqtd554zuhc3x3z65pq9glkrj`
 
 ### Run a local smoke test
 

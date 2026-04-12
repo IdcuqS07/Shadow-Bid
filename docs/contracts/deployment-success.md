@@ -1,6 +1,53 @@
 # ShadowBid Deployment Record
 
-## Active V2.22 Deployment
+## Active V2.24 Deployment
+
+- Program: `shadowbid_marketplace_v2_24.aleo`
+- Network: `testnet`
+- Deployed at: `2026-04-10`
+- Deployment transaction: `at1vfh332s5la6ewm232xh92ecclkqwpec3lxqtd554zuhc3x3z65pq9glkrj`
+- Fee transaction: `at1qv6st7s7yvhy20sq540ahdv95hxs03s5vq45m944pakucddjlq8qscf3c4`
+- Fee ID: `au1xcu6ad8mrjtq55fyrw6hwe6x93apnz4e30rq8ldfauh0mevlpyys4pfa43`
+- Program size: `43.74 KB / 500.00 KB`
+- Total fee: `56.009864 credits`
+
+### V2.24 Highlights
+
+- live remediated contract target moved to `shadowbid_marketplace_v2_24.aleo`
+- fixes the ALEO refund identity mismatch by using signer-derived refund commitments
+- retains the in-contract `BHP256` commitment verification and amount-free escrow mapping design
+- adds direct no-bid cancellation support with explicit `cancel_reason`
+- adds seller-bid guardrails and bidder-recovery-ready state
+
+### V2.24 Artifacts
+
+- ABI: `contracts/build/abi.json`
+- Note: temporary local CLI receipts created during deployment are operator-local outputs, not part of the V2.24 source tree or repo artifacts
+
+## Historical V2.23 Deployment
+
+- Program: `shadowbid_marketplace_v2_23.aleo`
+- Network: `testnet`
+- Deployed at: `2026-04-04`
+- Deployment transaction: `at1w0dfppt50espy5rxjljevwyatu90pn7q80n957ekz8gerjelnyysa8afzj`
+- Fee transaction: `at17dneykmn9zsuhejqzqc4geq4nuswam0p7qsl388k8pj9qaak7sxq54g6aq`
+- Fee ID: `au19mclcqwmyzp4qz7eqhthytv5whx42dprncyhzhczf3zxe97w8vqq8uk64h`
+- Program size: `43.74 KB / 500.00 KB`
+- Total fee: `56.009864 credits`
+
+### V2.23 Highlights
+
+- live remediated contract target moved to `shadowbid_marketplace_v2_23.aleo`
+- retains the in-contract `BHP256` commitment verification and amount-free escrow mapping design
+- adds direct no-bid cancellation support with explicit `cancel_reason`
+- adds seller-bid guardrails and bidder-recovery-ready state
+
+### V2.23 Artifacts
+
+- ABI: `contracts/build/abi.json`
+- Note: temporary local CLI receipts created during deployment are operator-local outputs, not part of the V2.23 source tree or repo artifacts
+
+## Historical V2.22 Deployment
 
 - Program: `shadowbid_marketplace_v2_22.aleo`
 - Network: `testnet`

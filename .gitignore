@@ -9,6 +9,10 @@ outputs/
 !.env.example
 !.env.local.example
 
+# Local Ops API state
+frontend/local-api/data/*.json
+frontend/local-api/data/*.corrupt-*.json
+
 # JavaScript and frontend leftovers
 node_modules/
 dist/

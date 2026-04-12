@@ -1,4 +1,4 @@
-// ShadowBid Marketplace V2.21 — Split Deadlines + Deterministic Reveal Timeout
+// ShadowBid Marketplace V2.24 — Refund identity consistency plus v2.23 lifecycle guards
 // Foundation: Aleo blockchain with ZK proofs
 // Currency: Aleo Credits (native) OR USDCx/USAD stablecoin (ARC-21 token)
 // Architecture: Commit-reveal pattern with O(1) winner determination
@@ -49,6 +49,14 @@ const VERIFICATION_PENDING: u8 = 0u8;
 const VERIFICATION_SUBMITTED: u8 = 1u8;
 const VERIFICATION_VERIFIED: u8 = 2u8;
 
+// Cancellation reasons
+const CANCEL_REASON_NONE: u8 = 0u8;
+const CANCEL_REASON_PREBID_CANCEL: u8 = 1u8;
+const CANCEL_REASON_NO_BID: u8 = 2u8;
+const CANCEL_REASON_NO_REVEAL: u8 = 3u8;
+const CANCEL_REASON_RESERVE_NOT_MET: u8 = 4u8;
+const CANCEL_REASON_DISPUTE_REFUND: u8 = 5u8;
+
 // -------------------------
 
 // Structs
@@ -87,7 +95,10 @@ struct AuctionInfo {
     
     // Reserve price controls
     reserve_price: u128,          // Minimum acceptable price
-    reserve_met: bool             // Is winning_amount >= reserve_price?
+    reserve_met: bool,            // Is winning_amount >= reserve_price?
+    commitment_count: u32,        // Number of committed bids
+    revealed_count: u32,          // Number of revealed bids
+    cancel_reason: u8             // Why a cancelled auction ended
 }
 
 // Bid commitment for commit-reveal pattern
@@ -177,7 +188,10 @@ final fn finalize_create_auction(
         platform_fee_claimed: false,
         platform_fee_claimed_at: 0i64,
         reserve_price,
-        reserve_met: false
+        reserve_met: false,
+        commitment_count: 0u32,
+        revealed_count: 0u32,
+        cancel_reason: CANCEL_REASON_NONE
     });
 }
 
@@ -217,7 +231,10 @@ final fn finalize_cancel_auction(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: CANCEL_REASON_PREBID_CANCEL
     };
     
     Mapping::set(auctions, auction_id, cancelled_auction);
@@ -230,15 +247,19 @@ final fn finalize_commit_bid(
     amount_usdx: u128,
     transfer_future: Final
 ) {
-    transfer_future.run();
-    
     let auction: AuctionInfo = Mapping::get(auctions, auction_id);
     
     // Verify auction uses USDCx currency
     assert_eq(auction.currency_type, CURRENCY_USDX);
     assert_eq(auction.state, OPEN);
+    assert(bidder != auction.seller);
+    assert(amount_usdx >= auction.min_bid_amount);
     
     let bid_key: field = auction_id + BHP256::hash_to_field(bidder);
+    assert(!Mapping::contains(commitments, bid_key));
+    assert(!Mapping::contains(escrow, bid_key));
+
+    transfer_future.run();
     
     Mapping::set(commitments, bid_key, BidCommitment {
         bidder,
@@ -280,7 +301,10 @@ final fn finalize_commit_bid(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count + 1u32,
+        revealed_count: auction.revealed_count,
+        cancel_reason: CANCEL_REASON_NONE
     };
     Mapping::set(auctions, auction_id, updated_auction);
 }
@@ -292,15 +316,19 @@ final fn finalize_commit_bid_usad(
     amount_usad: u128,
     transfer_future: Final
 ) {
-    transfer_future.run();
-    
     let auction: AuctionInfo = Mapping::get(auctions, auction_id);
     
     // Verify auction uses USAD currency
     assert_eq(auction.currency_type, CURRENCY_USAD);
     assert_eq(auction.state, OPEN);
+    assert(bidder != auction.seller);
+    assert(amount_usad >= auction.min_bid_amount);
     
     let bid_key: field = auction_id + BHP256::hash_to_field(bidder);
+    assert(!Mapping::contains(commitments, bid_key));
+    assert(!Mapping::contains(escrow, bid_key));
+
+    transfer_future.run();
     
     Mapping::set(commitments, bid_key, BidCommitment {
         bidder,
@@ -342,7 +370,10 @@ final fn finalize_commit_bid_usad(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count + 1u32,
+        revealed_count: auction.revealed_count,
+        cancel_reason: CANCEL_REASON_NONE
     };
     Mapping::set(auctions, auction_id, updated_auction);
 }
@@ -358,11 +389,15 @@ final fn finalize_commit_bid_aleo(
     // Verify auction uses Aleo currency
     assert_eq(auction.currency_type, CURRENCY_ALEO);
     assert_eq(auction.state, OPEN);
+    assert(bidder != auction.seller);
     
     // Convert u64 to u128 for storage
     let amount_u128: u128 = amount_credits as u128;
     
     let bid_key: field = auction_id + BHP256::hash_to_field(bidder);
+    assert(amount_u128 >= auction.min_bid_amount);
+    assert(!Mapping::contains(commitments, bid_key));
+    assert(!Mapping::contains(escrow, bid_key));
     
     Mapping::set(commitments, bid_key, BidCommitment {
         bidder,
@@ -404,7 +439,10 @@ final fn finalize_commit_bid_aleo(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count + 1u32,
+        revealed_count: auction.revealed_count,
+        cancel_reason: CANCEL_REASON_NONE
     };
     Mapping::set(auctions, auction_id, updated_auction);
 }
@@ -417,6 +455,7 @@ final fn finalize_close_auction(
     let auction: AuctionInfo = Mapping::get(auctions, auction_id);
     assert_eq(auction.state, OPEN);
     assert(closed_at >= auction.end_time);
+    let is_no_bid: bool = auction.total_escrowed == 0u128;
     
     let updated_auction: AuctionInfo = AuctionInfo {
         seller: auction.seller,
@@ -425,10 +464,10 @@ final fn finalize_close_auction(
         end_time: auction.end_time,
         reveal_period: auction.reveal_period,
         dispute_period: auction.dispute_period,
-        state: CLOSED,
-        winner: auction.winner,
-        winning_amount: auction.winning_amount,
-        reveal_deadline: closed_at + auction.reveal_period,
+        state: is_no_bid ? CANCELLED : CLOSED,
+        winner: is_no_bid ? EMPTY_ADDRESS : auction.winner,
+        winning_amount: is_no_bid ? 0u128 : auction.winning_amount,
+        reveal_deadline: is_no_bid ? 0i64 : closed_at + auction.reveal_period,
         dispute_deadline: 0i64,
         total_escrowed: auction.total_escrowed,
         asset_type: auction.asset_type,
@@ -437,14 +476,17 @@ final fn finalize_close_auction(
         payment_claimed: auction.payment_claimed,
         payment_claimed_at: auction.payment_claimed_at,
         confirmation_timeout: auction.confirmation_timeout,
-        settled_at: auction.settled_at,
-        claimable_at: auction.claimable_at,
-        platform_fee_amount: auction.platform_fee_amount,
-        seller_net_amount: auction.seller_net_amount,
+        settled_at: is_no_bid ? 0i64 : auction.settled_at,
+        claimable_at: is_no_bid ? 0i64 : auction.claimable_at,
+        platform_fee_amount: is_no_bid ? 0u128 : auction.platform_fee_amount,
+        seller_net_amount: is_no_bid ? 0u128 : auction.seller_net_amount,
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: is_no_bid ? false : auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: is_no_bid ? CANCEL_REASON_NO_BID : CANCEL_REASON_NONE
     };
     Mapping::set(auctions, auction_id, updated_auction);
 }
@@ -486,6 +528,39 @@ final fn finalize_reveal_bid(
         Mapping::set(highest_bid, auction_id, amount);
         Mapping::set(highest_bidder, auction_id, commitment.bidder);
     }
+
+    let updated_auction: AuctionInfo = AuctionInfo {
+        seller: auction.seller,
+        min_bid_amount: auction.min_bid_amount,
+        currency_type: auction.currency_type,
+        end_time: auction.end_time,
+        reveal_period: auction.reveal_period,
+        dispute_period: auction.dispute_period,
+        state: auction.state,
+        winner: auction.winner,
+        winning_amount: auction.winning_amount,
+        reveal_deadline: auction.reveal_deadline,
+        dispute_deadline: auction.dispute_deadline,
+        total_escrowed: auction.total_escrowed,
+        asset_type: auction.asset_type,
+        item_received: auction.item_received,
+        item_received_at: auction.item_received_at,
+        payment_claimed: auction.payment_claimed,
+        payment_claimed_at: auction.payment_claimed_at,
+        confirmation_timeout: auction.confirmation_timeout,
+        settled_at: auction.settled_at,
+        claimable_at: auction.claimable_at,
+        platform_fee_amount: auction.platform_fee_amount,
+        seller_net_amount: auction.seller_net_amount,
+        platform_fee_claimed: auction.platform_fee_claimed,
+        platform_fee_claimed_at: auction.platform_fee_claimed_at,
+        reserve_price: auction.reserve_price,
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count + 1u32,
+        cancel_reason: auction.cancel_reason
+    };
+    Mapping::set(auctions, auction_id, updated_auction);
 }
 
 final fn finalize_reveal_timeout(
@@ -499,11 +574,17 @@ final fn finalize_reveal_timeout(
     
     let winning_amount: u128 = Mapping::get_or_use(highest_bid, auction_id, 0u128);
     let winner: address = Mapping::get_or_use(highest_bidder, auction_id, EMPTY_ADDRESS);
+    let has_revealed_bids: bool = auction.revealed_count > 0u32;
     let reserve_met: bool = winning_amount > 0u128 && winning_amount >= auction.reserve_price;
     let next_state: u8 = reserve_met ? CHALLENGE : CANCELLED;
-    let stored_winner: address = winning_amount > 0u128 ? winner : EMPTY_ADDRESS;
-    let stored_amount: u128 = winning_amount > 0u128 ? winning_amount : 0u128;
+    let stored_winner: address = has_revealed_bids && winning_amount > 0u128 ? winner : EMPTY_ADDRESS;
+    let stored_amount: u128 = has_revealed_bids && winning_amount > 0u128 ? winning_amount : 0u128;
     let dispute_deadline: i64 = reserve_met ? settled_at + auction.dispute_period : 0i64;
+    let cancel_reason: u8 = reserve_met
+        ? CANCEL_REASON_NONE
+        : has_revealed_bids
+            ? CANCEL_REASON_RESERVE_NOT_MET
+            : CANCEL_REASON_NO_REVEAL;
     
     let updated_auction: AuctionInfo = AuctionInfo {
         seller: auction.seller,
@@ -531,7 +612,10 @@ final fn finalize_reveal_timeout(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met
+        reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason
     };
     
     Mapping::set(auctions, auction_id, updated_auction);
@@ -602,7 +686,10 @@ final fn finalize_finalize_winner(
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: CANCEL_REASON_NONE
     };
     Mapping::set(auctions, auction_id, updated_auction);
 }
@@ -717,18 +804,22 @@ final fn finalize_commit_aleo_priv(
     amount_credits: u64,
     transfer_future: Final
 ) {
-    transfer_future.run();
-    
     let auction: AuctionInfo = Mapping::get(auctions, auction_id);
     
     // Verify auction uses Aleo currency
     assert_eq(auction.currency_type, CURRENCY_ALEO);
     assert_eq(auction.state, OPEN);
+    assert(bidder != auction.seller);
     
     // Convert u64 to u128 for storage
     let amount_u128: u128 = amount_credits as u128;
     
     let bid_key: field = auction_id + BHP256::hash_to_field(bidder);
+    assert(amount_u128 >= auction.min_bid_amount);
+    assert(!Mapping::contains(commitments, bid_key));
+    assert(!Mapping::contains(escrow, bid_key));
+
+    transfer_future.run();
     
     Mapping::set(commitments, bid_key, BidCommitment {
         bidder,
@@ -770,7 +861,10 @@ final fn finalize_commit_aleo_priv(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count + 1u32,
+        revealed_count: auction.revealed_count,
+        cancel_reason: CANCEL_REASON_NONE
     };
     Mapping::set(auctions, auction_id, updated_auction);
 }
@@ -817,7 +911,10 @@ final fn finalize_confirm_receipt(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: CANCEL_REASON_NONE
     };
     
     Mapping::set(auctions, auction_id, updated_auction);
@@ -880,7 +977,10 @@ final fn finalize_claim_winning_aleo(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: auction.cancel_reason
     };
     
     Mapping::set(auctions, auction_id, updated_auction);
@@ -943,7 +1043,10 @@ final fn finalize_claim_winning_usdcx(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: auction.cancel_reason
     };
     
     Mapping::set(auctions, auction_id, updated_auction);
@@ -1006,7 +1109,10 @@ final fn finalize_claim_winning_usad(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: auction.cancel_reason
     };
     
     Mapping::set(auctions, auction_id, updated_auction);
@@ -1066,7 +1172,10 @@ final fn finalize_claim_fee_aleo(
         platform_fee_claimed: true,
         platform_fee_claimed_at: claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: auction.cancel_reason
     };
     
     Mapping::set(auctions, auction_id, updated_auction);
@@ -1126,7 +1235,10 @@ final fn finalize_claim_fee_usdcx(
         platform_fee_claimed: true,
         platform_fee_claimed_at: claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: auction.cancel_reason
     };
     
     Mapping::set(auctions, auction_id, updated_auction);
@@ -1186,7 +1298,10 @@ final fn finalize_claim_fee_usad(
         platform_fee_claimed: true,
         platform_fee_claimed_at: claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: auction.cancel_reason
     };
     
     Mapping::set(auctions, auction_id, updated_auction);
@@ -1216,10 +1331,10 @@ final fn finalize_cancel_reserve_not_met(
         reveal_period: auction.reveal_period,
         dispute_period: auction.dispute_period,
         state: CANCELLED,
-        winner: auction.winner,
-        winning_amount: auction.winning_amount,
+        winner: EMPTY_ADDRESS,
+        winning_amount: 0u128,
         reveal_deadline: auction.reveal_deadline,
-        dispute_deadline: auction.dispute_deadline,
+        dispute_deadline: 0i64,
         total_escrowed: auction.total_escrowed,
         asset_type: auction.asset_type,
         item_received: auction.item_received,
@@ -1234,7 +1349,10 @@ final fn finalize_cancel_reserve_not_met(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: false,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: CANCEL_REASON_RESERVE_NOT_MET
     };
     
     Mapping::set(auctions, auction_id, updated_auction);
@@ -1318,7 +1436,10 @@ final fn finalize_open_dispute(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: auction.cancel_reason
     };
 
     Mapping::set(auctions, auction_id, disputed_auction);
@@ -1385,7 +1506,10 @@ final fn finalize_dispute_release(
         platform_fee_claimed: auction.platform_fee_claimed,
         platform_fee_claimed_at: auction.platform_fee_claimed_at,
         reserve_price: auction.reserve_price,
-        reserve_met: auction.reserve_met
+        reserve_met: auction.reserve_met,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: auction.cancel_reason
     };
 
     Mapping::set(auctions, auction_id, updated_auction);
@@ -1423,10 +1547,10 @@ final fn finalize_dispute_refund(
         reveal_period: auction.reveal_period,
         dispute_period: auction.dispute_period,
         state: CANCELLED,
-        winner: auction.winner,
-        winning_amount: auction.winning_amount,
+        winner: EMPTY_ADDRESS,
+        winning_amount: 0u128,
         reveal_deadline: auction.reveal_deadline,
-        dispute_deadline: auction.dispute_deadline,
+        dispute_deadline: 0i64,
         total_escrowed: auction.total_escrowed,
         asset_type: auction.asset_type,
         item_received: auction.item_received,
@@ -1435,19 +1559,22 @@ final fn finalize_dispute_refund(
         payment_claimed_at: 0i64,
         confirmation_timeout: auction.confirmation_timeout,
         settled_at: auction.settled_at,
-        claimable_at: auction.claimable_at,
+        claimable_at: 0i64,
         platform_fee_amount: 0u128,
         seller_net_amount: 0u128,
         platform_fee_claimed: false,
         platform_fee_claimed_at: 0i64,
         reserve_price: auction.reserve_price,
-        reserve_met: false
+        reserve_met: false,
+        commitment_count: auction.commitment_count,
+        revealed_count: auction.revealed_count,
+        cancel_reason: CANCEL_REASON_DISPUTE_REFUND
     };
 
     Mapping::set(auctions, auction_id, updated_auction);
 }
 
-program shadowbid_marketplace_v2_22.aleo {
+program shadowbid_marketplace_v2_24.aleo {
 
     // Records
     // -------------------------
@@ -1574,7 +1701,7 @@ program shadowbid_marketplace_v2_22.aleo {
         });
 
         let transfer_future: Final = test_usdcx_stablecoin.aleo::transfer_public_as_signer(
-            shadowbid_marketplace_v2_22.aleo,
+            shadowbid_marketplace_v2_24.aleo,
             amount_usdx
         );
         
@@ -1598,7 +1725,7 @@ program shadowbid_marketplace_v2_22.aleo {
         });
 
         let transfer_future: Final = test_usad_stablecoin.aleo::transfer_public_as_signer(
-            shadowbid_marketplace_v2_22.aleo,
+            shadowbid_marketplace_v2_24.aleo,
             amount_usad
         );
         
@@ -1767,26 +1894,26 @@ program shadowbid_marketplace_v2_22.aleo {
         public refund_amount: u64
     ) -> Final {
 
-        let caller = self.caller;
+        // Match the bidder identity used during commit/reveal.
+        let signer = self.signer;
         let refund_amount_u128: u128 = refund_amount as u128;
         let computed_commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
             auction_id,
-            bidder: caller,
+            bidder: signer,
             amount: refund_amount_u128,
             nonce
         });
 
-        // Transfer Aleo credits FROM contract TO bidder (caller)
-        // caller = bidder address
+        // Transfer Aleo credits FROM contract TO bidder.
         let transfer_future: Final = credits.aleo::transfer_public(
-            caller,
+            signer,
             refund_amount
         );
         
         return final {
             finalize_claim_refund_aleo(
             auction_id,
-            caller,
+            signer,
             computed_commitment,
             refund_amount,
             transfer_future
@@ -1815,7 +1942,7 @@ program shadowbid_marketplace_v2_22.aleo {
         let (change_record, transfer_future): (credits.aleo::credits, Final) = 
             credits.aleo::transfer_private_to_public(
                 private_credits,
-                shadowbid_marketplace_v2_22.aleo,
+                shadowbid_marketplace_v2_24.aleo,
                 amount_credits
             );
         
@@ -1836,27 +1963,27 @@ program shadowbid_marketplace_v2_22.aleo {
         public refund_amount: u64
     ) -> (credits.aleo::credits, Final) {
 
-        let caller = self.caller;
+        // Match the bidder identity used during commit/reveal.
+        let signer = self.signer;
         let refund_amount_u128: u128 = refund_amount as u128;
         let computed_commitment: field = BHP256::hash_to_field(BidCommitmentPreimage {
             auction_id,
-            bidder: caller,
+            bidder: signer,
             amount: refund_amount_u128,
             nonce
         });
 
-        
-        // Transfer public → private (returns private record to caller)
+        // Transfer public → private (returns private record to bidder).
         let (refund_record, transfer_future): (credits.aleo::credits, Final) = 
             credits.aleo::transfer_public_to_private(
-                caller,
+                signer,
                 refund_amount
             );
         
         return (refund_record, final {
             finalize_claim_refund_aleo(
             auction_id,
-            caller,
+            signer,
             computed_commitment,
             refund_amount,
             transfer_future

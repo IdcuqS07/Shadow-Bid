@@ -18,6 +18,7 @@ const STEPS = {
 
 export function SettlementWizard() {
   const { connected, executeTransaction, address } = useWallet();
+  const activeContractVersion = (AleoServiceV2.inferContractVersionFromProgramId(AleoServiceV2.PROGRAM_ID) || 'current').toUpperCase();
   const [auctionId, setAuctionId] = useState('');
   const [auctionInfo, setAuctionInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -388,7 +389,7 @@ export function SettlementWizard() {
     <Card className="border-purple-500/20">
       <CardHeader>
         <CardTitle className="text-xl">Settlement Wizard</CardTitle>
-        <p className="text-sm text-slate-400">Guided seller flow for the live V2.22 contract</p>
+        <p className="text-sm text-slate-400">Guided seller flow for the live {activeContractVersion} contract</p>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Auction ID Input */}
